@@ -1,0 +1,11 @@
+# Global safe defaults
+UsePAM no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+ChallengeResponseAuthentication no
+PubkeyAuthentication yes
+PermitRootLogin no
+GatewayPorts no
+X11Forwarding no
+AllowAgentForwarding no
+AllowStreamLocalForwarding no

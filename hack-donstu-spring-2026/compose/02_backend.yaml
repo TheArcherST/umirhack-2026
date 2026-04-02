@@ -1,0 +1,89 @@
+services:
+  rest-server:
+    build: ./python
+    command: run-rest-server
+    restart: unless-stopped
+    env_file: ./python/.env
+    environment:
+      HACK__SERVER__ROOT_PATH: /api
+    expose:
+      - "80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  heartbeatd-non-dynamic-scheduler:
+    build: ./python
+    command: taskiq scheduler hack_backend.heartbeatd.main:non_dynamic_scheduler
+    restart: unless-stopped
+    env_file: ./python/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  heartbeatd-scheduler:
+    build: ./python
+    command: taskiq scheduler hack_backend.heartbeatd.main:scheduler
+    restart: unless-stopped
+    env_file: ./python/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  heartbeatd-worker:
+    build: ./python
+    command: taskiq worker hack_backend.heartbeatd.main:broker
+    restart: unless-stopped
+    env_file: ./python/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  tasksd-worker:
+    build: ./python
+    command: taskiq worker hack_backend.tasksd.tasks:broker
+    restart: unless-stopped
+    env_file: ./python/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+
+  bindingd:
+    build: ./python
+    command: run-bindingd
+    restart: unless-stopped
+    env_file: ./python/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  tool-alembic:
+    profiles:
+      - tools
+    build: ./python
+    entrypoint: /usr/src/app/alembic-entrypoint.sh
+    restart: no
+    environment:
+      EXTERNAL_UID: ${COMPOSE__UID}
+      EXTERNAL_GID: ${COMPOSE__GID}
+    env_file: ./python/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  run-integration-tests:
+    profiles:
+      - tests
+    build: ./python
+    entrypoint: pytest
+    depends_on:
+      postgres:
+        condition: service_healthy

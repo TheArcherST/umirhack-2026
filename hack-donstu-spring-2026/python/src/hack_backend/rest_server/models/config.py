@@ -1,0 +1,2 @@
+class HackServerConfig:
+    pass

@@ -1,0 +1,6 @@
+.idea
+.venv
+*.pyc
+.env
+compose.override.yaml
+nginx/default.conf

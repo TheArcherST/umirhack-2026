@@ -1,0 +1,11 @@
+x-dev-volumes: &dev-volumes
+  volumes:
+    - ./python/src:/usr/src/app/src
+
+services:
+  rest-server:
+    <<: *dev-volumes
+  tool-alembic:
+    <<: *dev-volumes
+  run-integration-tests:
+    <<: *dev-volumes

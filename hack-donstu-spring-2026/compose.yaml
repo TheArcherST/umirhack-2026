@@ -1,0 +1,9 @@
+name: "hack"
+
+include:
+  - path: ./compose/01_infra.yaml
+    project_directory: .
+  - path: ./compose/02_backend.yaml
+    project_directory: .
+  - path: ./compose/03_web.yaml
+    project_directory: .

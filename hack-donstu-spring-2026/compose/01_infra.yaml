@@ -1,0 +1,39 @@
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - ${COMPOSE__POSTGRES__HOST}:${COMPOSE__POSTGRES__PORT}:5432
+    environment:
+      POSTGRES_USER: ${COMPOSE__POSTGRES__USER}
+      POSTGRES_PASSWORD: ${COMPOSE__POSTGRES__PASSWORD}
+    healthcheck:
+      test: [
+        "CMD-SHELL", "pg_isready",
+        "-d", "${COMPOSE__POSTGRES__DATABASE}",
+        "-U", "${COMPOSE__POSTGRES__USER}"
+      ]
+      interval: 30s
+      timeout: 60s
+      retries: 5
+      start_period: 80s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - ${COMPOSE__REDIS__HOST}:${COMPOSE__REDIS__PORT}:6379
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:
