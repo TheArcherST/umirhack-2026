@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+STAGED_FILES="$(
+    git diff --cached --name-only --diff-filter=ACMR -- \
+        ':(glob)python/*.py' \
+        ':(glob)python/**/*.py'
+)"
+
+if [ -z "$STAGED_FILES" ]; then
+    exit 0
+fi
+
+# Paths in this repository do not contain spaces, so word splitting is acceptable here.
+# shellcheck disable=SC2086
+scripts/run-ruff-python.sh $STAGED_FILES
+# shellcheck disable=SC2086
+git add $STAGED_FILES
