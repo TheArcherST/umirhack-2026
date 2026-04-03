@@ -24,6 +24,9 @@ class ConfigPostgres(BaseModel):
     pool_size: int = 5
     pool_max_overflow: int = 10
 
+    def get_test_database_name(self) -> str:
+        return self.test_database or f"{self.database}_test"
+
     def get_sqlalchemy_url(
         self,
         driver: str,
@@ -35,9 +38,7 @@ class ConfigPostgres(BaseModel):
 
         database = self.database
         if is_test_database:
-            if self.test_database is None:
-                raise ValueError("Test database not specified")
-            database = self.test_database
+            database = self.get_test_database_name()
 
         return f"postgresql+{driver}://{self.user}:{self.password}@{self.host}:{self.port}/{database}"
 

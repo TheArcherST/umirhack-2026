@@ -32,6 +32,19 @@ API contract workflow:
 2. Run `make openapi`
 3. Share or commit `shared/openapi.json` for frontend work
 
+CI/CD deployment workflow:
+1. Push to `master`
+2. GitHub Actions runs `make test`
+3. If tests pass, Actions SSHes to the server and runs `./scripts/deploy.sh <tested-sha>`
+4. The server fetches the repository, checks out the exact tested revision, and runs `make up`
+
+Required GitHub Actions secrets:
+- `DEPLOY_HOST`
+- `DEPLOY_USER`
+- `DEPLOY_SSH_KEY`
+- `DEPLOY_PATH`
+- `DEPLOY_PORT` (optional, defaults to `22`)
+
 Compose layout:
 - `compose.yaml` is the root entrypoint and uses `include`
 - `compose/infra.yaml` contains infrastructure services

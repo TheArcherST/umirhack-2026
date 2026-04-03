@@ -19,8 +19,10 @@ format-python:
 install-hooks:
 	chmod +x .githooks/pre-commit scripts/run-ruff-python.sh
 	git config core.hooksPath .githooks
+deploy:
+	./scripts/deploy.sh $(rev)
 test:
-	docker compose run --rm --build run-integration-tests $(args)
+	./scripts/run-compose-tests.sh $(args)
 update:
 	git pull && make up && make test
 logs:
