@@ -1,0 +1,137 @@
+import React from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Copy, CheckCircle2, XCircle, Clock, Terminal } from 'lucide-react'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from '@/components/ui/dialog'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Badge } from '@/components/ui/badge'
+import { stubGetTask } from '@/api/stubs'
+import { formatDate, formatDuration } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+
+interface Props {
+  taskId: string | null
+  onClose: () => void
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = React.useState(false)
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(text)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      }}
+      className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+      title="Copy"
+    >
+      {copied ? <CheckCircle2 size={13} className="text-green-400" /> : <Copy size={13} />}
+    </button>
+  )
+}
+
+function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 py-2 border-b border-border/50 last:border-0">
+      <span className="text-xs text-muted-foreground w-28 shrink-0">{label}</span>
+      <span className="text-xs font-mono">{value}</span>
+    </div>
+  )
+}
+
+export function TaskLogModal({ taskId, onClose }: Props) {
+  const { data: task, isLoading } = useQuery({
+    queryKey: ['task', taskId],
+    queryFn: () => stubGetTask(taskId!),
+    enabled: !!taskId,
+  })
+
+  const statusIcon = task?.status === 'success'
+    ? <CheckCircle2 size={13} className="text-green-400" />
+    : task?.status === 'failed' || task?.status === 'timeout'
+    ? <XCircle size={13} className="text-red-400" />
+    : <Clock size={13} className="text-muted-foreground" />
+
+  return (
+    <Dialog open={!!taskId} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <div className="flex items-center gap-2">
+            <Terminal size={14} className="text-muted-foreground" />
+            <DialogTitle>Task log</DialogTitle>
+          </div>
+          {task && (
+            <DialogDescription className="font-mono text-xs truncate">
+              {task.command}
+            </DialogDescription>
+          )}
+        </DialogHeader>
+
+        {isLoading && (
+          <div className="px-6 pb-6 text-xs text-muted-foreground">Loading…</div>
+        )}
+
+        {task && (
+          <div className="px-6 pb-6 space-y-4">
+            {/* Meta */}
+            <div className="rounded-md border border-border bg-muted/20 px-4">
+              <MetaRow label="Status" value={
+                <div className="flex items-center gap-1.5">
+                  {statusIcon}
+                  <span>{task.status}</span>
+                </div>
+              } />
+              <MetaRow label="Exit code" value={task.result ? String(task.result.exit_code) : '—'} />
+              <MetaRow label="Duration" value={formatDuration(task.duration)} />
+              {task.started_at && <MetaRow label="Started at" value={formatDate(task.started_at)} />}
+              {task.completed_at && <MetaRow label="Completed at" value={formatDate(task.completed_at)} />}
+              <MetaRow label="Agent" value={task.agent_name} />
+            </div>
+
+            {/* Output tabs */}
+            {task.result && (
+              <Tabs defaultValue="stdout">
+                <TabsList>
+                  <TabsTrigger value="stdout">stdout</TabsTrigger>
+                  <TabsTrigger value="stderr" className={task.result.stderr ? 'text-red-400' : ''}>
+                    stderr {task.result.stderr ? '•' : ''}
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="stdout">
+                  <div className="relative rounded-md border border-border bg-muted/30 overflow-hidden">
+                    <div className="absolute top-2 right-2 z-10">
+                      <CopyButton text={task.result.stdout} />
+                    </div>
+                    <pre
+                      data-selectable
+                      className="p-4 text-xs font-mono leading-relaxed overflow-x-auto max-h-64 overflow-y-auto text-foreground/80 whitespace-pre-wrap break-all"
+                    >
+                      {task.result.stdout || <span className="text-muted-foreground italic">no output</span>}
+                    </pre>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="stderr">
+                  <div className="relative rounded-md border border-red-500/20 bg-red-500/5 overflow-hidden">
+                    <div className="absolute top-2 right-2 z-10">
+                      <CopyButton text={task.result.stderr} />
+                    </div>
+                    <pre
+                      data-selectable
+                      className="p-4 text-xs font-mono leading-relaxed overflow-x-auto max-h-64 overflow-y-auto text-red-300/80 whitespace-pre-wrap break-all"
+                    >
+                      {task.result.stderr || <span className="text-muted-foreground italic">no errors</span>}
+                    </pre>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
