@@ -23,6 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     if: github.ref == 'refs/heads/master'
+    environment: prod
     steps:
       - name: Deploy exact tested revision
         uses: appleboy/ssh-action@v1.2.0
