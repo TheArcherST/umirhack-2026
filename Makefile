@@ -22,7 +22,7 @@ install-hooks:
 deploy:
 	./scripts/deploy.sh $(rev)
 test:
-	docker compose run --rm --build run-integration-tests $(args)
+	./scripts/run-compose-tests.sh $(args)
 update:
 	git pull && make up && make test
 logs:

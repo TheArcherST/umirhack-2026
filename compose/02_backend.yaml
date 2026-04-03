@@ -8,6 +8,32 @@ services:
       HACK__SERVER__ROOT_PATH: /api
     expose:
       - "80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/openapi.json"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  rest-server-test:
+    profiles:
+      - tests
+    build: ./python
+    command: run-rest-server
+    restart: no
+    env_file: ./python/.env
+    environment:
+      HACK__POSTGRES__USE_TEST_BY_DEFAULT: "true"
+      HACK__SERVER__ROOT_PATH: ""
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/openapi.json"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     depends_on:
       postgres:
         condition: service_healthy
@@ -83,7 +109,13 @@ services:
     profiles:
       - tests
     build: ./python
-    entrypoint: pytest
+    entrypoint: ["sh", "/usr/src/app/run-integration-tests.sh"]
+    env_file: ./python/.env
+    environment:
+      HACK__POSTGRES__USE_TEST_BY_DEFAULT: "true"
+      HACK_TEST_BASE_URL: http://rest-server-test
     depends_on:
       postgres:
+        condition: service_healthy
+      rest-server-test:
         condition: service_healthy

@@ -24,4 +24,5 @@ def test_streams(
 
     req = api_templates.make_delete_agent()
     req.path_params = {"agent_id": agent_id}
+    r = authed_client.prepsend(req)
     assert r.status_code == 200

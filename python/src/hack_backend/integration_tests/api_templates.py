@@ -1,6 +1,11 @@
+import os
+
 from hack_backend.integration_tests.base import PatchedRequest
 
-_base_url = "http://rest-server"  # docker compose address
+_base_url = os.environ.get(
+    "HACK_TEST_BASE_URL",
+    "http://rest-server",
+)  # docker compose address
 
 
 def make_create_agent():
