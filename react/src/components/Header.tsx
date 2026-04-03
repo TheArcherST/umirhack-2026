@@ -13,12 +13,13 @@ interface HeaderProps {
 // Simple backend connection health check — tries to ping /api/health
 function useBackendStatus() {
   const [connected, setConnected] = React.useState(false)
+  const apiBaseUrl = import.meta.env.VITE_API_URL ?? ''
 
   React.useEffect(() => {
     let cancelled = false
     const check = async () => {
       try {
-        const url = (import.meta.env.VITE_API_URL ?? 'http://localhost:8000') + '/api/health'
+        const url = apiBaseUrl ? `${apiBaseUrl}/api/health` : '/api/health'
         const res = await fetch(url, { signal: AbortSignal.timeout(2000) })
         if (!cancelled) setConnected(res.ok)
       } catch {
@@ -28,7 +29,7 @@ function useBackendStatus() {
     check()
     const id = setInterval(check, 10_000)
     return () => { cancelled = true; clearInterval(id) }
-  }, [])
+  }, [apiBaseUrl])
 
   return connected
 }
