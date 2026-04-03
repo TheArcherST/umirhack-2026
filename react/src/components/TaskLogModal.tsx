@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { stubGetTask } from '@/api/stubs'
 import { formatDate, formatDuration } from '@/lib/utils'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/i18n'
 
 interface Props {
   taskId: string | null
@@ -16,6 +17,7 @@ interface Props {
 }
 
 function CopyButton({ text }: { text: string }) {
+  const { t } = useI18n()
   const [copied, setCopied] = React.useState(false)
   return (
     <button
@@ -25,7 +27,7 @@ function CopyButton({ text }: { text: string }) {
         setTimeout(() => setCopied(false), 1500)
       }}
       className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-      title="Copy"
+      title={t('common.copy')}
     >
       {copied ? <CheckCircle2 size={13} className="text-green-400" /> : <Copy size={13} />}
     </button>
@@ -42,6 +44,7 @@ function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 export function TaskLogModal({ taskId, onClose }: Props) {
+  const { t } = useI18n()
   const { data: task, isLoading } = useQuery({
     queryKey: ['task', taskId],
     queryFn: () => stubGetTask(taskId!),
@@ -60,7 +63,7 @@ export function TaskLogModal({ taskId, onClose }: Props) {
         <DialogHeader>
           <div className="flex items-center gap-2">
             <Terminal size={14} className="text-muted-foreground" />
-            <DialogTitle>Task log</DialogTitle>
+            <DialogTitle>{t('taskLog.title')}</DialogTitle>
           </div>
           {task && (
             <DialogDescription className="font-mono text-xs truncate">
@@ -70,33 +73,33 @@ export function TaskLogModal({ taskId, onClose }: Props) {
         </DialogHeader>
 
         {isLoading && (
-          <div className="px-6 pb-6 text-xs text-muted-foreground">Loading…</div>
+          <div className="px-6 pb-6 text-xs text-muted-foreground">{t('common.loading')}</div>
         )}
 
         {task && (
           <div className="px-6 pb-6 space-y-4">
             {/* Meta */}
             <div className="rounded-md border border-border bg-muted/20 px-4">
-              <MetaRow label="Status" value={
+              <MetaRow label={t('common.status')} value={
                 <div className="flex items-center gap-1.5">
                   {statusIcon}
                   <span>{task.status}</span>
                 </div>
               } />
-              <MetaRow label="Exit code" value={task.result ? String(task.result.exit_code) : '—'} />
-              <MetaRow label="Duration" value={formatDuration(task.duration)} />
-              {task.started_at && <MetaRow label="Started at" value={formatDate(task.started_at)} />}
-              {task.completed_at && <MetaRow label="Completed at" value={formatDate(task.completed_at)} />}
-              <MetaRow label="Agent" value={task.agent_name} />
+              <MetaRow label={t('taskLog.exitCode')} value={task.result ? String(task.result.exit_code) : '—'} />
+              <MetaRow label={t('common.duration')} value={formatDuration(task.duration)} />
+              {task.started_at && <MetaRow label={t('taskLog.startedAt')} value={formatDate(task.started_at)} />}
+              {task.completed_at && <MetaRow label={t('taskLog.completedAt')} value={formatDate(task.completed_at)} />}
+              <MetaRow label={t('common.agent')} value={task.agent_name} />
             </div>
 
             {/* Output tabs */}
             {task.result && (
               <Tabs defaultValue="stdout">
                 <TabsList>
-                  <TabsTrigger value="stdout">stdout</TabsTrigger>
+                  <TabsTrigger value="stdout">{t('taskLog.stdout')}</TabsTrigger>
                   <TabsTrigger value="stderr" className={task.result.stderr ? 'text-red-400' : ''}>
-                    stderr {task.result.stderr ? '•' : ''}
+                    {t('taskLog.stderr')} {task.result.stderr ? '•' : ''}
                   </TabsTrigger>
                 </TabsList>
 
@@ -109,7 +112,7 @@ export function TaskLogModal({ taskId, onClose }: Props) {
                       data-selectable
                       className="p-4 text-xs font-mono leading-relaxed overflow-x-auto max-h-64 overflow-y-auto text-foreground/80 whitespace-pre-wrap break-all"
                     >
-                      {task.result.stdout || <span className="text-muted-foreground italic">no output</span>}
+                      {task.result.stdout || <span className="text-muted-foreground italic">{t('taskLog.noOutput')}</span>}
                     </pre>
                   </div>
                 </TabsContent>
@@ -123,7 +126,7 @@ export function TaskLogModal({ taskId, onClose }: Props) {
                       data-selectable
                       className="p-4 text-xs font-mono leading-relaxed overflow-x-auto max-h-64 overflow-y-auto text-red-300/80 whitespace-pre-wrap break-all"
                     >
-                      {task.result.stderr || <span className="text-muted-foreground italic">no errors</span>}
+                      {task.result.stderr || <span className="text-muted-foreground italic">{t('taskLog.noErrors')}</span>}
                     </pre>
                   </div>
                 </TabsContent>

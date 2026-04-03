@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label'
 import { stubLogin, stubRegister } from '@/api/stubs'
 import { useAuth } from '@/hooks/useAuth'
 import { useTheme } from '@/hooks/useTheme'
-import { cn } from '@/lib/utils'
+import { useI18n } from '@/i18n'
 
 type AuthMode = 'login' | 'register'
 
@@ -15,6 +15,7 @@ export default function Auth() {
   const navigate = useNavigate()
   const { login } = useAuth()
   const { theme, toggle } = useTheme()
+  const { t } = useI18n()
   const [mode, setMode] = useState<AuthMode>('login')
 
   const [email, setEmail] = useState('')
@@ -39,7 +40,7 @@ export default function Auth() {
       }
       navigate('/dashboard')
     } catch (err: any) {
-      setError(err.message ?? 'Authentication failed')
+      setError(err.message ?? t('auth.authFailed'))
     } finally {
       setLoading(false)
     }
@@ -68,7 +69,7 @@ export default function Auth() {
       <button
         onClick={toggle}
         className="fixed top-4 right-4 z-20 p-2 rounded-md text-muted-foreground/60 hover:text-foreground hover:bg-accent/50 transition-colors"
-        title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+        title={theme === 'dark' ? t('common.theme.switchToLight') : t('common.theme.switchToDark')}
       >
         {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
       </button>
@@ -86,7 +87,7 @@ export default function Auth() {
           </div>
           <div className="text-center">
             <p className="text-xs font-mono tracking-[0.2em] text-muted-foreground uppercase">
-              Diagnostics Platform
+              {t('auth.platformName')}
             </p>
           </div>
         </div>
@@ -95,23 +96,23 @@ export default function Auth() {
         <div className="rounded-lg border border-border bg-card/80 backdrop-blur-sm p-7 shadow-2xl">
           <div className="mb-6">
             <h1 className="text-lg font-semibold font-display tracking-tight">
-              {mode === 'login' ? 'Sign in' : 'Create account'}
+              {mode === 'login' ? t('auth.signIn') : t('auth.createAccount')}
             </h1>
             <p className="mt-1 text-xs text-muted-foreground">
               {mode === 'login'
-                ? 'Enter your credentials to continue'
-                : 'Fill in the details to get started'}
+                ? t('auth.signInSubtitle')
+                : t('auth.registerSubtitle')}
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'register' && (
               <div className="space-y-1.5">
-                <Label htmlFor="name">Full name</Label>
+                <Label htmlFor="name">{t('auth.fullName')}</Label>
                 <Input
                   id="name"
                   type="text"
-                  placeholder="John Doe"
+                  placeholder={t('auth.namePlaceholder')}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   autoComplete="name"
@@ -122,11 +123,11 @@ export default function Auth() {
             )}
 
             <div className="space-y-1.5">
-              <Label htmlFor="email">Email address</Label>
+              <Label htmlFor="email">{t('auth.email')}</Label>
               <Input
                 id="email"
                 type="email"
-                placeholder="you@company.com"
+                placeholder={t('auth.emailPlaceholder')}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 autoComplete="email"
@@ -136,11 +137,11 @@ export default function Auth() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t('auth.password')}</Label>
               <Input
                 id="password"
                 type="password"
-                placeholder="••••••••"
+                placeholder={t('auth.passwordPlaceholder')}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
@@ -161,7 +162,7 @@ export default function Auth() {
                 <Loader2 size={14} className="animate-spin" />
               ) : (
                 <>
-                  {mode === 'login' ? 'Sign in' : 'Create account'}
+                  {mode === 'login' ? t('auth.signIn') : t('auth.createAccount')}
                   {mode === 'login' ? <ArrowRight size={14} /> : <UserPlus size={14} />}
                 </>
               )}
@@ -178,11 +179,13 @@ export default function Auth() {
           >
             {mode === 'login' ? (
               <>
-                Don't have an account? <span className="text-foreground/80">Sign up</span>
+                {t('auth.noAccount')}{' '}
+                <span className="text-foreground/80">{t('auth.signUp')}</span>
               </>
             ) : (
               <>
-                Already have an account? <span className="text-foreground/80">Sign in</span>
+                {t('auth.hasAccount')}{' '}
+                <span className="text-foreground/80">{t('auth.signIn')}</span>
               </>
             )}
           </button>
@@ -190,7 +193,7 @@ export default function Auth() {
 
         {/* Footer note */}
         <p className="mt-5 text-center text-xs text-muted-foreground/50 font-mono">
-          infrastructure · diagnostics · v1.0
+          {t('auth.footer')}
         </p>
       </div>
     </div>

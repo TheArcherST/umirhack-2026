@@ -1,16 +1,36 @@
-import { NavLink, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Server, LogOut } from 'lucide-react'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { LayoutDashboard, Server, LogOut, Settings, ChevronUp, ChevronRight, Languages, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
+import { useI18n } from '@/i18n'
+import type { Locale } from '@/i18n'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from '@/components/ui/dropdown-menu'
 
 const NAV = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/agents', icon: Server, label: 'Agents' },
+  { to: '/dashboard', icon: LayoutDashboard, labelKey: 'sidebar.dashboard' },
+  { to: '/agents', icon: Server, labelKey: 'sidebar.agents' },
 ]
 
 export function Sidebar() {
   const { user, logout } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
+  const { locale, t, setLocale } = useI18n()
+
+  const locales: { code: Locale; label: string }[] = [
+    { code: 'en', label: t('languages.en') },
+    { code: 'ru', label: t('languages.ru') },
+  ]
 
   return (
     <aside
@@ -32,7 +52,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-2 py-3 space-y-0.5">
-        {NAV.map(({ to, icon: Icon, label }) => (
+        {NAV.map(({ to, icon: Icon, labelKey }) => (
           <NavLink
             key={to}
             to={to}
@@ -46,29 +66,64 @@ export function Sidebar() {
             }
           >
             <Icon size={15} className="shrink-0" />
-            <span>{label}</span>
+            <span>{t(labelKey)}</span>
           </NavLink>
         ))}
       </nav>
 
-      {/* User + logout */}
-      <div className="border-t border-border p-3">
-        <div className="flex items-center gap-2.5 px-2">
-          <div className="w-6 h-6 rounded-full bg-foreground/15 flex items-center justify-center text-xs font-semibold font-mono shrink-0">
-            {user?.name?.[0]?.toUpperCase() ?? 'U'}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium truncate">{user?.name ?? 'user'}</p>
-            <p className="text-xs text-muted-foreground truncate">{user?.email ?? ''}</p>
-          </div>
-          <button
-            onClick={logout}
-            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-            title="Sign out"
-          >
-            <LogOut size={13} />
-          </button>
-        </div>
+      {/* User dropdown */}
+      <div className="border-t border-border p-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex items-center gap-2.5 w-full px-2 py-2 rounded-md hover:bg-accent/50 transition-colors text-left">
+              <div className="w-6 h-6 rounded-full bg-foreground/15 flex items-center justify-center text-xs font-semibold font-mono shrink-0">
+                {user?.name?.[0]?.toUpperCase() ?? 'U'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium truncate">{user?.name ?? 'user'}</p>
+                <p className="text-xs text-muted-foreground truncate">{user?.email ?? ''}</p>
+              </div>
+              <ChevronUp size={12} className="text-muted-foreground shrink-0" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" side="top" className="w-56">
+            <DropdownMenuLabel>
+              <p className="text-xs font-medium">{user?.name}</p>
+              <p className="text-xs text-muted-foreground font-mono">{user?.email}</p>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => navigate('/settings/profile')}>
+              <Settings size={13} className="mr-2" />
+              {t('sidebar.profileSettings')}
+            </DropdownMenuItem>
+
+            {/* Language sub-menu */}
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <Languages size={13} className="mr-2" />
+                {t('sidebar.languages')}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent sideOffset={8} alignOffset={-4}>
+                {locales.map(({ code, label }) => (
+                  <DropdownMenuItem
+                    key={code}
+                    onClick={() => setLocale(code)}
+                    className={cn(locale === code && 'bg-accent')}
+                  >
+                    {label}
+                    {locale === code && <Check size={13} className="ml-auto" />}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={logout} className="text-red-400 focus:text-red-400 focus:bg-red-400/10">
+              <LogOut size={13} className="mr-2" />
+              {t('sidebar.signOut')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </aside>
   )

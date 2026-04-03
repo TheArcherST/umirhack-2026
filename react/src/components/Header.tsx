@@ -1,6 +1,8 @@
-import { Sun, Moon, Wifi, WifiOff } from 'lucide-react'
+import { Sun, Moon } from 'lucide-react'
 import { useTheme } from '@/hooks/useTheme'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
+import React from 'react'
 
 interface HeaderProps {
   title?: string
@@ -31,10 +33,9 @@ function useBackendStatus() {
   return connected
 }
 
-import React from 'react'
-
 export function Header({ title, right, backButton }: HeaderProps) {
   const { theme, toggle } = useTheme()
+  const { t } = useI18n()
   const connected = useBackendStatus()
 
   return (
@@ -61,7 +62,7 @@ export function Header({ title, right, backButton }: HeaderProps) {
             )}
           />
           <span className="hidden sm:inline font-mono text-[11px]">
-            {connected ? 'connected' : 'offline'}
+            {connected ? t('common.connected') : t('common.offline')}
           </span>
         </div>
 
@@ -69,7 +70,7 @@ export function Header({ title, right, backButton }: HeaderProps) {
         <button
           onClick={toggle}
           className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-          title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+          title={theme === 'dark' ? t('common.theme.switchToLight') : t('common.theme.switchToDark')}
         >
           {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
         </button>

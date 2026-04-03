@@ -12,6 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { stubGetAgents, stubCreateTask } from '@/api/stubs'
+import { useI18n } from '@/i18n'
 
 interface Props {
   open: boolean
@@ -26,6 +27,7 @@ export function NewTaskModal({ open, onClose, onCreated, defaultAgentId }: Props
   const [timeout, setTimeout_] = useState('30')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const { t } = useI18n()
 
   const { data: agents = [] } = useQuery({
     queryKey: ['agents'],
@@ -47,7 +49,7 @@ export function NewTaskModal({ open, onClose, onCreated, defaultAgentId }: Props
       setCommand('')
       onCreated()
     } catch (err: any) {
-      setError(err.message ?? 'Failed to create task')
+      setError(err.message ?? t('newTask.createFailed'))
     } finally {
       setLoading(false)
     }
@@ -65,17 +67,17 @@ export function NewTaskModal({ open, onClose, onCreated, defaultAgentId }: Props
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New task</DialogTitle>
-          <DialogDescription>Execute a command on a remote agent</DialogDescription>
+          <DialogTitle>{t('newTask.title')}</DialogTitle>
+          <DialogDescription>{t('newTask.description')}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit}>
           <div className="px-6 pb-2 space-y-4">
             <div className="space-y-1.5">
-              <Label>Agent</Label>
+              <Label>{t('newTask.agentLabel')}</Label>
               <Select value={agentId} onValueChange={setAgentId}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select agent…" />
+                  <SelectValue placeholder={t('newTask.agentPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
                   {agents.map((a) => (
@@ -89,9 +91,9 @@ export function NewTaskModal({ open, onClose, onCreated, defaultAgentId }: Props
             </div>
 
             <div className="space-y-1.5">
-              <Label>Command</Label>
+              <Label>{t('newTask.commandLabel')}</Label>
               <Textarea
-                placeholder="df -h"
+                placeholder={t('newTask.commandPlaceholder')}
                 value={command}
                 onChange={(e) => setCommand(e.target.value)}
                 className="h-24 font-mono text-xs"
@@ -100,7 +102,7 @@ export function NewTaskModal({ open, onClose, onCreated, defaultAgentId }: Props
             </div>
 
             <div className="space-y-1.5">
-              <Label>Timeout (seconds)</Label>
+              <Label>{t('newTask.timeoutLabel')}</Label>
               <Input
                 type="number"
                 min="1"
@@ -116,14 +118,14 @@ export function NewTaskModal({ open, onClose, onCreated, defaultAgentId }: Props
 
           <DialogFooter>
             <Button type="button" variant="ghost" size="sm" onClick={onClose}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button
               type="submit"
               size="sm"
               disabled={loading || !agentId || !command.trim()}
             >
-              {loading ? <Loader2 size={13} className="animate-spin" /> : 'Run task'}
+              {loading ? <Loader2 size={13} className="animate-spin" /> : t('newTask.runTask')}
             </Button>
           </DialogFooter>
         </form>

@@ -11,16 +11,18 @@ import { TaskLogModal } from '@/components/TaskLogModal'
 import { NewTaskModal } from '@/components/NewTaskModal'
 import type { Task, TaskStatus } from '@/api/types'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/i18n'
 
 type StatusFilter = '' | TaskStatus
 
 function StatusBadge({ status }: { status: Task['status'] }) {
+  const { t } = useI18n()
   const map: Record<Task['status'], React.ReactNode> = {
-    success: <Badge variant="success">success</Badge>,
-    failed: <Badge variant="destructive">failed</Badge>,
-    timeout: <Badge variant="warning">timeout</Badge>,
-    running: <Badge variant="blue">running</Badge>,
-    pending: <Badge variant="muted">pending</Badge>,
+    success: <Badge variant="success">{t('common.success')}</Badge>,
+    failed: <Badge variant="destructive">{t('common.failed')}</Badge>,
+    timeout: <Badge variant="warning">{t('common.timeout')}</Badge>,
+    running: <Badge variant="blue">{t('common.running')}</Badge>,
+    pending: <Badge variant="muted">{t('common.pending')}</Badge>,
   }
   return <>{map[status]}</>
 }
@@ -28,6 +30,7 @@ function StatusBadge({ status }: { status: Task['status'] }) {
 export default function AgentTasks() {
   const { agentId } = useParams<{ agentId: string }>()
   const navigate = useNavigate()
+  const { t } = useI18n()
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('')
   const [page, setPage] = useState(1)
   const [logTaskId, setLogTaskId] = useState<string | null>(null)
@@ -55,17 +58,17 @@ export default function AgentTasks() {
   const totalPages = tasksPage?.total_pages ?? 1
 
   const STATUS_FILTERS: [StatusFilter, string][] = [
-    ['', 'All'],
-    ['success', 'Success'],
-    ['failed', 'Failed'],
-    ['timeout', 'Timeout'],
-    ['pending', 'Pending'],
+    ['', t('common.all')],
+    ['success', t('agentTasks.successFilter')],
+    ['failed', t('agentTasks.failedFilter')],
+    ['timeout', t('agentTasks.timeoutFilter')],
+    ['pending', t('agentTasks.pendingFilter')],
   ]
 
   return (
     <>
       <Header
-        title={agent?.name ?? 'Agent tasks'}
+        title={agent?.name ?? t('agentTasks.title')}
         backButton={
           <button
             onClick={() => navigate('/agents')}
@@ -91,7 +94,7 @@ export default function AgentTasks() {
             )}
             <Button size="sm" variant="outline" onClick={() => setNewTaskOpen(true)} className="gap-1.5 h-7 text-xs">
               <Plus size={12} />
-              New task
+              {t('agentTasks.newTask')}
             </Button>
           </div>
         }
@@ -118,7 +121,7 @@ export default function AgentTasks() {
 
             {tasksPage && (
               <span className="ml-auto text-xs font-mono text-muted-foreground">
-                {tasksPage.total} task{tasksPage.total !== 1 ? 's' : ''}
+                {tasksPage.total} {tasksPage.total === 1 ? t('agentTasks.taskCount', { count: tasksPage.total }) : t('agentTasks.taskCountPlural', { count: tasksPage.total })}
               </span>
             )}
           </div>
@@ -128,11 +131,11 @@ export default function AgentTasks() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground font-mono">#</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Command</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Status</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden sm:table-cell">Duration</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden md:table-cell">Started</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground font-mono">{t('agentTasks.hash')}</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{t('common.command')}</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{t('common.status')}</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden sm:table-cell">{t('common.duration')}</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden md:table-cell">{t('agentTasks.started')}</th>
                   <th className="px-4 py-2.5 w-10" />
                 </tr>
               </thead>
@@ -172,7 +175,7 @@ export default function AgentTasks() {
                 {tasks.length === 0 && (
                   <tr>
                     <td colSpan={6} className="px-4 py-8 text-center text-xs text-muted-foreground">
-                      No tasks found
+                      {t('agentTasks.noTasks')}
                     </td>
                   </tr>
                 )}
@@ -190,10 +193,10 @@ export default function AgentTasks() {
                 onClick={() => setPage((p) => p - 1)}
                 className="h-7 text-xs"
               >
-                Previous
+                {t('agentTasks.previous')}
               </Button>
               <span className="text-xs font-mono text-muted-foreground">
-                Page {page} / {totalPages}
+                {t('agentTasks.page', { current: page, total: totalPages })}
               </span>
               <Button
                 variant="outline"
@@ -202,7 +205,7 @@ export default function AgentTasks() {
                 onClick={() => setPage((p) => p + 1)}
                 className="h-7 text-xs"
               >
-                Next
+                {t('agentTasks.next')}
               </Button>
             </div>
           )}

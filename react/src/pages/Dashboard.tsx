@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Server, Activity, CheckCircle2, XCircle, Clock, ChevronRight, Plus } from 'lucide-react'
+import { Server, Activity, CheckCircle2, XCircle, ChevronRight, Plus } from 'lucide-react'
 import { Header } from '@/components/Header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -10,14 +10,16 @@ import { formatDate, formatDuration } from '@/lib/utils'
 import type { Task } from '@/api/types'
 import { TaskLogModal } from '@/components/TaskLogModal'
 import { NewTaskModal } from '@/components/NewTaskModal'
+import { useI18n } from '@/i18n'
 
 function StatusBadge({ status }: { status: Task['status'] }) {
-  const map = {
-    success: <Badge variant="success">success</Badge>,
-    failed: <Badge variant="destructive">failed</Badge>,
-    timeout: <Badge variant="warning">timeout</Badge>,
-    running: <Badge variant="blue">running</Badge>,
-    pending: <Badge variant="muted">pending</Badge>,
+  const { t } = useI18n()
+  const map: Record<Task['status'], React.ReactNode> = {
+    success: <Badge variant="success">{t('common.success')}</Badge>,
+    failed: <Badge variant="destructive">{t('common.failed')}</Badge>,
+    timeout: <Badge variant="warning">{t('common.timeout')}</Badge>,
+    running: <Badge variant="blue">{t('common.running')}</Badge>,
+    pending: <Badge variant="muted">{t('common.pending')}</Badge>,
   }
   return map[status] ?? null
 }
@@ -39,6 +41,7 @@ function StatCard({ icon: Icon, label, value, sub }: { icon: React.ElementType; 
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const { t } = useI18n()
   const [logTaskId, setLogTaskId] = useState<string | null>(null)
   const [newTaskOpen, setNewTaskOpen] = useState(false)
 
@@ -57,11 +60,11 @@ export default function Dashboard() {
   return (
     <>
       <Header
-        title="Dashboard"
+        title={t('dashboard.title')}
         right={
           <Button size="sm" variant="outline" onClick={() => setNewTaskOpen(true)} className="gap-1.5 h-7 text-xs">
             <Plus size={12} />
-            New task
+            {t('dashboard.newTask')}
           </Button>
         }
       />
@@ -70,37 +73,37 @@ export default function Dashboard() {
         <div className="p-5 space-y-6">
           {/* Stats grid */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatCard icon={Server} label="Total agents" value={stats?.total_agents ?? '—'} />
+            <StatCard icon={Server} label={t('dashboard.totalAgents')} value={stats?.total_agents ?? '—'} />
             <StatCard
               icon={Activity}
-              label="Online now"
+              label={t('dashboard.onlineNow')}
               value={stats?.online_agents ?? '—'}
-              sub={stats ? `${stats.total_agents - stats.online_agents} offline` : undefined}
+              sub={stats ? t('dashboard.offlineCount', { count: stats.total_agents - stats.online_agents }) : undefined}
             />
-            <StatCard icon={CheckCircle2} label="Successful" value={stats?.successful_tasks ?? '—'} sub="all time" />
-            <StatCard icon={XCircle} label="Failed" value={stats?.failed_tasks ?? '—'} sub="all time" />
+            <StatCard icon={CheckCircle2} label={t('dashboard.successful')} value={stats?.successful_tasks ?? '—'} sub={t('dashboard.allTime')} />
+            <StatCard icon={XCircle} label={t('dashboard.failedTasks')} value={stats?.failed_tasks ?? '—'} sub={t('dashboard.allTime')} />
           </div>
 
           {/* Recent tasks */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Recent tasks</h2>
+              <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('dashboard.recentTasks')}</h2>
             </div>
 
             <div className="rounded-lg border border-border overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/30">
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Time</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Agent</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden md:table-cell">Command</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Status</th>
-                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden sm:table-cell">Duration</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{t('dashboard.time')}</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{t('common.agent')}</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden md:table-cell">{t('common.command')}</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{t('common.status')}</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden sm:table-cell">{t('common.duration')}</th>
                     <th className="px-4 py-2.5 w-10" />
                   </tr>
                 </thead>
                 <tbody>
-                  {recentTasks.map((task, i) => (
+                  {recentTasks.map((task) => (
                     <tr
                       key={task.id}
                       className="border-b border-border/50 last:border-0 hover:bg-accent/30 transition-colors"
@@ -140,7 +143,7 @@ export default function Dashboard() {
                   {recentTasks.length === 0 && (
                     <tr>
                       <td colSpan={6} className="px-4 py-8 text-center text-xs text-muted-foreground">
-                        No tasks yet
+                        {t('dashboard.noTasks')}
                       </td>
                     </tr>
                   )}

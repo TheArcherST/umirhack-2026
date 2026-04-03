@@ -1,20 +1,21 @@
 import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { ChevronRight, Circle } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { Header } from '@/components/Header'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { stubGetAgents } from '@/api/stubs'
 import { timeAgo } from '@/lib/utils'
 import type { AgentStatus } from '@/api/types'
 import { cn } from '@/lib/utils'
+import { useI18n } from '@/i18n'
 
 type Filter = '' | AgentStatus
 
 export default function Agents() {
   const navigate = useNavigate()
   const [filter, setFilter] = useState<Filter>('')
+  const { t } = useI18n()
 
   const { data: agents = [], isLoading } = useQuery({
     queryKey: ['agents', filter],
@@ -25,15 +26,21 @@ export default function Agents() {
   const online = agents.filter((a) => a.status === 'online').length
   const offline = agents.filter((a) => a.status === 'offline').length
 
+  const filters: [Filter, string, string?, string?][] = [
+    ['', t('common.all')],
+    ['online', t('common.online'), 'text-green-400', String(online)],
+    ['offline', t('common.offline'), 'text-muted-foreground/60', String(offline)],
+  ]
+
   return (
     <>
-      <Header title="Agents" />
+      <Header title={t('agents.title')} />
 
       <div className="flex-1 overflow-y-auto">
         <div className="p-5 space-y-4">
           {/* Filter bar */}
           <div className="flex items-center gap-2">
-            {([['', 'All'], ['online', 'Online'], ['offline', 'Offline']] as [Filter, string][]).map(([val, label]) => (
+            {filters.map(([val, label, color, count]) => (
               <button
                 key={val}
                 onClick={() => setFilter(val)}
@@ -45,8 +52,7 @@ export default function Agents() {
                 )}
               >
                 {label}
-                {val === 'online' && <span className="ml-1.5 font-mono text-green-400">{online}</span>}
-                {val === 'offline' && <span className="ml-1.5 font-mono text-muted-foreground/60">{offline}</span>}
+                {count != null && <span className={cn('ml-1.5 font-mono', color)}>{count}</span>}
               </button>
             ))}
           </div>
@@ -56,18 +62,18 @@ export default function Agents() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Agent</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden sm:table-cell">IP / Host</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Status</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden md:table-cell">Last heartbeat</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden lg:table-cell">Tasks</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{t('common.agent')}</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden sm:table-cell">{t('agents.ipHost')}</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{t('common.status')}</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden md:table-cell">{t('agents.lastHeartbeat')}</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden lg:table-cell">{t('common.tasks')}</th>
                   <th className="px-4 py-2.5 w-10" />
                 </tr>
               </thead>
               <tbody>
                 {isLoading && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-xs text-muted-foreground">Loading…</td>
+                    <td colSpan={6} className="px-4 py-8 text-center text-xs text-muted-foreground">{t('common.loading')}</td>
                   </tr>
                 )}
                 {!isLoading && agents.map((agent) => (
@@ -94,7 +100,7 @@ export default function Agents() {
                           )}
                         />
                         <span className={cn('text-xs font-mono', agent.status === 'online' ? 'text-green-400' : 'text-muted-foreground')}>
-                          {agent.status}
+                          {agent.status === 'online' ? t('common.online') : t('common.offline')}
                         </span>
                       </div>
                     </td>
@@ -117,7 +123,7 @@ export default function Agents() {
                 {!isLoading && agents.length === 0 && (
                   <tr>
                     <td colSpan={6} className="px-4 py-8 text-center text-xs text-muted-foreground">
-                      No agents found
+                      {t('agents.noAgents')}
                     </td>
                   </tr>
                 )}
