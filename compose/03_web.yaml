@@ -13,7 +13,8 @@ services:
     image: nginx:1.27-alpine
     restart: unless-stopped
     ports:
-      - ${COMPOSE__NGINX__HOST}:${COMPOSE__NGINX__PORT}:80
+      - ${COMPOSE__NGINX__HTTP_HOST}:${COMPOSE__NGINX__HTTP_PORT}:80
+      - ${COMPOSE__NGINX__HTTPS_HOST}:${COMPOSE__NGINX__HTTPS_PORT}:443
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
