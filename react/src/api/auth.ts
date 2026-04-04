@@ -1,5 +1,6 @@
 import apiClient from './client'
 import type {
+    AuthUser,
     LoginPayload,
     LoginResponse,
     RegisterPayload,
@@ -46,6 +47,24 @@ export async function apiResendCode(payload: ResendCodePayload): Promise<ResendR
     const res = await apiClient.post<ResendResponse>('/auth/email/resend', {
         username: payload.username,
     })
+    return res.data
+}
+
+export async function apiGetMe(): Promise<AuthUser> {
+    const res = await apiClient.get<AuthUser>('/me')
+    return res.data
+}
+
+export async function apiUpdateMe(name: string): Promise<AuthUser> {
+    const res = await apiClient.patch<AuthUser>('/me', {name})
+    return res.data
+}
+
+export async function apiInitiatePasswordChange(payload: {
+    current_password: string
+    new_password: string
+}): Promise<{message: string}> {
+    const res = await apiClient.post<{message: string}>('/me/password', payload)
     return res.data
 }
 

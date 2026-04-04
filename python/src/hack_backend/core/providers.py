@@ -67,17 +67,20 @@ class ConfigServer(BaseModel):
     root_path: str = ""
     agent_artifacts_dir: str = "/opt/hack-agent-artifacts"
     agent_public_origin: str | None = None
+    frontend_url: str = ""
 
 
 class ConfigEmail(BaseModel):
     resend_api_key: str = ""
     from_address: str = ""
     template_name: str = ""
+    password_change_template_name: str = ""
     app_name: str = "Linkoo"
     code_validity_minutes: int = Field(default=5, ge=1)
     code_length: int = Field(default=6, ge=4, le=12)
     resend_cooldown_seconds: int = Field(default=60, ge=1)
     max_verification_attempts: int = Field(default=5, ge=1, le=20)
+    password_change_validity_hours: int = Field(default=1, ge=1)
 
 
 class ConfigHack(BaseSettings):
@@ -111,6 +114,13 @@ class ProviderConfig(Provider):
         config: ConfigHack,
     ) -> ConfigEmail:
         return config.email
+
+    @provide(scope=Scope.APP)
+    def get_config_server(
+        self,
+        config: ConfigHack,
+    ) -> ConfigServer:
+        return config.server
 
 
 class ProviderDatabase(Provider):

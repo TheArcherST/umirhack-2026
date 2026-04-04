@@ -39,3 +39,39 @@ async def send_verification_email(
     })
 
     logger.info("Verification email sent to %s, id: %s", to_address, r["id"])
+
+
+async def send_password_change_email(
+    to_address: str,
+    user_name: str,
+    confirm_url: str,
+    cancel_url: str,
+    api_key: str,
+    from_address: str,
+    template_name: str,
+    app_name: str = "Linkoo",
+    validity_hours: int = 1,
+    request_ip: str = "unknown",
+    request_time: str | None = None,
+) -> None:
+    """Send a password change confirmation email using Resend template."""
+    resend.api_key = api_key
+
+    r = resend.Emails.send({
+        "from": from_address,
+        "to": [to_address],
+        "template": {
+            "id": template_name,
+            "variables": {
+                "app_name": app_name,
+                "user_name": user_name,
+                "confirm_url": confirm_url,
+                "cancel_url": cancel_url,
+                "validity_hours": validity_hours,
+                "request_ip": request_ip,
+                "request_time": request_time or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            },
+        },
+    })
+
+    logger.info("Password change email sent to %s, id: %s", to_address, r["id"])
