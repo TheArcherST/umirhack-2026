@@ -710,7 +710,9 @@ def _cron_field_matches(expr: str, current: int, minimum: int, maximum: int) -> 
 
 
 def next_cron_run(expr: str, after: datetime) -> datetime:
-    probe = after.replace(second=0, microsecond=0) + timedelta(minutes=1)
+    probe = ensure_utc(after).replace(second=0, microsecond=0) + timedelta(
+        minutes=1
+    )
     for _ in range(60 * 24 * 366):
         if cron_matches(expr, probe):
             return probe

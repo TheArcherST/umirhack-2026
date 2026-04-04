@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from fastapi import HTTPException
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -760,6 +760,11 @@ class PlatformService:
 
         rule = await self.session.get(ScheduleRule, schedule_rule_id)
         if rule is not None:
+            await self.session.execute(
+                update(TaskRun)
+                .where(TaskRun.schedule_rule_id == schedule_rule_id)
+                .values(schedule_rule_id=None)
+            )
             await self.session.delete(rule)
             await self.session.flush()
 
