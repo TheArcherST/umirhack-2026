@@ -1,18 +1,12 @@
-import pyotp
-
-OTP_TTL = 300
-OTP_DIGITS = 6
+import secrets
 
 
-def generate_otp_secret() -> str:
-    return pyotp.random_base32()
+def generate_otp_code(length: int) -> str:
+    if length <= 0:
+        raise ValueError("OTP length must be positive")
+    upper_bound = 10**length
+    return f"{secrets.randbelow(upper_bound):0{length}d}"
 
 
-def generate_otp_code(otp_secret: str) -> str:
-    totp = pyotp.TOTP(s=otp_secret, interval=OTP_TTL, digits=OTP_DIGITS)
-    return totp.now()
-
-
-def verify_otp_code(code: str, otp_secret: str) -> bool:
-    totp = pyotp.TOTP(s=otp_secret, interval=OTP_TTL, digits=OTP_DIGITS)
-    return totp.verify(code)
+def is_otp_code_format_valid(code: str, length: int) -> bool:
+    return len(code) == length and code.isdigit()

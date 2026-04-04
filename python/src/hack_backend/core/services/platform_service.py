@@ -12,11 +12,14 @@ from hack_backend.core.models import (
     AgentBootstrapToken,
     Environment,
     EnvironmentMember,
+    EnvironmentMemberRole,
     GraphEdge,
     Host,
+    InviteStatus,
     MetricSnapshot,
     Project,
     ProjectMember,
+    ProjectMemberRole,
     TaskRun,
     TaskRunResult,
     TaskTemplate,
@@ -138,8 +141,8 @@ class PlatformService:
             membership = ProjectMember(
                 project_id=project_id,
                 user_id=user.id,
-                role="member",
-                invite_status="pending",
+                role=ProjectMemberRole.MEMBER,
+                invite_status=InviteStatus.PENDING,
             )
             self.session.add(membership)
             await self.session.flush()
@@ -158,8 +161,12 @@ class PlatformService:
         )
         if membership is None:
             raise HTTPException(status_code=404, detail="Member not found")
-        membership.role = "admin" if role == "admin" else "member"
-        membership.invite_status = "accepted"
+        membership.role = (
+            ProjectMemberRole.ADMIN
+            if role == "admin"
+            else ProjectMemberRole.MEMBER
+        )
+        membership.invite_status = InviteStatus.ACCEPTED
         user = await self.session.get(User, user_id)
         if user is None:
             raise HTTPException(status_code=404, detail="User not found")
@@ -199,7 +206,7 @@ class PlatformService:
             EnvironmentMember(
                 environment_id=environment.id,
                 user_id=creator_id,
-                role="operator",
+                role=EnvironmentMemberRole.OPERATOR,
             )
         )
         return environment

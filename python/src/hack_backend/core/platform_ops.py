@@ -15,6 +15,7 @@ from hack_backend.core.models import (
     Environment,
     GraphEdge,
     Host,
+    InviteStatus,
     MetricSnapshot,
     Project,
     ProjectMember,
@@ -202,7 +203,7 @@ async def create_project_defaults(
             project_id=project.id,
             user_id=owner_id,
             role=ProjectMemberRole.ADMIN,
-            invite_status="accepted",
+            invite_status=InviteStatus.ACCEPTED,
         )
     )
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from hack_backend.core.models import (
     Agent,
     Environment,
@@ -34,6 +36,10 @@ from hack_backend.rest_server.schemas.platform import (
 )
 
 
+def _string_value(value: Any) -> str:
+    return str(getattr(value, "value", value))
+
+
 def project_to_dto(project: Project) -> ProjectDTO:
     return ProjectDTO(
         id=project.id,
@@ -56,13 +62,13 @@ def project_member_to_dto(
     member: ProjectMember,
     user: User,
 ) -> ProjectMemberDTO:
-    role = "admin" if member.role.value == "admin" else "member"
+    role = "admin" if _string_value(member.role) == "admin" else "member"
     return ProjectMemberDTO(
         user_id=str(user.id),
         email=user.email or "",
         name=user.username,
         role=role,
-        status=member.invite_status.value,
+        status=_string_value(member.invite_status),
         invited_at=member.invited_at,
     )
 
@@ -71,7 +77,7 @@ def environment_member_to_dto(member: EnvironmentMember) -> EnvironmentMemberDTO
     return EnvironmentMemberDTO(
         user_id=str(member.user_id),
         env_id=member.environment_id,
-        role=member.role.value,
+        role=_string_value(member.role),
     )
 
 
@@ -81,7 +87,7 @@ def agent_to_dto(agent: Agent, environments: list[Environment]) -> AgentDTO:
         project_id=agent.project_id,
         name=agent.name,
         declared_os=agent.declared_os,
-        status=agent.status.value,
+        status=_string_value(agent.status),
         last_seen_at=agent.last_seen_at,
         agent_version=agent.agent_version,
         capabilities_json=agent.capabilities_json or {},
@@ -100,7 +106,7 @@ def host_list_to_dto(host: Host, *, agent: Agent) -> HostListDTO:
         name=host.name,
         hostname=host.hostname,
         os_name=host.os_name,
-        status=agent.status.value,
+        status=_string_value(agent.status),
         primary_ipv4=host.primary_ipv4,
         primary_ipv6=host.primary_ipv6,
         last_seen_at=agent.last_seen_at,
@@ -133,7 +139,7 @@ def task_run_to_dto(task_run: TaskRun) -> TaskRunDTO:
         host_id=task_run.host_id,
         agent_id=task_run.agent_id,
         task_template_id=task_run.task_template_id,
-        status=task_run.status.value,
+        status=_string_value(task_run.status),
         attempt_no=task_run.attempt_no,
         queued_at=task_run.queued_at,
         started_at=task_run.started_at,

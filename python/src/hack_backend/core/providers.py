@@ -1,7 +1,7 @@
 from collections.abc import AsyncGenerator, Iterable
 
 from dishka import Provider, Scope, provide
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import (
@@ -73,7 +73,10 @@ class ConfigEmail(BaseModel):
     from_address: str = ""
     template_name: str = ""
     app_name: str = "Linkoo"
-    code_validity_minutes: int = 5
+    code_validity_minutes: int = Field(default=5, ge=1)
+    code_length: int = Field(default=6, ge=4, le=12)
+    resend_cooldown_seconds: int = Field(default=60, ge=1)
+    max_verification_attempts: int = Field(default=5, ge=1, le=20)
 
 
 class ConfigHack(BaseSettings):

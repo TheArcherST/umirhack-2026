@@ -9,11 +9,14 @@ from sqlalchemy import select
 from hack_backend.core.models import User
 from hack_backend.core.services.access import AccessService
 from hack_backend.core.services.email_verification import (
+    CodeExpired,
     EmailAlreadyVerified,
     EmailVerificationError,
     EmailVerificationService,
     InvalidVerificationCode,
     NoOtpSecret,
+    ResendTooSoon,
+    TooManyVerificationAttempts,
 )
 from hack_backend.core.services.uow_ctl import UoWCtl
 from hack_backend.rest_server.routers.access import (
@@ -66,6 +69,15 @@ async def verify_email(
     except (InvalidVerificationCode, NoOtpSecret) as exc:
         await uow_ctl.rollback()
         raise HTTPException(status_code=400, detail="Invalid code") from exc
+    except CodeExpired as exc:
+        await uow_ctl.rollback()
+        raise HTTPException(status_code=400, detail="Code expired") from exc
+    except TooManyVerificationAttempts as exc:
+        await uow_ctl.rollback()
+        raise HTTPException(
+            status_code=429,
+            detail="Too many attempts. Request a new code.",
+        ) from exc
     except EmailAlreadyVerified as exc:
         await uow_ctl.rollback()
         raise HTTPException(status_code=400, detail="Email already verified") from exc
@@ -102,7 +114,7 @@ async def resend_code(
                 request_ip=(request_ip or "unknown").split(",")[0].strip() or "unknown",
                 user_agent=user_agent or "unknown",
             )
-        except EmailVerificationError:
+        except (EmailVerificationError, ResendTooSoon):
             pass
     await uow_ctl.commit()
     return ResendCodeResponse(

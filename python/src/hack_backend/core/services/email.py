@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 async def send_verification_email(
     to_address: str,
-    code: int,
+    code: str,
     user_name: str,
     api_key: str,
     from_address: str,
@@ -33,7 +33,7 @@ async def send_verification_email(
                 "request_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "user_agent": user_agent,
                 "user_name": user_name,
-                "verification_code": int(code),
+                "verification_code": code,
             },
         },
     })

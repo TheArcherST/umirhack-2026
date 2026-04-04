@@ -27,6 +27,28 @@ def test_login_returns_session_for_valid_credentials(api) -> None:
     assert payload["user"]["name"] == user.username
 
 
+def test_unverified_email_login_is_blocked(api) -> None:
+    username = "needs-verification"
+    password = "pw-needs-verification"
+    register = api.client.post(
+        "/register",
+        json={
+            "username": username,
+            "password": password,
+            "email": "needs-verification@example.com",
+        },
+        headers={"User-Agent": "pytest-integration"},
+    )
+    assert register.status_code == 201, register.text
+    payload = register.json()
+    assert payload["email_verification_required"] is True
+    assert payload["auth"] is None
+
+    login = api.login(username=username, password=password)
+    assert login.status_code == 403
+    assert login.json()["detail"] == "Email is not verified"
+
+
 def test_project_creation_bootstraps_main_environment_and_templates(api) -> None:
     owner = api.register_user(prefix="owner")
 
@@ -85,3 +107,32 @@ def test_project_data_is_isolated_from_other_users(api) -> None:
     )
     assert environments.status_code == 403
     assert environments.json()["detail"] == "Project access denied"
+
+
+def test_project_member_role_update_returns_updated_member(api) -> None:
+    owner = api.register_user(prefix="owner")
+    bundle = api.create_project_bundle(
+        user=owner,
+        project_name="Operations",
+    )
+
+    invited = api.client.post(
+        f"/projects/{bundle.project['id']}/members/invite",
+        json={"email": "invitee@example.com"},
+        headers=owner.headers,
+    )
+    assert invited.status_code == 201, invited.text
+    invited_payload = invited.json()
+    assert invited_payload["role"] == "member"
+    assert invited_payload["status"] == "pending"
+
+    promoted = api.client.put(
+        f"/projects/{bundle.project['id']}/members/{invited_payload['user_id']}/role",
+        json={"role": "admin"},
+        headers=owner.headers,
+    )
+    assert promoted.status_code == 200, promoted.text
+    promoted_payload = promoted.json()
+    assert promoted_payload["user_id"] == invited_payload["user_id"]
+    assert promoted_payload["role"] == "admin"
+    assert promoted_payload["status"] == "accepted"
