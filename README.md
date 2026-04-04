@@ -1,5 +1,3 @@
-# Концептуальное описание (ридми будет потом):
-
 ## Задеплоенный проект
 
 https://lvalue.linkoo.dev
@@ -15,7 +13,9 @@ https://lvalue.linkoo.dev
 6. Можно ещё прогнать тесты через `make test`
 
 
-## Part 1. Observability.
+## Концептуальное описание предметной области
+
+### Part 1. Observability.
 
 Clause 1.  
 We model infrastructure as set of hosts, each described as a set of fields having arbitrary structure. There are  
@@ -72,13 +72,14 @@ Clause 10.
 Currently, we support at least such a type of telemetry that can be represented as edges:  
 1. Endpoint connectivity (single task result or CRON, so last attempt displayed (with expiry indication), or metric that displays computed telemetry on top of tasks results).
 
-## Part 2. Compliance.
+
+### Part 2. Compliance.
 
 Clause 11.
 Compliance stands for distinguishing desired states of system from undesired. White unit of unit of observed system behavior is telemetry entity (task result or metric snapshot), the unit of compliance is a rule. For given valid telemetry entity, rule defines whether it's desired entity or not.
 
 Clause 12.
-Formally, we can call compliance just a spe
+Formally, we can call compliance just a spe; todo
 
 Clause 13.
 As a rule of thumb, structure of a rule is determined on basis of corresponding telemetry entity structure by enumeration of qualities, required to classify telemetry entity as desired (whitelist) or as undesired (blacklist).
