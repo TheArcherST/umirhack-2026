@@ -73,6 +73,7 @@ export function EndpointTargetInput({
               onBlur={(event) => {
                 onBlur?.(event)
               }}
+              onClick={(event) => event.stopPropagation()}
               className={cn('font-mono text-xs', className)}
               autoComplete="off"
             />
@@ -89,7 +90,11 @@ export function EndpointTargetInput({
               {t('env.taskTargetSuggestionsLoading')}
             </div>
           ) : (
-            <div className="max-h-56 overflow-y-auto">
+            <div
+              className="max-h-56 overflow-y-auto"
+              onMouseDown={(event) => event.preventDefault()}
+              onWheel={(event) => event.stopPropagation()}
+            >
               {filteredSuggestions.map((suggestion) => (
                 <button
                   key={`${suggestion.kind}:${suggestion.value}`}
