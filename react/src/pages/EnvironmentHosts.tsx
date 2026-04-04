@@ -10,6 +10,7 @@ import type { AgentStatus } from '@/api/types'
 import { cn } from '@/lib/utils'
 import { agentStatusLabelKey, agentStatusTextTone, agentStatusTone } from '@/lib/agentStatus'
 import { useI18n } from '@/i18n'
+import { EnvironmentHeader } from '@/components/EnvironmentHeader'
 
 type Filter = '' | AgentStatus
 
@@ -42,9 +43,7 @@ export default function EnvironmentHosts() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <header className="flex items-center px-5 border-b border-border bg-card/50 backdrop-blur-sm" style={{ height: 'var(--header-height)' }}>
-        <h1 className="text-sm font-semibold text-foreground">{t('env.hosts')}</h1>
-      </header>
+      <EnvironmentHeader envId={envId} title={t('env.hosts')} />
 
       <div className="flex-1 overflow-y-auto">
         <div className="p-5 space-y-4">

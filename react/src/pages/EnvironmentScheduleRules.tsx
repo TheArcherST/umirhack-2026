@@ -24,6 +24,7 @@ import { CreateCronRuleModal } from '@/components/CreateCronRuleModal'
 import { EndpointTargetInput } from '@/components/EndpointTargetInput'
 import { formatDate } from '@/lib/utils'
 import { useI18n } from '@/i18n'
+import { EnvironmentHeader } from '@/components/EnvironmentHeader'
 import type { ScheduleRule, TaskTemplate } from '@/api/types'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -271,18 +272,16 @@ export default function EnvironmentScheduleRules() {
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <header
-        className="flex items-center justify-between px-5 border-b border-border bg-card/50 backdrop-blur-sm"
-        style={{ height: 'var(--header-height)' }}
-      >
-        <h1 className="text-sm font-semibold text-foreground">
-          {currentEnv?.name ?? 'Environment'} — {t('cron.title')}
-        </h1>
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
-          <Plus size={13} className="mr-1.5" />
-          {t('cron.new')}
-        </Button>
-      </header>
+      <EnvironmentHeader
+        envId={envId}
+        title={t('env.schedule')}
+        right={
+          <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus size={13} className="mr-1.5" />
+            {t('cron.new')}
+          </Button>
+        }
+      />
 
       <div className="flex-1 overflow-y-auto">
         <div className="p-5">

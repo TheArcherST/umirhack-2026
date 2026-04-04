@@ -12,6 +12,7 @@ import { TaskLogModal } from '@/components/TaskLogModal'
 import { DeleteHostModal } from '@/components/DeleteHostModal'
 import type { Task } from '@/api/types'
 import { useI18n } from '@/i18n'
+import { EnvironmentHeader } from '@/components/EnvironmentHeader'
 
 function StatusBadge({ status }: { status: Task['status'] }) {
   const { t } = useI18n()
@@ -73,46 +74,31 @@ export default function EnvironmentHostDetail() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="flex items-center px-5 border-b border-border bg-card/50 backdrop-blur-sm" style={{ height: 'var(--header-height)' }}>
-        <div className="flex items-center gap-2 min-w-0">
+      <EnvironmentHeader
+        envId={envId!}
+        title={host?.name || t('common.host')}
+        backButton={
           <button
             onClick={() => navigate(`/environments/${envId}/hosts`)}
-            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors mr-2"
+            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           >
             <ChevronLeft size={15} />
           </button>
-          <div className="flex items-center gap-2 min-w-0">
-            <h1 className="text-sm font-semibold text-foreground font-mono truncate">
-              {host?.name ?? hostId}
-            </h1>
-            {host && (
-              <div className="flex items-center gap-1.5">
-                <span className={cn(
-                  'w-1.5 h-1.5 rounded-full',
-                  agentStatusTone(host.status),
-                )} />
-                <span className={cn(
-                  'text-xs font-mono',
-                  agentStatusTextTone(host.status),
-                )}>
-                  {t(agentStatusLabelKey(host.status))}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-        {host && (
-          <Button
-            size="sm"
-            variant="destructive"
-            className="ml-auto h-7 gap-1.5 text-xs"
-            onClick={() => setDeleteOpen(true)}
-          >
-            <Trash2 size={12} />
-            {t('env.deleteHost')}
-          </Button>
-        )}
-      </header>
+        }
+        right={
+          host && (
+            <Button
+              size="sm"
+              variant="destructive"
+              className="ml-auto h-7 gap-1.5 text-xs"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 size={12} />
+              {t('env.deleteHost')}
+            </Button>
+          )
+        }
+      />
 
       <DeleteHostModal
         host={host ?? null}
@@ -124,7 +110,7 @@ export default function EnvironmentHostDetail() {
       <div className="flex-1 overflow-y-auto">
         <div className="p-5 space-y-5">
           {/* Top: two columns */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
             {/* Left: Host Info */}
             <div className="rounded-lg border border-border bg-card">
               <div className="flex items-center gap-2 px-4 py-3 border-b border-border/50">
@@ -166,7 +152,7 @@ export default function EnvironmentHostDetail() {
             </div>
 
             {/* Right: Services + Ports */}
-            <div className="space-y-5">
+            <div className="flex flex-col gap-5">
               {/* Services */}
               <div className="rounded-lg border border-border bg-card">
                 <div className="flex items-center gap-2 px-4 py-3 border-b border-border/50">
@@ -179,7 +165,7 @@ export default function EnvironmentHostDetail() {
                   )}
                 </div>
                 {loadingServices ? (
-                  <div className="px-4 py-3 space-y-2">
+                  <div className="px-4 py-3 space-y-2 overflow-y-auto">
                     {Array.from({length: 3}).map((_, i) => (
                       <div key={i} className="flex items-center justify-between py-2.5 border-b border-border/50 last:border-0">
                         <div className="flex items-center gap-2">
@@ -196,7 +182,7 @@ export default function EnvironmentHostDetail() {
                 ) : services.length === 0 ? (
                   <div className="px-4 py-6 text-xs text-muted-foreground">{t('common.noResults')}</div>
                 ) : (
-                  <div className="px-4 py-2">
+                  <div className="px-4 py-2 overflow-y-auto max-h-[190px]">
                     {services.map((svc) => (
                       <div key={svc.name} className="flex items-center justify-between py-2.5 border-b border-border/50 last:border-0">
                         <div className="flex items-center gap-2">

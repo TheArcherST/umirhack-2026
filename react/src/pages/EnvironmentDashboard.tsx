@@ -16,6 +16,7 @@ import type { Task } from '@/api/types'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import EnvironmentGraph from '@/components/EnvironmentGraph'
+import { EnvironmentHeader } from '@/components/EnvironmentHeader'
 
 function StatusBadge({ status }: { status: Task['status'] }) {
   const { t } = useI18n()
@@ -96,11 +97,7 @@ export default function EnvironmentDashboard() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="flex items-center px-5 border-b border-border bg-card/50 backdrop-blur-sm" style={{ height: 'var(--header-height)' }}>
-        <h1 className="text-sm font-semibold text-foreground">
-          {currentEnv?.name ?? 'Environment'} — {t('env.dashboard')}
-        </h1>
-      </header>
+      <EnvironmentHeader envId={envId!} title={t('env.dashboard')} />
 
       <div className="flex-1 overflow-y-auto">
         <div className="p-5 space-y-6">
@@ -115,7 +112,7 @@ export default function EnvironmentDashboard() {
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Connectivity Graph
+                {t('dashboard.connectivity_graph')}
               </h2>
               {isLoadingGraph ? (
                 <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
