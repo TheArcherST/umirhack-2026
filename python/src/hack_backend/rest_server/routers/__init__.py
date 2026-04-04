@@ -12,6 +12,7 @@ from . import (
     schedule_rules,
     task_runs,
     task_templates,
+    user_settings,
 )
 
 router = APIRouter()
@@ -19,6 +20,7 @@ router = APIRouter()
 
 router.include_router(access.router)
 router.include_router(email_verification.router)
+router.include_router(user_settings.router)
 router.include_router(dev_router.router)
 router.include_router(projects.router)
 router.include_router(environments.router)

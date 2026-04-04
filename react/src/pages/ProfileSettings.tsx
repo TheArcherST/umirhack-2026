@@ -6,9 +6,10 @@ import {Label} from '@/components/ui/label'
 import {useAuth} from '@/hooks/useAuth'
 import {useNavigate} from 'react-router-dom'
 import {useI18n} from '@/i18n'
+import {apiUpdateMe, apiInitiatePasswordChange, extractError} from '@/api/auth'
 
 export default function ProfileSettings() {
-    const {user, login} = useAuth()
+    const {user, login, token} = useAuth()
     const navigate = useNavigate()
     const {t} = useI18n()
 
@@ -17,21 +18,30 @@ export default function ProfileSettings() {
     const [currentPassword, setCurrentPassword] = useState('')
     const [newPassword, setNewPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
-    const [saved, setSaved] = useState(false)
+    const [profileSaved, setProfileSaved] = useState(false)
+    const [passwordEmailSent, setPasswordEmailSent] = useState(false)
+    const [profileLoading, setProfileLoading] = useState(false)
+    const [passwordLoading, setPasswordLoading] = useState(false)
     const [error, setError] = useState('')
 
-    const handleSaveProfile = (e: React.FormEvent) => {
+    const handleSaveProfile = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!name.trim()) return
-        const updated = {...user!, name: name.trim()}
-        localStorage.setItem('auth_user', JSON.stringify(updated))
-        const token = localStorage.getItem('auth_token')
-        if (token) login(token, updated)
-        setSaved(true)
-        setTimeout(() => setSaved(false), 2000)
+        setProfileLoading(true)
+        setError('')
+        try {
+            const updated = await apiUpdateMe(name.trim())
+            if (token) login(token, updated)
+            setProfileSaved(true)
+            setTimeout(() => setProfileSaved(false), 2000)
+        } catch (err: any) {
+            setError(extractError(err))
+        } finally {
+            setProfileLoading(false)
+        }
     }
 
-    const handleChangePassword = (e: React.FormEvent) => {
+    const handleChangePassword = async (e: React.FormEvent) => {
         e.preventDefault()
         setError('')
         if (!currentPassword || !newPassword || !confirmPassword) {
@@ -46,11 +56,21 @@ export default function ProfileSettings() {
             setError(t('profile.passwordMinLength'))
             return
         }
-        setSaved(true)
-        setCurrentPassword('')
-        setNewPassword('')
-        setConfirmPassword('')
-        setTimeout(() => setSaved(false), 2000)
+        setPasswordLoading(true)
+        try {
+            await apiInitiatePasswordChange({
+                current_password: currentPassword,
+                new_password: newPassword,
+            })
+            setPasswordEmailSent(true)
+            setCurrentPassword('')
+            setNewPassword('')
+            setConfirmPassword('')
+        } catch (err: any) {
+            setError(extractError(err))
+        } finally {
+            setPasswordLoading(false)
+        }
     }
 
     return (
@@ -130,9 +150,9 @@ export default function ProfileSettings() {
                             </p>
                         </div>
 
-                        <Button type="submit" size="sm">
+                        <Button type="submit" size="sm" disabled={profileLoading}>
                             <Save size={13}/>
-                            {saved ? t('common.saved') : t('common.saveChanges')}
+                            {profileSaved ? t('common.saved') : t('common.saveChanges')}
                         </Button>
                     </form>
 
@@ -200,16 +220,16 @@ export default function ProfileSettings() {
                             <p className="text-xs text-red-400 font-mono">{error}</p>
                         )}
 
-                        <Button type="submit" size="sm" variant="secondary">
+                        <Button type="submit" size="sm" variant="secondary" disabled={passwordLoading}>
                             {t('profile.changePassword')}
                         </Button>
-                    </form>
 
-                    {saved && (
-                        <p className="text-xs text-green-400 font-mono">
-                            {t('common.changesSaved')}
-                        </p>
-                    )}
+                        {passwordEmailSent && (
+                            <p className="text-xs text-green-400 font-mono">
+                                Письмо с подтверждением отправлено на {email}
+                            </p>
+                        )}
+                    </form>
                 </div>
             </div>
         </div>

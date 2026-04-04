@@ -163,6 +163,18 @@ async def login(
     )
 
 
+@router.get("/me", response_model=AuthUserDTO)
+@inject
+async def get_me(
+    current_user: FromDishka[AuthorizedUser],
+) -> AuthUserDTO:
+    return AuthUserDTO(
+        id=str(current_user.id),
+        email=current_user.email or current_user.username,
+        name=current_user.username,
+    )
+
+
 @router.get("/users/search", response_model=list[UserSearchResultDTO])
 @inject
 async def search_users(

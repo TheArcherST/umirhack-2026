@@ -1,4 +1,5 @@
 import secrets
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from argon2 import PasswordHasher
@@ -7,6 +8,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hack_backend.core.models import LoginSession, User
+from hack_backend.core.security import hash_secret, new_secret, verify_secret
 
 
 class ServiceAccessError(Exception):
@@ -26,6 +28,18 @@ class ErrorEmailAlreadyExists(ServiceAccessError):
 
 
 class ErrorUsernameAlreadyExists(ServiceAccessError):
+    pass
+
+
+class ErrorNoPendingPasswordChange(ServiceAccessError):
+    pass
+
+
+class ErrorPasswordChangeTokenExpired(ServiceAccessError):
+    pass
+
+
+class ErrorPasswordChangeTokenInvalid(ServiceAccessError):
     pass
 
 
@@ -196,6 +210,60 @@ class AccessService:
         dummy_password = "dummy password horse battery"
         self.ph.verify(dummy_hash, dummy_password)
         await self._dummy_rehash()
+
+    async def update_username(self, user: User, new_username: str) -> None:
+        existing = await self.orm_session.scalar(
+            select(User).where(User.username == new_username, User.id != user.id)
+        )
+        if existing is not None:
+            raise ErrorUsernameAlreadyExists("Username already exists")
+        user.username = new_username
+
+    async def initiate_password_change(
+        self,
+        user: User,
+        current_password: str,
+        new_password: str,
+        validity_hours: int = 1,
+    ) -> str:
+        await self._authenticate_user(user, current_password)
+        token = new_secret(32)
+        user.password_change_token_hash = hash_secret(token)
+        user.password_change_new_hash = self.ph.hash(new_password)
+        user.password_change_expires_at = datetime.now(tz=UTC) + timedelta(hours=validity_hours)
+        return token
+
+    async def confirm_password_change(self, token: str) -> User:
+        user = await self._find_user_by_password_change_token(token)
+        user.password_hash = user.password_change_new_hash  # type: ignore[assignment]
+        self._clear_password_change_state(user)
+        return user
+
+    async def cancel_password_change(self, token: str) -> User:
+        user = await self._find_user_by_password_change_token(token)
+        self._clear_password_change_state(user)
+        return user
+
+    async def _find_user_by_password_change_token(self, token: str) -> User:
+        token_hash = hash_secret(token)
+        user = await self.orm_session.scalar(
+            select(User).where(User.password_change_token_hash == token_hash)
+        )
+        if user is None:
+            raise ErrorPasswordChangeTokenInvalid("Invalid token")
+        expires_at = user.password_change_expires_at
+        if expires_at is not None:
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=UTC)
+            if expires_at <= datetime.now(tz=UTC):
+                self._clear_password_change_state(user)
+                raise ErrorPasswordChangeTokenExpired("Token expired")
+        return user
+
+    def _clear_password_change_state(self, user: User) -> None:
+        user.password_change_token_hash = None
+        user.password_change_new_hash = None
+        user.password_change_expires_at = None
 
     async def _dummy_rehash(self):
         self.ph.hash("password horse battery dummy")

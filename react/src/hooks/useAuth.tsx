@@ -1,10 +1,12 @@
 import React, {createContext, useContext, useState, useEffect, useCallback} from 'react'
 import type {AuthUser} from '@/api/types'
+import {apiGetMe} from '@/api/auth'
 
 interface AuthContextValue {
     user: AuthUser | null
     token: string | null
     isAuthenticated: boolean
+    isLoading: boolean
     login: (token: string, user: AuthUser) => void
     logout: () => void
 }
@@ -21,6 +23,7 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
         }
     })
     const [token, setToken] = useState<string | null>(() => localStorage.getItem('auth_token'))
+    const [isLoading, setIsLoading] = useState(() => !!localStorage.getItem('auth_token'))
 
     const login = useCallback((newToken: string, newUser: AuthUser) => {
         localStorage.setItem('auth_token', newToken)
@@ -36,8 +39,25 @@ export function AuthProvider({children}: { children: React.ReactNode }) {
         setUser(null)
     }, [])
 
+    useEffect(() => {
+        const storedToken = localStorage.getItem('auth_token')
+        if (!storedToken) return
+
+        apiGetMe()
+            .then((me) => {
+                setUser(me)
+                localStorage.setItem('auth_user', JSON.stringify(me))
+            })
+            .catch(() => {
+                logout()
+            })
+            .finally(() => {
+                setIsLoading(false)
+            })
+    }, [logout])
+
     return (
-        <AuthContext.Provider value={{user, token, isAuthenticated: !!token && !!user, login, logout}}>
+        <AuthContext.Provider value={{user, token, isAuthenticated: !!token && !!user, isLoading, login, logout}}>
             {children}
         </AuthContext.Provider>
     )

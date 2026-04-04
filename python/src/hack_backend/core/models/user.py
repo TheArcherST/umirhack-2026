@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import String
 from datetime import datetime
+
+from sqlalchemy import String
+from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, CreatedAt
 
@@ -34,5 +35,9 @@ class User(Base):
         mapped_column(nullable=True)
     )
     email_verification_attempt_count: Mapped[int] = mapped_column(default=0)
+
+    password_change_token_hash: Mapped[str | None] = mapped_column(String(), nullable=True)
+    password_change_new_hash: Mapped[str | None] = mapped_column(String(), nullable=True)
+    password_change_expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
 
     created_at: Mapped[CreatedAt]
