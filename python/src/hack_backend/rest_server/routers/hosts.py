@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from hack_backend.core.models import Host
 from hack_backend.core.services.access import AccessService
 from hack_backend.core.services.platform_service import PlatformService
+from hack_backend.core.services.uow_ctl import UoWCtl
 from hack_backend.rest_server.providers import AuthorizedUser
 from hack_backend.rest_server.schemas.platform import (
     HostDetailDTO,
@@ -38,6 +39,26 @@ async def get_host(
         user_id=current_user.id,
     )
     return host_detail_to_dto(host)
+
+
+@router.delete("/hosts/{host_id}", status_code=204)
+@inject
+async def delete_host(
+    host_id: str,
+    current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
+    platform_service: FromDishka[PlatformService],
+    uow_ctl: FromDishka[UoWCtl],
+) -> None:
+    host = await platform_service.session.get(Host, host_id)
+    if host is None:
+        return
+    await access_service.require_environment_member(
+        host.environment_id,
+        user_id=current_user.id,
+    )
+    await platform_service.delete_host(host_id)
+    await uow_ctl.commit()
 
 
 @router.get("/hosts/{host_id}/telemetry", response_model=list[TelemetryRecordDTO])

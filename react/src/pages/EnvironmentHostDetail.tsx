@@ -1,13 +1,15 @@
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft, Cpu, Network, Server } from 'lucide-react'
+import { ChevronLeft, Cpu, Network, Server, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { stubGetHost, stubGetHostInfo, stubGetHostServices, stubGetRecentTasks } from '@/api/stubs'
 import { formatDate, formatDuration, cn } from '@/lib/utils'
 import { agentStatusLabelKey, agentStatusTextTone, agentStatusTone } from '@/lib/agentStatus'
 import { TaskLogModal } from '@/components/TaskLogModal'
+import { DeleteHostModal } from '@/components/DeleteHostModal'
 import type { Task } from '@/api/types'
 import { useI18n } from '@/i18n'
 
@@ -37,6 +39,7 @@ export default function EnvironmentHostDetail() {
   const navigate = useNavigate()
   const { t } = useI18n()
   const [logTaskId, setLogTaskId] = React.useState<string | null>(null)
+  const [deleteOpen, setDeleteOpen] = React.useState(false)
 
   const { data: host } = useQuery({
     queryKey: ['host', hostId],
@@ -71,32 +74,52 @@ export default function EnvironmentHostDetail() {
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
       <header className="flex items-center px-5 border-b border-border bg-card/50 backdrop-blur-sm" style={{ height: 'var(--header-height)' }}>
-        <button
-          onClick={() => navigate(`/environments/${envId}/hosts`)}
-          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors mr-2"
-        >
-          <ChevronLeft size={15} />
-        </button>
-        <div className="flex items-center gap-2">
-          <h1 className="text-sm font-semibold text-foreground font-mono">
-            {host?.name ?? hostId}
-          </h1>
-          {host && (
-            <div className="flex items-center gap-1.5">
-              <span className={cn(
-                'w-1.5 h-1.5 rounded-full',
-                agentStatusTone(host.status),
-              )} />
-              <span className={cn(
-                'text-xs font-mono',
-                agentStatusTextTone(host.status),
-              )}>
-                {t(agentStatusLabelKey(host.status))}
-              </span>
-            </div>
-          )}
+        <div className="flex items-center gap-2 min-w-0">
+          <button
+            onClick={() => navigate(`/environments/${envId}/hosts`)}
+            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors mr-2"
+          >
+            <ChevronLeft size={15} />
+          </button>
+          <div className="flex items-center gap-2 min-w-0">
+            <h1 className="text-sm font-semibold text-foreground font-mono truncate">
+              {host?.name ?? hostId}
+            </h1>
+            {host && (
+              <div className="flex items-center gap-1.5">
+                <span className={cn(
+                  'w-1.5 h-1.5 rounded-full',
+                  agentStatusTone(host.status),
+                )} />
+                <span className={cn(
+                  'text-xs font-mono',
+                  agentStatusTextTone(host.status),
+                )}>
+                  {t(agentStatusLabelKey(host.status))}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
+        {host && (
+          <Button
+            size="sm"
+            variant="destructive"
+            className="ml-auto h-7 gap-1.5 text-xs"
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 size={12} />
+            {t('env.deleteHost')}
+          </Button>
+        )}
       </header>
+
+      <DeleteHostModal
+        host={host ?? null}
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onDeleted={() => navigate(`/environments/${envId}/hosts`)}
+      />
 
       <div className="flex-1 overflow-y-auto">
         <div className="p-5 space-y-5">

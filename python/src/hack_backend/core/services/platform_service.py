@@ -29,6 +29,7 @@ from hack_backend.core.models import (
 from hack_backend.core.platform_ops import (
     create_hosts_for_agent,
     create_project_defaults,
+    delete_hosts_and_related,
     ensure_project_templates,
     is_graph_edge_stale,
     issue_bootstrap_token,
@@ -524,36 +525,33 @@ class PlatformService:
                 select(Host).where(Host.agent_id == agent_id)
             )
         ]
-        if host_ids:
-            await self.session.execute(
-                delete(GraphEdge).where(GraphEdge.source_host_id.in_(host_ids))
-            )
-            await self.session.execute(
-                delete(GraphEdge).where(GraphEdge.target_host_id.in_(host_ids))
-            )
-            await self.session.execute(
-                delete(MetricSnapshot).where(MetricSnapshot.host_id.in_(host_ids))
-            )
-            await self.session.execute(
-                delete(TelemetryRecord).where(TelemetryRecord.host_id.in_(host_ids))
-            )
-            await self.session.execute(delete(Host).where(Host.id.in_(host_ids)))
+        await delete_hosts_and_related(self.session, host_ids=host_ids)
 
-        task_run_ids = [
+        orphan_task_run_ids = [
             task_run.id
             for task_run in await self.session.scalars(
                 select(TaskRun).where(TaskRun.agent_id == agent_id)
             )
         ]
-        if task_run_ids:
+        if orphan_task_run_ids:
             await self.session.execute(
-                delete(TaskRunResult).where(TaskRunResult.task_run_id.in_(task_run_ids))
+                delete(TaskRunResult).where(
+                    TaskRunResult.task_run_id.in_(orphan_task_run_ids)
+                )
             )
-        await self.session.execute(delete(TaskRun).where(TaskRun.agent_id == agent_id))
+            await self.session.execute(
+                delete(TaskRun).where(TaskRun.id.in_(orphan_task_run_ids))
+            )
         await self.session.execute(
             delete(AgentBootstrapToken).where(AgentBootstrapToken.agent_id == agent_id)
         )
         await self.session.delete(agent)
+
+    async def delete_host(self, host_id: str) -> None:
+        host = await self.session.get(Host, host_id)
+        if host is None:
+            return
+        await delete_hosts_and_related(self.session, host_ids=[host_id])
 
     async def issue_install_script(
         self,

@@ -70,6 +70,115 @@ def _set_agent_seen_state(
         engine.dispose()
 
 
+def _provision_host_with_connectivity_activity(
+    api,
+    *,
+    project_name: str,
+    agent_name: str,
+) -> dict[str, Any]:
+    owner = api.register_user(prefix="operator")
+    bundle = api.create_project_bundle(
+        user=owner,
+        project_name=project_name,
+    )
+    created_agent = api.create_agent(
+        user=owner,
+        project_id=bundle.project["id"],
+        environment_id=bundle.environment["id"],
+        name=agent_name,
+    )
+    bootstrap_token = api.issue_install_token(
+        user=owner,
+        agent_id=created_agent["id"],
+    )
+    agent = api.register_agent(bootstrap_token=bootstrap_token)
+
+    bootstrap_leases = api.poll_agent(agent=agent)
+    leases_by_kind = {
+        lease["task_template"]["kind"]: lease for lease in bootstrap_leases
+    }
+    _complete_success(
+        api,
+        agent=agent,
+        lease=leases_by_kind["host.system_profile"],
+        telemetry_kind="host.system_profile",
+        telemetry_payload={
+            "hostname": f"{agent_name}.internal",
+            "os_name": "linux",
+            "platform_version": "ubuntu-24.04",
+            "kernel": "6.8.0",
+            "cpu_model": "Xeon Platinum",
+            "cpu_cores": 8,
+            "memory_total_mb": 16384,
+        },
+    )
+    _complete_success(
+        api,
+        agent=agent,
+        lease=leases_by_kind["host.ip_interfaces"],
+        telemetry_kind="host.ip_interfaces",
+        telemetry_payload={
+            "interfaces": [
+                {
+                    "name": "eth0",
+                    "mac": "00:11:22:33:44:55",
+                    "ipv4": ["10.20.30.40"],
+                    "ipv6": ["fd00::40"],
+                }
+            ]
+        },
+    )
+
+    hosts_response = api.client.get(
+        f"/environments/{bundle.environment['id']}/hosts",
+        headers=owner.headers,
+    )
+    assert hosts_response.status_code == 200, hosts_response.text
+    hosts = hosts_response.json()
+    assert len(hosts) == 1
+    host = hosts[0]
+
+    connectivity_template_id = _template_id_for_kind(
+        bundle.templates,
+        "network.endpoint_connectivity",
+    )
+    create_task_runs = api.client.post(
+        "/task-runs",
+        json={
+            "environment_id": bundle.environment["id"],
+            "host_ids": [host["id"]],
+            "task_template_id": connectivity_template_id,
+            "payload_overrides": {"target_endpoint": f"{agent_name}.internal"},
+        },
+        headers=owner.headers,
+    )
+    assert create_task_runs.status_code == 201, create_task_runs.text
+    task_run = create_task_runs.json()[0]
+
+    connectivity_lease = api.poll_agent(agent=agent)[0]
+    _complete_success(
+        api,
+        agent=agent,
+        lease=connectivity_lease,
+        telemetry_kind="network.endpoint_connectivity",
+        telemetry_payload={
+            "target_endpoint": f"{agent_name}.internal",
+            "success": True,
+            "latency_ms": 12.5,
+        },
+        summary_json={"target_endpoint": f"{agent_name}.internal"},
+    )
+
+    return {
+        "owner": owner,
+        "bundle": bundle,
+        "created_agent": created_agent,
+        "registered_agent": agent,
+        "host": host,
+        "task_run": task_run,
+    }
+
+
 def test_mock_agent_drives_bootstrap_and_projection_flow(api) -> None:
     owner = api.register_user(prefix="operator")
     bundle = api.create_project_bundle(
@@ -261,6 +370,122 @@ def test_mock_agent_drives_bootstrap_and_projection_flow(api) -> None:
     assert graph[0]["source_host_id"] == host["id"]
     assert graph[0]["target_host_id"] == host["id"]
     assert graph[0]["target_label"] == "alpha.internal"
+
+
+def test_delete_host_cascades_related_entities(api) -> None:
+    scenario = _provision_host_with_connectivity_activity(
+        api,
+        project_name="Fleet Host Delete",
+        agent_name="delete-host-agent",
+    )
+    owner = scenario["owner"]
+    bundle = scenario["bundle"]
+    created_agent = scenario["created_agent"]
+    host = scenario["host"]
+    task_run = scenario["task_run"]
+
+    delete_response = api.client.delete(
+        f"/hosts/{host['id']}",
+        headers=owner.headers,
+    )
+    assert delete_response.status_code == 204, delete_response.text
+
+    host_detail = api.client.get(
+        f"/hosts/{host['id']}",
+        headers=owner.headers,
+    )
+    assert host_detail.status_code == 404
+
+    task_run_response = api.client.get(
+        f"/task-runs/{task_run['id']}",
+        headers=owner.headers,
+    )
+    assert task_run_response.status_code == 404
+
+    hosts_response = api.client.get(
+        f"/environments/{bundle.environment['id']}/hosts",
+        headers=owner.headers,
+    )
+    assert hosts_response.status_code == 200, hosts_response.text
+    assert hosts_response.json() == []
+
+    graph_response = api.client.get(
+        f"/environments/{bundle.environment['id']}/graph",
+        headers=owner.headers,
+    )
+    assert graph_response.status_code == 200, graph_response.text
+    assert graph_response.json() == []
+
+    task_runs_response = api.client.get(
+        f"/environments/{bundle.environment['id']}/task-runs",
+        headers=owner.headers,
+    )
+    assert task_runs_response.status_code == 200, task_runs_response.text
+    assert task_runs_response.json() == []
+
+    agents_response = api.client.get(
+        "/agents",
+        params={"project_id": bundle.project["id"]},
+        headers=owner.headers,
+    )
+    assert agents_response.status_code == 200, agents_response.text
+    agents = agents_response.json()
+    assert len(agents) == 1
+    assert agents[0]["id"] == created_agent["id"]
+    assert agents[0]["environments"] == []
+
+
+def test_delete_agent_cascades_related_entities(api) -> None:
+    scenario = _provision_host_with_connectivity_activity(
+        api,
+        project_name="Fleet Agent Delete",
+        agent_name="delete-agent",
+    )
+    owner = scenario["owner"]
+    bundle = scenario["bundle"]
+    created_agent = scenario["created_agent"]
+    host = scenario["host"]
+    task_run = scenario["task_run"]
+
+    delete_response = api.client.delete(
+        f"/agents/{created_agent['id']}",
+        headers=owner.headers,
+    )
+    assert delete_response.status_code == 204, delete_response.text
+
+    agents_response = api.client.get(
+        "/agents",
+        params={"project_id": bundle.project["id"]},
+        headers=owner.headers,
+    )
+    assert agents_response.status_code == 200, agents_response.text
+    assert agents_response.json() == []
+
+    host_detail = api.client.get(
+        f"/hosts/{host['id']}",
+        headers=owner.headers,
+    )
+    assert host_detail.status_code == 404
+
+    task_run_response = api.client.get(
+        f"/task-runs/{task_run['id']}",
+        headers=owner.headers,
+    )
+    assert task_run_response.status_code == 404
+
+    hosts_response = api.client.get(
+        f"/environments/{bundle.environment['id']}/hosts",
+        headers=owner.headers,
+    )
+    assert hosts_response.status_code == 200, hosts_response.text
+    assert hosts_response.json() == []
+
+    graph_response = api.client.get(
+        f"/environments/{bundle.environment['id']}/graph",
+        headers=owner.headers,
+    )
+    assert graph_response.status_code == 200, graph_response.text
+    assert graph_response.json() == []
 
 
 def test_heartbeat_restores_agent_online_status_after_stale_marker(api) -> None:

@@ -576,6 +576,10 @@ export async function stubDeleteAgent(id: string): Promise<void> {
     await apiClient.delete(`/agents/${id}`)
 }
 
+export async function stubDeleteHost(id: string): Promise<void> {
+    await apiClient.delete(`/hosts/${id}`)
+}
+
 export async function stubGetAgentInstallScript(id: string): Promise<InstallScript> {
     const { data } = await apiClient.get<InstallScript>(`/agents/${id}/install-script`)
     return data
