@@ -1,7 +1,3 @@
-from __future__ import annotations
-
-from urllib.parse import urlencode
-
 from dishka import FromDishka
 from dishka.integrations.fastapi import inject
 from fastapi import APIRouter, Header, HTTPException
@@ -106,7 +102,11 @@ async def initiate_password_change(
     return MessageResponse(message="Confirmation email sent")
 
 
-@router.get("/me/password/confirm")
+@router.get(
+    "/me/password/confirm",
+    response_class=RedirectResponse,
+    response_model=None,
+)
 @inject
 async def confirm_password_change(
     token: str,
@@ -127,7 +127,11 @@ async def confirm_password_change(
     return RedirectResponse(url=f"{redirect_to}?password_changed=1", status_code=302)
 
 
-@router.get("/me/password/cancel")
+@router.get(
+    "/me/password/cancel",
+    response_class=RedirectResponse,
+    response_model=None,
+)
 @inject
 async def cancel_password_change(
     token: str,
