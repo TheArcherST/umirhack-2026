@@ -34,12 +34,14 @@ pub struct TaskExecutionOutcome {
 pub struct PostTaskAction {
     launcher_path: PathBuf,
     download_url: String,
-    version: Option<String>,
+    from_version: String,
+    target_version: String,
 }
 
 #[derive(Debug, Default, Deserialize)]
 struct SelfUpdatePayload {
     artifact_url: Option<String>,
+    from_version: Option<String>,
     version: Option<String>,
 }
 
@@ -193,7 +195,9 @@ fn self_update_result(
     let summary_json = json!({
         "action": "self_update",
         "artifact_url": post_action.download_url,
-        "version": post_action.version,
+        "from_version": post_action.from_version,
+        "to_version": post_action.target_version,
+        "version": post_action.target_version,
     });
     CompletePayload {
         lease_token: task.lease_token.clone(),
@@ -751,7 +755,16 @@ async fn prepare_self_update(
         .with_context(|| format!("failed to write {}", staged_binary.display()))?;
     ensure_executable(&staged_binary)?;
 
-    let launcher = render_self_update_launcher(&staged_binary, &target_binary);
+    let target_version = payload
+        .version
+        .clone()
+        .unwrap_or_else(|| config.agent_version.clone());
+    let from_version = payload
+        .from_version
+        .clone()
+        .unwrap_or_else(|| config.agent_version.clone());
+    let launcher =
+        render_self_update_launcher(&staged_binary, &target_binary, &target_version);
     tokio::fs::write(&launcher_path, launcher.as_bytes())
         .await
         .with_context(|| format!("failed to write {}", launcher_path.display()))?;
@@ -760,7 +773,8 @@ async fn prepare_self_update(
     Ok(PostTaskAction {
         launcher_path,
         download_url,
-        version: payload.version,
+        from_version,
+        target_version,
     })
 }
 
@@ -780,8 +794,14 @@ fn resolve_self_update_download_url(
     let platform = declared_os();
     let arch = current_arch_label()?;
     let filename = current_binary_name();
+    let version = payload
+        .version
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(config.agent_version.as_str());
     Ok(format!(
-        "{}/agent-artifacts/{platform}/{arch}/{filename}",
+        "{}/agent-artifacts/{version}/{platform}/{arch}/{filename}",
         config.api_url
     ))
 }
@@ -814,40 +834,67 @@ fn unique_self_update_dir() -> PathBuf {
     ))
 }
 
-fn render_self_update_launcher(staged_binary: &Path, target_binary: &Path) -> String {
+fn render_self_update_launcher(
+    staged_binary: &Path,
+    target_binary: &Path,
+    target_version: &str,
+) -> String {
     if cfg!(target_os = "windows") {
-        return render_windows_self_update_launcher(staged_binary, target_binary);
+        return render_windows_self_update_launcher(
+            staged_binary,
+            target_binary,
+            target_version,
+        );
     }
     if cfg!(target_os = "macos") {
-        return render_macos_self_update_launcher(staged_binary, target_binary);
+        return render_macos_self_update_launcher(
+            staged_binary,
+            target_binary,
+            target_version,
+        );
     }
-    render_linux_self_update_launcher(staged_binary, target_binary)
+    render_linux_self_update_launcher(staged_binary, target_binary, target_version)
 }
 
-fn render_linux_self_update_launcher(staged_binary: &Path, target_binary: &Path) -> String {
+fn render_linux_self_update_launcher(
+    staged_binary: &Path,
+    target_binary: &Path,
+    target_version: &str,
+) -> String {
     let staged = shell_quote(&staged_binary.to_string_lossy());
     let target = shell_quote(&target_binary.to_string_lossy());
     let service_name = shell_quote(LINUX_SERVICE_NAME);
+    let version = shell_quote(target_version);
     format!(
-        "#!/bin/sh\nset -eu\nsleep 2\nTARGET={target}\nSTAGED={staged}\nNEW_TARGET=\"$TARGET.new\"\ninstall -m 0755 \"$STAGED\" \"$NEW_TARGET\"\nmv \"$NEW_TARGET\" \"$TARGET\"\nsystemctl restart {service_name}\nrm -f \"$STAGED\" \"$0\"\n"
+        "#!/bin/sh\nset -eu\nsleep 2\nTARGET={target}\nSTAGED={staged}\nNEW_TARGET=\"$TARGET.new\"\nENV_FILE='/etc/umirhack-agent.env'\nVERSION_NOTE='/var/lib/umirhack-agent/version.txt'\nTARGET_VERSION={version}\ninstall -m 0755 \"$STAGED\" \"$NEW_TARGET\"\nmv \"$NEW_TARGET\" \"$TARGET\"\nTMP_ENV=\"$ENV_FILE.tmp\"\nif [ -f \"$ENV_FILE\" ]; then\n  awk -v version=\"$TARGET_VERSION\" 'BEGIN {{ updated = 0 }} /^HACK_AGENT_VERSION=/ {{ print \"HACK_AGENT_VERSION=\" version; updated = 1; next }} {{ print }} END {{ if (updated == 0) print \"HACK_AGENT_VERSION=\" version }}' \"$ENV_FILE\" > \"$TMP_ENV\"\n  mv \"$TMP_ENV\" \"$ENV_FILE\"\nelse\n  printf 'HACK_AGENT_VERSION=%s\\n' \"$TARGET_VERSION\" > \"$ENV_FILE\"\nfi\nprintf '%s\\n' \"$TARGET_VERSION\" > \"$VERSION_NOTE\"\nsystemctl restart {service_name}\nrm -f \"$STAGED\" \"$0\"\n"
     )
 }
 
-fn render_macos_self_update_launcher(staged_binary: &Path, target_binary: &Path) -> String {
+fn render_macos_self_update_launcher(
+    staged_binary: &Path,
+    target_binary: &Path,
+    target_version: &str,
+) -> String {
     let staged = shell_quote(&staged_binary.to_string_lossy());
     let target = shell_quote(&target_binary.to_string_lossy());
+    let version = shell_quote(target_version);
     format!(
-        "#!/bin/sh\nset -eu\nsleep 2\nTARGET={target}\nSTAGED={staged}\nNEW_TARGET=\"$TARGET.new\"\ninstall -m 0755 \"$STAGED\" \"$NEW_TARGET\"\nmv \"$NEW_TARGET\" \"$TARGET\"\nlaunchctl kickstart -k system/{plist_id}\nrm -f \"$STAGED\" \"$0\"\n",
+        "#!/bin/sh\nset -eu\nsleep 2\nTARGET={target}\nSTAGED={staged}\nNEW_TARGET=\"$TARGET.new\"\nRUNNER='/usr/local/libexec/umirhack-agent/run-agent.sh'\nVERSION_NOTE='/Library/Application Support/UmirhackAgent/version.txt'\nTARGET_VERSION={version}\ninstall -m 0755 \"$STAGED\" \"$NEW_TARGET\"\nmv \"$NEW_TARGET\" \"$TARGET\"\nif [ -f \"$RUNNER\" ]; then\n  TMP_RUNNER=\"$RUNNER.tmp\"\n  awk -v version=\"$TARGET_VERSION\" 'BEGIN {{ updated = 0 }} /^export HACK_AGENT_VERSION=/ {{ print \"export HACK_AGENT_VERSION='\\''\" version \"'\\''\"\"; updated = 1; next }} {{ print }} END {{ if (updated == 0) print \"export HACK_AGENT_VERSION='\\''\" version \"'\\''\"\" }}' \"$RUNNER\" > \"$TMP_RUNNER\"\n  mv \"$TMP_RUNNER\" \"$RUNNER\"\n  chmod 0755 \"$RUNNER\"\nfi\nprintf '%s\\n' \"$TARGET_VERSION\" > \"$VERSION_NOTE\"\nlaunchctl kickstart -k system/{plist_id}\nrm -f \"$STAGED\" \"$0\"\n",
         plist_id = MACOS_PLIST_ID,
     )
 }
 
-fn render_windows_self_update_launcher(staged_binary: &Path, target_binary: &Path) -> String {
+fn render_windows_self_update_launcher(
+    staged_binary: &Path,
+    target_binary: &Path,
+    target_version: &str,
+) -> String {
     let staged = powershell_quote(&staged_binary.to_string_lossy());
     let target = powershell_quote(&target_binary.to_string_lossy());
     let task_name = powershell_quote(WINDOWS_TASK_NAME);
+    let version = powershell_quote(target_version);
     format!(
-        "$ErrorActionPreference = \"Stop\"\n$staged = {staged}\n$target = {target}\n$newTarget = \"$target.new\"\nStart-Sleep -Seconds 2\nfor ($i = 0; $i -lt 20; $i++) {{\n    try {{\n        if (Test-Path $newTarget) {{ Remove-Item -Force $newTarget }}\n        Copy-Item -Force $staged $newTarget\n        if (Test-Path $target) {{ Remove-Item -Force $target }}\n        Move-Item -Force $newTarget $target\n        break\n    }} catch {{\n        if ($i -eq 19) {{ throw }}\n        Start-Sleep -Seconds 1\n    }}\n}}\nStart-ScheduledTask -TaskName {task_name}\nRemove-Item -Force $staged\nRemove-Item -Force $PSCommandPath\n"
+        "$ErrorActionPreference = \"Stop\"\n$staged = {staged}\n$target = {target}\n$targetVersion = {version}\n$newTarget = \"$target.new\"\n$runnerPath = Join-Path (Split-Path -Parent $target) \"run-agent.ps1\"\n$versionPath = Join-Path $env:ProgramData \"Umirhack\\version.txt\"\nStart-Sleep -Seconds 2\nfor ($i = 0; $i -lt 20; $i++) {{\n    try {{\n        if (Test-Path $newTarget) {{ Remove-Item -Force $newTarget }}\n        Copy-Item -Force $staged $newTarget\n        if (Test-Path $target) {{ Remove-Item -Force $target }}\n        Move-Item -Force $newTarget $target\n        break\n    }} catch {{\n        if ($i -eq 19) {{ throw }}\n        Start-Sleep -Seconds 1\n    }}\n}}\nif (Test-Path $runnerPath) {{\n    $runner = Get-Content -Raw -Path $runnerPath\n    if ($runner -match \"(?m)^\\$env:HACK_AGENT_VERSION = '.*'$\") {{\n        $runner = $runner -replace \"(?m)^\\$env:HACK_AGENT_VERSION = '.*'$\", ('$env:HACK_AGENT_VERSION = ''{{0}}''' -f $targetVersion)\n    }} else {{\n        $runner = $runner + \"`r`n\" + '$env:HACK_AGENT_VERSION = ''' + $targetVersion + ''''\n    }}\n    Set-Content -Path $runnerPath -Value $runner -Encoding ASCII\n}}\nSet-Content -Path $versionPath -Value $targetVersion -Encoding ASCII\nStart-ScheduledTask -TaskName {task_name}\nRemove-Item -Force $staged\nRemove-Item -Force $PSCommandPath\n"
     )
 }
 
@@ -879,7 +926,7 @@ fn ensure_executable(_path: &Path) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     use serde_json::json;
     use crate::models::{AgentExecutionHost, AgentExecutionTemplate, AgentTaskLease};
@@ -887,11 +934,13 @@ mod tests {
     use crate::config::Config;
 
     use super::{
+        PostTaskAction,
         SelfUpdatePayload,
         execute_task,
         parse_linux_service_status,
         parse_macos_service_status,
         parse_windows_service_status,
+        render_linux_self_update_launcher,
         resolve_self_update_download_url,
     };
 
@@ -929,7 +978,7 @@ mod tests {
             bootstrap_token: None,
             state_path: PathBuf::from("/tmp/hack-agent-test-state.json"),
             poll_interval_seconds: 5,
-            agent_version: "rust-test-agent/1".to_string(),
+            agent_version: "1.2.2".to_string(),
             safe_mode,
         }
     }
@@ -1020,7 +1069,8 @@ mod tests {
 
         let platform = super::declared_os();
         assert!(url.starts_with("http://example.invalid/api/agent-artifacts/"));
-        assert!(url.contains(&format!("/agent-artifacts/{platform}/")));
+        assert!(url.contains("/agent-artifacts/1.2.2/"));
+        assert!(url.contains(&format!("/1.2.2/{platform}/")));
         assert!(url.ends_with(super::current_binary_name()));
     }
 
@@ -1030,12 +1080,45 @@ mod tests {
             &test_config(false),
             &SelfUpdatePayload {
                 artifact_url: Some("https://updates.example.com/hack-agent".to_string()),
-                version: Some("2026.04.04".to_string()),
+                from_version: None,
+                version: Some("1.2.3".to_string()),
             },
         )
         .expect("explicit self update url should resolve");
 
         assert_eq!(url, "https://updates.example.com/hack-agent");
+    }
+
+    #[test]
+    fn self_update_launcher_rewrites_linux_version_metadata() {
+        let launcher = render_linux_self_update_launcher(
+            Path::new("/tmp/hack-agent.new"),
+            Path::new("/usr/local/bin/hack-agent"),
+            "1.2.3",
+        );
+
+        assert!(launcher.contains("HACK_AGENT_VERSION="));
+        assert!(launcher.contains("/var/lib/umirhack-agent/version.txt"));
+        assert!(launcher.contains("1.2.3"));
+    }
+
+    #[test]
+    fn self_update_result_includes_from_and_to_versions() {
+        let task = lease_for_kind("agent.self_update", json!({}), None);
+        let result = super::self_update_result(
+            &task,
+            &PostTaskAction {
+                launcher_path: PathBuf::from("/tmp/apply-self-update.sh"),
+                download_url: "https://updates.example.com/hack-agent".to_string(),
+                from_version: "1.2.2".to_string(),
+                target_version: "1.2.3".to_string(),
+            },
+        );
+        let summary = result.summary_json.expect("self update should include summary");
+
+        assert_eq!(summary.get("from_version").and_then(|v| v.as_str()), Some("1.2.2"));
+        assert_eq!(summary.get("to_version").and_then(|v| v.as_str()), Some("1.2.3"));
+        assert_eq!(summary.get("version").and_then(|v| v.as_str()), Some("1.2.3"));
     }
 
     #[test]

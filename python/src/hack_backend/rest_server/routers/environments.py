@@ -5,10 +5,9 @@ from dishka.integrations.fastapi import inject
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from hack_backend.core.models import User
+from hack_backend.core.services.access import AccessService
 from hack_backend.core.services.platform_service import PlatformService
 from hack_backend.core.services.uow_ctl import UoWCtl
-from hack_backend.rest_server.dependencies import require_environment_member, require_project_member
 from hack_backend.rest_server.providers import AuthorizedUser
 from hack_backend.rest_server.schemas.platform import (
     EnvironmentDTO,
@@ -42,11 +41,11 @@ class UpdateEnvironmentRolePayload(BaseModel):
 async def list_environments(
     project_id: str,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
 ) -> list[EnvironmentDTO]:
-    await require_project_member(
+    await access_service.require_project_member(
         project_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     environments = await platform_service.list_environments(project_id)
@@ -58,12 +57,12 @@ async def list_environments(
 async def create_environment(
     payload: CreateEnvironmentPayload,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
     uow_ctl: FromDishka[UoWCtl],
 ) -> EnvironmentDTO:
-    await require_project_member(
+    await access_service.require_project_member(
         payload.project_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     environment = await platform_service.create_environment(
@@ -83,11 +82,11 @@ async def create_environment(
 async def list_environment_members(
     environment_id: str,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
 ) -> list[EnvironmentMemberDTO]:
-    await require_environment_member(
+    await access_service.require_environment_member(
         environment_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     members = await platform_service.list_environment_members(environment_id)
@@ -104,12 +103,12 @@ async def assign_environment_role(
     user_id: int,
     payload: UpdateEnvironmentRolePayload,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
     uow_ctl: FromDishka[UoWCtl],
 ) -> EnvironmentMemberDTO:
-    await require_environment_member(
+    await access_service.require_environment_member(
         environment_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     member = await platform_service.assign_environment_role(
@@ -126,11 +125,11 @@ async def assign_environment_role(
 async def list_environment_hosts(
     environment_id: str,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
 ) -> list[HostListDTO]:
-    await require_environment_member(
+    await access_service.require_environment_member(
         environment_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     hosts, agents = await platform_service.list_environment_hosts(environment_id)
@@ -146,11 +145,11 @@ async def list_environment_hosts(
 async def list_environment_graph(
     environment_id: str,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
 ) -> list[GraphEdgeDTO]:
-    await require_environment_member(
+    await access_service.require_environment_member(
         environment_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     edges = await platform_service.list_environment_graph(environment_id)
@@ -165,11 +164,11 @@ async def list_environment_graph(
 async def list_environment_task_runs(
     environment_id: str,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
 ) -> list[TaskRunDTO]:
-    await require_environment_member(
+    await access_service.require_environment_member(
         environment_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     task_runs = await platform_service.list_environment_task_runs(environment_id)

@@ -35,6 +35,7 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
     const [os, setOs] = useState<AgentOS>('linux')
     const [selectedEnvs, setSelectedEnvs] = useState<string[]>([])
     const [safeInstall, setSafeInstall] = useState(false)
+    const [agentVersion, setAgentVersion] = useState('')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
 
@@ -68,6 +69,7 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
                 name: name.trim(),
                 os,
                 safe_install: safeInstall,
+                agent_version: agentVersion.trim() || undefined,
                 environment_ids: selectedEnvs,
             })
             setInstallScript(result.installScript)
@@ -97,6 +99,7 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
         setOs('linux')
         setSelectedEnvs([])
         setSafeInstall(false)
+        setAgentVersion('')
         setError('')
         setStep('form')
         setInstallScript(null)
@@ -163,6 +166,19 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
                                 />
                             </div>
 
+                            <div className="space-y-1.5">
+                                <Label>{t('agent.version')}</Label>
+                                <Input
+                                    value={agentVersion}
+                                    onChange={(e) => setAgentVersion(e.target.value)}
+                                    placeholder={t('agent.versionPlaceholder')}
+                                    className="font-mono text-xs"
+                                />
+                                <p className="text-[11px] text-muted-foreground">
+                                    {t('agent.versionHint')}
+                                </p>
+                            </div>
+
                             <label className="flex items-start gap-3 rounded-md border border-border px-3 py-2 text-sm">
                                 <input
                                     type="checkbox"
@@ -199,6 +215,9 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
                         <p className="text-xs text-muted-foreground">{t('agent.installScript')}</p>
                         <p className="text-[11px] text-muted-foreground font-mono">
                             {installHint}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground font-mono">
+                            {t('agent.installVersion')}: {installScript?.version}
                         </p>
                         {installScript?.safe_install && (
                             <p className="text-[11px] text-amber-500 font-mono">

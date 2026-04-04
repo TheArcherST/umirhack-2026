@@ -67,6 +67,7 @@ class ConfigServer(BaseModel):
     root_path: str = ""
     agent_artifacts_dir: str = "/opt/hack-agent-artifacts"
     agent_public_origin: str | None = None
+    agent_current_version: str | None = None
     frontend_url: str = ""
 
 

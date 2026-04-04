@@ -4,10 +4,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ARTIFACT_DIR="$ROOT_DIR/artifacts/rust/hack-agent"
 WORKSPACE_DIR="$ROOT_DIR/rust"
+AGENT_CARGO_TOML="$WORKSPACE_DIR/hack_agent/Cargo.toml"
 mkdir -p "$ROOT_DIR/artifacts/.tmp"
 TMP_ARTIFACT_DIR="$(mktemp -d "$ROOT_DIR/artifacts/.tmp/hack-agent-artifacts.XXXXXX")"
 CLEAN_OUTPUT=0
 CONTAINER_ONLY=0
+AGENT_VERSION=""
 
 cleanup() {
   rm -rf "$TMP_ARTIFACT_DIR"
@@ -15,8 +17,9 @@ cleanup() {
 
 usage() {
   cat <<'EOF'
-usage: ./scripts/build-agent-artifacts.sh [--clean] [--container-only]
+usage: ./scripts/build-agent-artifacts.sh [--version VERSION] [--clean] [--container-only]
 
+  --version VERSION  Publish artifacts under artifacts/rust/hack-agent/VERSION/.
   --clean           Replace the published artifact directory with the freshly built set.
   --container-only  Build only the Linux and Windows targets supported by the tool container.
 EOF
@@ -24,6 +27,14 @@ EOF
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --version)
+      shift
+      if [ "$#" -eq 0 ]; then
+        echo "--version requires a value" >&2
+        exit 1
+      fi
+      AGENT_VERSION="$1"
+      ;;
     --clean)
       CLEAN_OUTPUT=1
       ;;
@@ -69,14 +80,14 @@ build_linux_target() {
   local output_dir="$2"
   local output_name="$3"
 
-  prepare_output_dir "$output_dir"
+  prepare_output_dir "$AGENT_VERSION/$output_dir"
   (
     cd "$WORKSPACE_DIR"
     cargo zigbuild --release -p hack_agent --target "$target"
   )
   cp \
     "$WORKSPACE_DIR/target/$target/release/hack_agent" \
-    "$TMP_ARTIFACT_DIR/$output_dir/$output_name"
+    "$TMP_ARTIFACT_DIR/$AGENT_VERSION/$output_dir/$output_name"
 }
 
 build_windows_target() {
@@ -84,14 +95,14 @@ build_windows_target() {
   local output_dir="$2"
   local output_name="$3"
 
-  prepare_output_dir "$output_dir"
+  prepare_output_dir "$AGENT_VERSION/$output_dir"
   (
     cd "$WORKSPACE_DIR"
     cargo build --release -p hack_agent --target "$target"
   )
   cp \
     "$WORKSPACE_DIR/target/$target/release/hack_agent.exe" \
-    "$TMP_ARTIFACT_DIR/$output_dir/$output_name"
+    "$TMP_ARTIFACT_DIR/$AGENT_VERSION/$output_dir/$output_name"
 }
 
 build_native_target() {
@@ -100,14 +111,14 @@ build_native_target() {
   local binary_name="$3"
   local output_name="$4"
 
-  prepare_output_dir "$output_dir"
+  prepare_output_dir "$AGENT_VERSION/$output_dir"
   (
     cd "$WORKSPACE_DIR"
     cargo build --release -p hack_agent --target "$target"
   )
   cp \
     "$WORKSPACE_DIR/target/$target/release/$binary_name" \
-    "$TMP_ARTIFACT_DIR/$output_dir/$output_name"
+    "$TMP_ARTIFACT_DIR/$AGENT_VERSION/$output_dir/$output_name"
 }
 
 publish_artifacts() {
@@ -117,7 +128,7 @@ publish_artifacts() {
     rm -rf "$ARTIFACT_DIR"
   else
     mkdir -p "$ARTIFACT_DIR"
-    for target_path in "$TMP_ARTIFACT_DIR"/*; do
+    for target_path in "$TMP_ARTIFACT_DIR"/"$AGENT_VERSION"; do
       [ -e "$target_path" ] || continue
       rm -rf "$ARTIFACT_DIR/$(basename "$target_path")"
     done
@@ -127,9 +138,39 @@ publish_artifacts() {
   cp -R "$TMP_ARTIFACT_DIR"/. "$ARTIFACT_DIR"/
 }
 
+write_manifest() {
+  local versions_json=""
+  local separator=""
+
+  for version_dir in "$ARTIFACT_DIR"/*; do
+    [ -d "$version_dir" ] || continue
+    local version_name
+    version_name="$(basename "$version_dir")"
+    if [ "$version_name" = "tmp" ]; then
+      continue
+    fi
+    versions_json="${versions_json}${separator}\"${version_name}\""
+    separator=", "
+  done
+
+  cat > "$ARTIFACT_DIR/manifest.json" <<EOF
+{"current_version":"$AGENT_VERSION","versions":[${versions_json}]}
+EOF
+}
+
 need_cmd cargo
 need_cmd rustup
 need_cmd cargo-zigbuild
+
+AGENT_VERSION="${AGENT_VERSION:-$(sed -nE 's/^version = \"([^\"]+)\"$/\1/p' "$AGENT_CARGO_TOML" | head -n 1)}"
+if [ -z "$AGENT_VERSION" ]; then
+  echo "Unable to determine agent version from $AGENT_CARGO_TOML" >&2
+  exit 1
+fi
+if ! [[ "$AGENT_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?(\+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?$ ]]; then
+  echo "Agent version must be a valid SemVer string: $AGENT_VERSION" >&2
+  exit 1
+fi
 
 # Pre-add all cross-compilation targets upfront — rustup is not safe to call
 # concurrently, so we do it here before launching parallel builds.
@@ -208,5 +249,6 @@ else
 fi
 
 publish_artifacts
+write_manifest
 
 echo "Agent artifacts written to $ARTIFACT_DIR"

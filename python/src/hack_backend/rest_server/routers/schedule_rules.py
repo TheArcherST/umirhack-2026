@@ -5,9 +5,9 @@ from dishka.integrations.fastapi import inject
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 
+from hack_backend.core.services.access import AccessService
 from hack_backend.core.services.platform_service import PlatformService
 from hack_backend.core.services.uow_ctl import UoWCtl
-from hack_backend.rest_server.dependencies import require_environment_member
 from hack_backend.rest_server.providers import AuthorizedUser
 from hack_backend.rest_server.schemas.platform import ScheduleRuleDTO
 from hack_backend.rest_server.serializers import schedule_rule_to_dto
@@ -38,11 +38,11 @@ class PatchScheduleRulePayload(BaseModel):
 async def list_schedule_rules(
     environment_id: str,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
 ) -> list[ScheduleRuleDTO]:
-    await require_environment_member(
+    await access_service.require_environment_member(
         environment_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     rules = await platform_service.list_schedule_rules(environment_id)
@@ -57,12 +57,12 @@ async def list_schedule_rules(
 async def create_schedule_rule(
     payload: CreateScheduleRulePayload,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
     uow_ctl: FromDishka[UoWCtl],
 ) -> ScheduleRuleDTO:
-    await require_environment_member(
+    await access_service.require_environment_member(
         payload.environment_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     rule = await platform_service.create_schedule_rule(

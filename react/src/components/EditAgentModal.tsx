@@ -25,6 +25,7 @@ export function EditAgentModal({ agent, open, onClose, onUpdated }: Props) {
   const [name, setName] = useState('')
   const [selectedEnvs, setSelectedEnvs] = useState<string[]>([])
   const [safeInstall, setSafeInstall] = useState(false)
+  const [agentVersion, setAgentVersion] = useState('')
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -32,6 +33,7 @@ export function EditAgentModal({ agent, open, onClose, onUpdated }: Props) {
       setName(agent.name)
       setSelectedEnvs([...agent.environment_ids])
       setSafeInstall(agent.safe_install)
+      setAgentVersion(agent.agent_version ?? '')
     }
   }, [agent, open])
 
@@ -43,6 +45,7 @@ export function EditAgentModal({ agent, open, onClose, onUpdated }: Props) {
       await stubUpdateAgent(agent.id, {
         name: name.trim(),
         safe_install: safeInstall,
+        agent_version: agentVersion.trim() || undefined,
         environment_ids: selectedEnvs,
       })
       onUpdated()
@@ -55,6 +58,7 @@ export function EditAgentModal({ agent, open, onClose, onUpdated }: Props) {
     setName('')
     setSelectedEnvs([])
     setSafeInstall(false)
+    setAgentVersion('')
     onClose()
   }
 
@@ -88,6 +92,19 @@ export function EditAgentModal({ agent, open, onClose, onUpdated }: Props) {
                 onChange={setSelectedEnvs}
                 placeholder={t('agent.selectEnvPlaceholder')}
               />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>{t('agent.version')}</Label>
+              <Input
+                value={agentVersion}
+                onChange={(e) => setAgentVersion(e.target.value)}
+                placeholder={t('agent.versionPlaceholder')}
+                className="font-mono text-xs"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                {t('agent.versionHint')}
+              </p>
             </div>
 
             <label className="flex items-start gap-3 rounded-md border border-border px-3 py-2 text-sm">

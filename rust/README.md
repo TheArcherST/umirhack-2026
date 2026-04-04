@@ -27,16 +27,16 @@ Environment variables match the current backend agent API:
 
 Hosted onboarding now expects built agent artifacts under `artifacts/rust/hack-agent/`:
 
-- `linux/amd64/hack-agent`
-- `linux/arm64/hack-agent`
-- `macos/amd64/hack-agent`
-- `macos/arm64/hack-agent`
-- `windows/amd64/hack-agent.exe`
+- `0.1.0/linux/amd64/hack-agent`
+- `0.1.0/linux/arm64/hack-agent`
+- `0.1.0/macos/amd64/hack-agent`
+- `0.1.0/macos/arm64/hack-agent`
+- `0.1.0/windows/amd64/hack-agent.exe`
 
 Build them from the repository root with:
 
 ```bash
-./scripts/build-agent-artifacts.sh
+./scripts/build-agent-artifacts.sh --version 0.1.0
 ```
 
 That script uses `cargo zigbuild` for Linux targets, a MinGW-backed Rust target for Windows, and native `cargo` builds for macOS when run on a Darwin host with the Apple Rust targets installed.
@@ -44,7 +44,7 @@ That script uses `cargo zigbuild` for Linux targets, a MinGW-backed Rust target 
 For Linux deployment hosts without a Rust toolchain, use:
 
 ```bash
-make artifacts args="--clean --container-only"
+make artifacts version=0.1.0 args="--clean --container-only"
 ```
 
 That runs the compose-backed `tool-artifacts` container, which contains the Rust cross-build toolchain and rebuilds the published Linux and Windows artifacts from scratch, replacing the existing `artifacts/rust/hack-agent/` contents with the fresh output.
@@ -52,7 +52,7 @@ That runs the compose-backed `tool-artifacts` container, which contains the Rust
 For production deploys on a Linux host that should keep any separately published macOS artifacts intact, use:
 
 ```bash
-make artifacts
+make artifacts version=0.1.0
 ```
 
-That refreshes only the Linux and Windows subdirectories under `artifacts/rust/hack-agent/`.
+That refreshes only the Linux and Windows subdirectories under `artifacts/rust/hack-agent/0.1.0/`.

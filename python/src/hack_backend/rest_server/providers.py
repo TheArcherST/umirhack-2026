@@ -5,11 +5,10 @@ from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi.requests import Request
 from starlette.testclient import TestClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from hack_backend.core.models import Agent, LoginSession, User
+from hack_backend.core.services.access import AccessService
 from hack_backend.core.services.agent_runtime_service import AgentRuntimeService
-from hack_backend.rest_server.dependencies import resolve_bearer_login_session
 
 AuthorizedUser = NewType("AuthorizedUser", User)
 CurrentLoginSession = NewType("CurrentLoginSession", LoginSession)
@@ -28,11 +27,10 @@ class ProviderServer(Provider):
     async def get_current_login_session(
         self,
         request: Request,
-        orm_session: AsyncSession,
+        access_service: AccessService,
     ) -> CurrentLoginSession:
-        login_session = await resolve_bearer_login_session(
-            authorization=request.headers.get("Authorization"),
-            session=orm_session,
+        login_session = await access_service.resolve_bearer_login_session(
+            request.headers.get("Authorization"),
         )
         return CurrentLoginSession(login_session)
 

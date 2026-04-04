@@ -140,7 +140,8 @@ def test_mock_agent_drives_bootstrap_and_projection_flow(api) -> None:
     assert len(listed_agents) == 1
     assert listed_agents[0]["id"] == created_agent["id"]
     assert listed_agents[0]["status"] == "online"
-    assert listed_agents[0]["agent_version"] == "pytest-agent/1"
+    assert listed_agents[0]["agent_version"] == "0.1.0"
+    assert listed_agents[0]["reported_agent_version"] == "0.1.0"
 
     hosts_response = api.client.get(
         f"/environments/{bundle.environment['id']}/hosts",
@@ -329,10 +330,15 @@ def test_custom_command_tasks_and_safe_install_script(api) -> None:
         agent_id=created_agent["id"],
     )
     assert install_script["safe_install"] is True
+    assert install_script["version"] == "0.1.0"
 
     script_response = api.client.get(install_script["script_url"])
     assert script_response.status_code == 200, script_response.text
     assert "HACK_AGENT_SAFE_MODE=1" in script_response.text
+    assert "AGENT_VERSION='0.1.0'" in script_response.text
+    assert "HACK_AGENT_VERSION=$AGENT_VERSION" in script_response.text
+    assert "/agent-artifacts/0.1.0/linux" in script_response.text
+    assert "version.txt" in script_response.text
 
     bootstrap_token = install_script["script_url"].rstrip("/").split("/")[-1].split("?")[0]
     agent = api.register_agent(bootstrap_token=bootstrap_token)
@@ -363,3 +369,126 @@ def test_custom_command_tasks_and_safe_install_script(api) -> None:
         if lease["task_template"]["kind"] == "diagnostic.command.custom"
     )
     assert custom_lease["task_template"]["payload_json"]["approved_command"] == "echo custom-task"
+
+
+def test_self_update_tracks_from_and_to_versions(api) -> None:
+    owner = api.register_user(prefix="operator")
+    bundle = api.create_project_bundle(
+        user=owner,
+        project_name="Fleet Update",
+    )
+    self_update_template_id = _template_id_for_kind(
+        bundle.templates,
+        "agent.self_update",
+    )
+    created_agent = api.create_agent(
+        user=owner,
+        project_id=bundle.project["id"],
+        environment_id=bundle.environment["id"],
+        name="update-agent",
+        agent_version="0.1.0",
+    )
+    bootstrap_token = api.issue_install_token(
+        user=owner,
+        agent_id=created_agent["id"],
+    )
+    agent = api.register_agent(
+        bootstrap_token=bootstrap_token,
+        agent_version="0.1.0",
+    )
+
+    hosts_response = api.client.get(
+        f"/environments/{bundle.environment['id']}/hosts",
+        headers=owner.headers,
+    )
+    assert hosts_response.status_code == 200, hosts_response.text
+    host_id = hosts_response.json()[0]["id"]
+
+    same_version_task_runs = api.client.post(
+        "/task-runs",
+        json={
+            "environment_id": bundle.environment["id"],
+            "host_ids": [host_id],
+            "task_template_id": self_update_template_id,
+        },
+        headers=owner.headers,
+    )
+    assert same_version_task_runs.status_code == 201, same_version_task_runs.text
+    same_version_task = same_version_task_runs.json()[0]
+    assert same_version_task["command"] == "self-update 0.1.0 -> 0.1.0"
+
+    update_agent_response = api.client.put(
+        f"/agents/{created_agent['id']}",
+        json={"agent_version": "0.1.1"},
+        headers=owner.headers,
+    )
+    assert update_agent_response.status_code == 200, update_agent_response.text
+    assert update_agent_response.json()["agent_version"] == "0.1.1"
+
+    mismatched_install = api.client.get(
+        f"/agents/{created_agent['id']}/install-script",
+        headers=owner.headers,
+    )
+    assert mismatched_install.status_code == 409, mismatched_install.text
+
+    next_update_task_runs = api.client.post(
+        "/task-runs",
+        json={
+            "environment_id": bundle.environment["id"],
+            "host_ids": [host_id],
+            "task_template_id": self_update_template_id,
+            "payload_overrides": {
+                "artifact_url": "https://updates.example.com/hack-agent",
+            },
+        },
+        headers=owner.headers,
+    )
+    assert next_update_task_runs.status_code == 201, next_update_task_runs.text
+    next_update_task = next_update_task_runs.json()[0]
+    assert next_update_task["command"] == "self-update 0.1.0 -> 0.1.1"
+
+    update_lease = next(
+        lease
+        for lease in api.poll_agent(agent=agent)
+        if lease["id"] == next_update_task["id"]
+    )
+    assert update_lease["task_template"]["payload_json"]["from_version"] == "0.1.0"
+    assert update_lease["task_template"]["payload_json"]["version"] == "0.1.1"
+
+    api.mark_task_running(
+        agent=agent,
+        task_run_id=update_lease["id"],
+        lease_token=update_lease["lease_token"],
+    )
+    api.complete_task(
+        agent=agent,
+        task_run_id=update_lease["id"],
+        payload={
+            "lease_token": update_lease["lease_token"],
+            "status": "succeeded",
+            "exit_code": 0,
+            "stdout_text": "",
+            "stderr_text": "",
+            "summary_json": {
+                "action": "self_update",
+                "from_version": "0.1.0",
+                "to_version": "0.1.1",
+                "version": "0.1.1",
+            },
+            "telemetry_kind": None,
+            "telemetry_payload": None,
+            "failure_reason": None,
+        },
+    )
+
+    api.heartbeat_agent(agent=agent, agent_version="0.1.1")
+
+    agents_response = api.client.get(
+        "/agents",
+        params={"project_id": bundle.project["id"]},
+        headers=owner.headers,
+    )
+    assert agents_response.status_code == 200, agents_response.text
+    refreshed_agent = agents_response.json()[0]
+    assert refreshed_agent["agent_version"] == "0.1.1"
+    assert refreshed_agent["reported_agent_version"] == "0.1.1"

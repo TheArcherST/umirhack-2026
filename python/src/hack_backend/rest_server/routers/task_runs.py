@@ -5,10 +5,10 @@ from dishka.integrations.fastapi import inject
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from hack_backend.core.models import TaskRun, TaskRunResult, User
+from hack_backend.core.models import TaskRun, TaskRunResult
+from hack_backend.core.services.access import AccessService
 from hack_backend.core.services.platform_service import PlatformService
 from hack_backend.core.services.uow_ctl import UoWCtl
-from hack_backend.rest_server.dependencies import require_environment_member
 from hack_backend.rest_server.providers import AuthorizedUser
 from hack_backend.rest_server.schemas.platform import TaskRunDTO, TaskRunResultDTO
 from hack_backend.rest_server.serializers import (
@@ -31,12 +31,12 @@ class CreateTaskRunsPayload(BaseModel):
 async def create_task_runs(
     payload: CreateTaskRunsPayload,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
     uow_ctl: FromDishka[UoWCtl],
 ) -> list[TaskRunDTO]:
-    await require_environment_member(
+    await access_service.require_environment_member(
         payload.environment_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     task_runs = await platform_service.create_task_runs(
@@ -54,14 +54,14 @@ async def create_task_runs(
 async def get_task_run(
     task_run_id: str,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
 ) -> TaskRunDTO:
     task_run = await platform_service.session.get(TaskRun, task_run_id)
     if task_run is None:
         raise HTTPException(status_code=404, detail="Task run not found")
-    await require_environment_member(
+    await access_service.require_environment_member(
         task_run.environment_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     return task_run_to_dto(task_run)
@@ -72,14 +72,14 @@ async def get_task_run(
 async def get_task_run_result(
     task_run_id: str,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
 ) -> TaskRunResultDTO:
     task_run = await platform_service.session.get(TaskRun, task_run_id)
     if task_run is None:
         raise HTTPException(status_code=404, detail="Task run not found")
-    await require_environment_member(
+    await access_service.require_environment_member(
         task_run.environment_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     result = await platform_service.session.get(TaskRunResult, task_run_id)

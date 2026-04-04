@@ -72,6 +72,7 @@ class AgentDTO(BaseDTO):
     status: str
     last_seen_at: datetime | None = None
     agent_version: str | None = None
+    reported_agent_version: str | None = None
     capabilities_json: dict[str, Any] = Field(default_factory=dict)
     environments: list[EnvironmentDTO] = Field(default_factory=list)
     created_at: datetime
@@ -196,6 +197,7 @@ class ScheduleRuleDTO(BaseDTO):
 class InstallScriptDTO(BaseDTO):
     command: str
     agent_id: str
+    version: str
     safe_install: bool = False
     platform: str
     script_kind: str

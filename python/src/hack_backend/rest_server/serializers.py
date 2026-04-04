@@ -92,6 +92,7 @@ def agent_to_dto(agent: Agent, environments: list[Environment]) -> AgentDTO:
         status=_string_value(agent.status),
         last_seen_at=agent.last_seen_at,
         agent_version=agent.agent_version,
+        reported_agent_version=agent.reported_agent_version,
         capabilities_json=agent.capabilities_json or {},
         environments=[
             environment_to_dto(environment) for environment in environments
@@ -136,12 +137,17 @@ def host_detail_to_dto(host: Host) -> HostDetailDTO:
 
 def task_run_to_dto(task_run: TaskRun) -> TaskRunDTO:
     resolved_payload = merged_payload(task_run.task_template, task_run)
-    command = (
-        resolved_payload.get("approved_command")
-        or resolved_payload.get("target_endpoint")
-        or task_run.task_template.approved_command
-        or task_run.task_template.name
-    )
+    if task_run.task_template.kind == "agent.self_update":
+        from_version = resolved_payload.get("from_version") or "unknown"
+        to_version = resolved_payload.get("version") or "unknown"
+        command = f"self-update {from_version} -> {to_version}"
+    else:
+        command = (
+            resolved_payload.get("approved_command")
+            or resolved_payload.get("target_endpoint")
+            or task_run.task_template.approved_command
+            or task_run.task_template.name
+        )
     return TaskRunDTO(
         id=task_run.id,
         environment_id=task_run.environment_id,

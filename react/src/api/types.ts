@@ -9,6 +9,7 @@ export type TaskTemplate =
     | 'ping'
     | 'system_info'
     | 'network_interfaces'
+    | 'self_update'
     | 'custom_command'
     | 'port_scan'
     | 'disk_usage'
@@ -28,6 +29,7 @@ export const TASK_TEMPLATES: TaskTemplateOption[] = [
     { id: 'ping',               labelKey: 'taskTemplates.ping',              descriptionKey: 'taskTemplates.pingDesc',              requiresTarget: true },
     { id: 'system_info',        labelKey: 'taskTemplates.systemInfo',        descriptionKey: 'taskTemplates.systemInfoDesc' },
     { id: 'network_interfaces', labelKey: 'taskTemplates.networkInterfaces', descriptionKey: 'taskTemplates.networkInterfacesDesc' },
+    { id: 'self_update',        labelKey: 'taskTemplates.selfUpdate',        descriptionKey: 'taskTemplates.selfUpdateDesc' },
     { id: 'custom_command',     labelKey: 'taskTemplates.customCommand',     descriptionKey: 'taskTemplates.customCommandDesc',     requiresCommand: true },
     { id: 'port_scan',          labelKey: 'taskTemplates.portScan',          descriptionKey: 'taskTemplates.portScanDesc' },
     { id: 'disk_usage',         labelKey: 'taskTemplates.diskUsage',         descriptionKey: 'taskTemplates.diskUsageDesc' },
@@ -81,6 +83,8 @@ export interface Agent {
     tasks_count: number
     environment_ids: string[]
     safe_install: boolean
+    agent_version: string | null
+    reported_agent_version: string | null
     created_at: string
     environment_names?: AgentEnvironmentRef[]
 }
@@ -278,12 +282,14 @@ export interface CreateAgentPayload {
     name: string
     os: AgentOS
     safe_install?: boolean
+    agent_version?: string
     environment_ids?: string[]
 }
 
 export interface UpdateAgentPayload {
     name?: string
     safe_install?: boolean
+    agent_version?: string
     environment_ids?: string[]
 }
 
@@ -301,6 +307,7 @@ export interface AssignEnvRolePayload {
 export interface InstallScript {
     command: string
     agent_id: string
+    version: string
     safe_install: boolean
     platform: 'linux' | 'macos' | 'windows'
     script_kind: 'bash' | 'powershell'

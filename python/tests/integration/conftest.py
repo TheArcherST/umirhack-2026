@@ -122,6 +122,7 @@ class ApiDriver:
         name: str,
         declared_os: str = "linux",
         safe_install: bool = False,
+        agent_version: str | None = None,
     ) -> dict[str, Any]:
         response = self.client.post(
             "/agents",
@@ -130,6 +131,7 @@ class ApiDriver:
                 "name": name,
                 "declared_os": declared_os,
                 "safe_install": safe_install,
+                "agent_version": agent_version,
                 "environment_ids": [environment_id],
             },
             headers=user.headers,
@@ -167,12 +169,13 @@ class ApiDriver:
         *,
         bootstrap_token: str,
         declared_os: str = "linux",
+        agent_version: str = "0.1.0",
     ) -> AgentCredentials:
         response = self.client.post(
             "/agent/register",
             json={
                 "bootstrap_token": bootstrap_token,
-                "agent_version": "pytest-agent/1",
+                "agent_version": agent_version,
                 "declared_os": declared_os,
                 "capabilities_json": {
                     "task_kinds": [
@@ -208,7 +211,7 @@ class ApiDriver:
         self,
         *,
         agent: AgentCredentials,
-        agent_version: str = "pytest-agent/1",
+        agent_version: str = "0.1.0",
         capabilities_json: dict[str, Any] | None = None,
     ) -> None:
         response = self.client.post(

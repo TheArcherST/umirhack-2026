@@ -61,13 +61,18 @@ def install_command_for_script(
 
 def artifact_relative_path(
     *,
+    version: str | None,
     platform: InstallPlatform,
     arch: str,
 ) -> Path:
     if arch not in SUPPORTED_ARCHES[platform]:
         raise ValueError(f"Unsupported architecture {arch!r} for platform {platform!r}")
     filename = "hack-agent.exe" if platform == "windows" else "hack-agent"
-    return Path(platform) / arch / filename
+    parts: list[str] = []
+    if version:
+        parts.append(version)
+    parts.extend([platform, arch, filename])
+    return Path(*parts)
 
 
 def render_install_script(
@@ -76,6 +81,7 @@ def render_install_script(
     api_url: str,
     bootstrap_token: str,
     artifact_root_url: str,
+    agent_version: str,
     safe_install: bool,
 ) -> str:
     if platform == "windows":
@@ -83,6 +89,7 @@ def render_install_script(
             api_url=api_url,
             bootstrap_token=bootstrap_token,
             artifact_root_url=artifact_root_url,
+            agent_version=agent_version,
             safe_install=safe_install,
         )
     if platform == "macos":
@@ -90,12 +97,14 @@ def render_install_script(
             api_url=api_url,
             bootstrap_token=bootstrap_token,
             artifact_root_url=artifact_root_url,
+            agent_version=agent_version,
             safe_install=safe_install,
         )
     return _render_linux_install_script(
         api_url=api_url,
         bootstrap_token=bootstrap_token,
         artifact_root_url=artifact_root_url,
+        agent_version=agent_version,
         safe_install=safe_install,
     )
 
@@ -105,6 +114,7 @@ def _render_linux_install_script(
     api_url: str,
     bootstrap_token: str,
     artifact_root_url: str,
+    agent_version: str,
     safe_install: bool,
 ) -> str:
     return f"""#!/usr/bin/env bash
@@ -118,8 +128,10 @@ BINARY_PATH="$INSTALL_DIR/hack-agent"
 SERVICE_NAME=umirhack-agent
 STATE_DIR=/var/lib/umirhack-agent
 STATE_PATH="$STATE_DIR/state.json"
+VERSION_NOTE_PATH="$STATE_DIR/version.txt"
 ENV_FILE=/etc/umirhack-agent.env
 SERVICE_FILE="/etc/systemd/system/$SERVICE_NAME.service"
+AGENT_VERSION={_shell_quote(agent_version)}
 
 need_cmd() {{
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -176,9 +188,11 @@ cat > "$ENV_FILE" <<EOF
 HACK_AGENT_API_URL=$API_URL
 HACK_AGENT_BOOTSTRAP_TOKEN=$BOOTSTRAP_TOKEN
 HACK_AGENT_STATE_PATH=$STATE_PATH
-HACK_AGENT_VERSION=rust-agent/1
+HACK_AGENT_VERSION=$AGENT_VERSION
 HACK_AGENT_SAFE_MODE={"1" if safe_install else "0"}
 EOF
+
+printf '%s\n' "$AGENT_VERSION" > "$VERSION_NOTE_PATH"
 
 cat > "$SERVICE_FILE" <<EOF
 [Unit]
@@ -208,6 +222,7 @@ def _render_windows_install_script(
     api_url: str,
     bootstrap_token: str,
     artifact_root_url: str,
+    agent_version: str,
     safe_install: bool,
 ) -> str:
     return f"""$ErrorActionPreference = "Stop"
@@ -215,10 +230,12 @@ def _render_windows_install_script(
 $apiUrl = {_powershell_quote(api_url)}
 $bootstrapToken = {_powershell_quote(bootstrap_token)}
 $artifactRootUrl = {_powershell_quote(artifact_root_url)}
+$agentVersion = {_powershell_quote(agent_version)}
 $installDir = Join-Path $env:ProgramFiles "Umirhack"
 $stateDir = Join-Path $env:ProgramData "Umirhack"
 $binaryPath = Join-Path $installDir "hack-agent.exe"
 $runnerPath = Join-Path $installDir "run-agent.ps1"
+$versionPath = Join-Path $stateDir "version.txt"
 $taskName = "UmirhackAgent"
 
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -243,11 +260,13 @@ $runner = @"
 $env:HACK_AGENT_API_URL = '$apiUrl'
 $env:HACK_AGENT_BOOTSTRAP_TOKEN = '$bootstrapToken'
 $env:HACK_AGENT_STATE_PATH = '$stateDir\\state.json'
-$env:HACK_AGENT_VERSION = 'rust-agent/1'
+$env:HACK_AGENT_VERSION = '$agentVersion'
 $env:HACK_AGENT_SAFE_MODE = '{'1' if safe_install else '0'}'
 & '$binaryPath'
 "@
 $runner | Set-Content -Path $runnerPath -Encoding ASCII
+
+$agentVersion | Set-Content -Path $versionPath -Encoding ASCII
 
 $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$runnerPath`""
 $trigger = New-ScheduledTaskTrigger -AtStartup
@@ -264,6 +283,7 @@ def _render_macos_install_script(
     api_url: str,
     bootstrap_token: str,
     artifact_root_url: str,
+    agent_version: str,
     safe_install: bool,
 ) -> str:
     return f"""#!/usr/bin/env bash
@@ -278,10 +298,12 @@ BINARY_PATH="$INSTALL_DIR/hack-agent"
 RUNNER_PATH="$LIBEXEC_DIR/run-agent.sh"
 STATE_DIR="/Library/Application Support/UmirhackAgent"
 STATE_PATH="$STATE_DIR/state.json"
+VERSION_NOTE_PATH="$STATE_DIR/version.txt"
 PLIST_ID=com.umirhack.agent
 PLIST_FILE="/Library/LaunchDaemons/$PLIST_ID.plist"
 STDOUT_LOG=/var/log/umirhack-agent.log
 STDERR_LOG=/var/log/umirhack-agent.err.log
+AGENT_VERSION={_shell_quote(agent_version)}
 
 need_cmd() {{
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -331,11 +353,13 @@ cat > "$RUNNER_PATH" <<EOF
 export HACK_AGENT_API_URL={_shell_quote(api_url)}
 export HACK_AGENT_BOOTSTRAP_TOKEN={_shell_quote(bootstrap_token)}
 export HACK_AGENT_STATE_PATH={_shell_quote("/Library/Application Support/UmirhackAgent/state.json")}
-export HACK_AGENT_VERSION='rust-agent/1'
+export HACK_AGENT_VERSION="$AGENT_VERSION"
 export HACK_AGENT_SAFE_MODE={_shell_quote("1" if safe_install else "0")}
 exec {_shell_quote("/usr/local/bin/hack-agent")}
 EOF
 chmod 0755 "$RUNNER_PATH"
+
+printf '%s\n' "$AGENT_VERSION" > "$VERSION_NOTE_PATH"
 
 cat > "$PLIST_FILE" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>

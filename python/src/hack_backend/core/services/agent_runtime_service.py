@@ -26,6 +26,7 @@ from hack_backend.core.platform_ops import (
     utcnow,
 )
 from hack_backend.core.security import hash_secret, new_secret, verify_secret
+from hack_backend.core.services.agent_versioning import AgentVersioningService
 from hack_backend.rest_server.schemas.platform import (
     AgentExecutionHostDTO,
     AgentExecutionTemplateDTO,
@@ -38,6 +39,7 @@ LEASE_SECONDS = 60
 @dataclass(slots=True)
 class AgentRuntimeService:
     session: AsyncSession
+    agent_versioning_service: AgentVersioningService
 
     async def authenticate(self, *, agent_id: str, agent_token: str) -> Agent:
         agent = await self.session.get(Agent, agent_id)
@@ -70,10 +72,13 @@ class AgentRuntimeService:
         registration_token = new_secret(24)
         agent.registration_token_hash = hash_secret(registration_token)
         agent.declared_os = declared_os or agent.declared_os
+        agent.agent_version = self.agent_versioning_service.normalize_agent_version(agent)
         await set_agent_online(
             self.session,
             agent=agent,
-            agent_version=agent_version,
+            agent_version=self.agent_versioning_service.normalize_reported_version(
+                agent_version
+            ),
             capabilities_json=capabilities_json,
         )
         bootstrap.revoked_at = utcnow()
@@ -95,7 +100,9 @@ class AgentRuntimeService:
         await set_agent_online(
             self.session,
             agent=agent,
-            agent_version=agent_version,
+            agent_version=self.agent_versioning_service.normalize_reported_version(
+                agent_version
+            ),
             capabilities_json=capabilities_json,
         )
 
@@ -207,7 +214,7 @@ class AgentRuntimeService:
         await set_agent_online(
             self.session,
             agent=agent,
-            agent_version=agent.agent_version,
+            agent_version=agent.reported_agent_version,
             capabilities_json=agent.capabilities_json,
         )
 

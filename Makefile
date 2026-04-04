@@ -4,7 +4,7 @@
 alembic:
 	docker compose run --rm --build tool-alembic $(command)
 artifacts:
-	docker compose --profile tools run --rm --build -e ARTIFACTS_ARGS='$(if $(args),$(args),--container-only)' tool-artifacts
+	docker compose --profile tools run --rm --build -e ARTIFACTS_ARGS='$(if $(version),--version $(version) ,)$(if $(args),$(args),--container-only)' tool-artifacts
 run-migrations:
 	make alembic command="upgrade head"
 generate-migrations:

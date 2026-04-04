@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from hack_backend.core.providers import ConfigHack, ConfigPostgres, ConfigRedis, ConfigServer
+from hack_backend.rest_server.agent_install import artifact_relative_path
 from hack_backend.rest_server.routers.agents import _public_agent_url
 
 
@@ -51,4 +52,15 @@ def test_public_agent_url_accepts_host_without_scheme() -> None:
             config=make_config("agents.example.com"),
         )
         == "http://agents.example.com/api/agent-install/linux/token-1"
+    )
+
+
+def test_artifact_relative_path_includes_version_directory() -> None:
+    assert (
+        artifact_relative_path(
+            version="0.1.0",
+            platform="linux",
+            arch="amd64",
+        ).as_posix()
+        == "0.1.0/linux/amd64/hack-agent"
     )
