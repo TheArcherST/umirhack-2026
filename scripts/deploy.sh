@@ -10,17 +10,13 @@ REVISION="$1"
 REPO_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 LOCK_FILE="${DEPLOY_LOCK_FILE:-/tmp/hack-donstu-spring-2026-deploy.lock}"
 
-run_deploy() {
-    cd "$REPO_DIR"
-
-    git fetch origin
-    git checkout --detach "$REVISION"
-
-    # make artifacts
-    # Note: compile now only manually because it takes time...
-    make up
-}
-
 exec 9>"$LOCK_FILE"
 flock 9
-run_deploy
+
+cd "$REPO_DIR"
+git fetch origin
+git checkout --detach "$REVISION"
+
+# Invoke make directly — no function wrapper, so bash has no stale in-memory
+# commands from before the checkout above.
+make up
