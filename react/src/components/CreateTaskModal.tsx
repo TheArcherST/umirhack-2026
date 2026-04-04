@@ -119,8 +119,8 @@ export function CreateTaskModal({ open, onClose, onCreated, envId }: Props) {
                   {TASK_TEMPLATES.map((tt) => (
                     <SelectItem key={tt.id} value={tt.id}>
                       <div>
-                        <span className="font-medium text-xs">{tt.label}</span>
-                        <span className="ml-2 text-muted-foreground text-xs">{tt.description}</span>
+                        <span className="font-medium text-xs">{t(tt.labelKey)}</span>
+                        <span className="ml-2 text-muted-foreground text-xs">{t(tt.descriptionKey)}</span>
                       </div>
                     </SelectItem>
                   ))}

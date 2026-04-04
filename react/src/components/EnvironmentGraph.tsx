@@ -10,6 +10,7 @@ import {
   Position,
   useNodesState,
   useEdgesState,
+  type OnNodeDrag,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import dagre from '@dagrejs/dagre'
@@ -21,6 +22,21 @@ import type { GraphEdge, Host } from '@/api/types'
 
 const NODE_W = 160
 const NODE_H = 60
+const STORAGE_KEY_PREFIX = 'graph-node-pos:'
+
+function loadSavedPosition(nodeId: string): { x: number; y: number } | null {
+  try {
+    const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${nodeId}`)
+    if (raw) return JSON.parse(raw)
+  } catch { /* ignore */ }
+  return null
+}
+
+function saveNodePosition(nodeId: string, position: { x: number; y: number }) {
+  try {
+    localStorage.setItem(`${STORAGE_KEY_PREFIX}${nodeId}`, JSON.stringify(position))
+  } catch { /* ignore */ }
+}
 
 function applyDagreLayout(
   nodes: Node[],
@@ -35,6 +51,9 @@ function applyDagreLayout(
   dagre.layout(g)
 
   return nodes.map((n) => {
+    const saved = loadSavedPosition(n.id)
+    if (saved) return { ...n, position: saved }
+
     const pos = g.node(n.id)
     return {
       ...n,
@@ -322,6 +341,10 @@ export default function EnvironmentGraph({ graphEdges, hosts }: Props) {
     [hosts],
   )
 
+  const onNodeDragStop: OnNodeDrag = useCallback((_event, node) => {
+    saveNodePosition(node.id, node.position)
+  }, [])
+
   if (graphEdges.length === 0 && hosts.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
@@ -337,6 +360,7 @@ export default function EnvironmentGraph({ graphEdges, hosts }: Props) {
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeDragStop={onNodeDragStop}
         onEdgeClick={onEdgeClick}
         onNodeClick={onNodeClick}
         onPaneClick={() => { setSelectedEdge(null); setSelectedHost(null) }}

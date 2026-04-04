@@ -31,6 +31,8 @@ import type {
     UpdateAgentPayload,
     UserSearchResult,
     TaskTemplate,
+    ScheduleRule,
+    TaskTemplateItem,
 } from './types'
 
 type AgentApi = {
@@ -332,7 +334,7 @@ function mapStructuredPorts(
     return parsePortScanSample(payload?.sample)
 }
 
-function kindToTemplate(kind: string): TaskTemplate {
+export function kindToTemplate(kind: string): TaskTemplate {
     const map: Record<string, TaskTemplate> = {
         'host.system_profile': 'system_info',
         'host.ip_interfaces': 'network_interfaces',
@@ -828,5 +830,64 @@ export async function stubSearchUsers(query: string): Promise<UserSearchResult[]
     const { data } = await apiClient.get<UserSearchResult[]>('/users/search', {
         params: { q: normalized },
     })
+    return data
+}
+
+export async function stubGetTaskTemplates(): Promise<TaskTemplateItem[]> {
+    const projectId = await fetchProjectId()
+    const { data } = await apiClient.get<TaskTemplateItem[]>('/task-templates', {
+        params: { project_id: projectId },
+    })
+    return data
+}
+
+export async function stubGetScheduleRules(envId: string): Promise<ScheduleRule[]> {
+    const { data } = await apiClient.get<ScheduleRule[]>(`/environments/${envId}/schedule-rules`)
+    return data
+}
+
+export async function stubPatchScheduleRule(
+    id: string,
+    patch: { is_enabled?: boolean; cron_expr?: string },
+): Promise<ScheduleRule> {
+    const { data } = await apiClient.patch<ScheduleRule>(`/schedule-rules/${id}`, patch)
+    return data
+}
+
+export async function stubDeleteScheduleRule(id: string): Promise<void> {
+    await apiClient.delete(`/schedule-rules/${id}`)
+}
+
+export interface CreateCronPayload {
+    environment_id: string
+    template: TaskTemplate
+    cron_expr: string
+    host_ids?: string[]
+    is_enabled?: boolean
+    command?: string
+    target?: string
+}
+
+export async function stubCreateScheduleRule(payload: CreateCronPayload): Promise<ScheduleRule> {
+    const projectId = await fetchProjectId()
+    const templates = await getTaskTemplatesInternal(projectId)
+    const targetKind = templateToKind(payload.template)
+    const template =
+        templates.find((item) => item.kind === targetKind) ??
+        templates.find((item) => item.kind === 'diagnostic.command') ??
+        templates[0]
+    if (!template) throw new Error('No task templates are available')
+
+    const body: Record<string, unknown> = {
+        environment_id: payload.environment_id,
+        task_template_id: template.id,
+        cron_expr: payload.cron_expr,
+        host_ids: payload.host_ids,
+        is_enabled: payload.is_enabled ?? true,
+    }
+    if (payload.command) body.approved_command = payload.command.trim()
+    if (payload.target) body.target_endpoint = payload.target.trim()
+
+    const { data } = await apiClient.post<ScheduleRule>('/schedule-rules', body)
     return data
 }

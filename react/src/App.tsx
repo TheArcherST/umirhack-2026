@@ -20,6 +20,7 @@ import EnvironmentDashboard from '@/pages/EnvironmentDashboard'
 import EnvironmentHosts from '@/pages/EnvironmentHosts'
 import EnvironmentHostDetail from '@/pages/EnvironmentHostDetail'
 import EnvironmentTasks from '@/pages/EnvironmentTasks'
+import EnvironmentScheduleRules from '@/pages/EnvironmentScheduleRules'
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -51,6 +52,7 @@ function ProtectedRoutes() {
                     <Route path="environments/:envId/hosts" element={<EnvironmentHosts/>}/>
                     <Route path="environments/:envId/hosts/:hostId" element={<EnvironmentHostDetail/>}/>
                     <Route path="environments/:envId/tasks" element={<EnvironmentTasks/>}/>
+                    <Route path="environments/:envId/schedule" element={<EnvironmentScheduleRules/>}/>
                 </Route>
             </Routes>
         </ProjectProvider>
