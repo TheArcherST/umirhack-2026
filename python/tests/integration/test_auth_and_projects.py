@@ -84,6 +84,19 @@ def test_project_creation_bootstraps_main_environment_and_templates(api) -> None
     assert members[0]["role"] == "admin"
     assert members[0]["status"] == "accepted"
 
+    environment_members = api.client.get(
+        f"/environments/{bundle.environment['id']}/members",
+        headers=owner.headers,
+    )
+    assert environment_members.status_code == 200, environment_members.text
+    assert environment_members.json() == [
+        {
+            "user_id": owner.id,
+            "env_id": bundle.environment["id"],
+            "role": "operator",
+        }
+    ]
+
 
 def test_project_data_is_isolated_from_other_users(api) -> None:
     owner = api.register_user(prefix="owner")
@@ -136,3 +149,58 @@ def test_project_member_role_update_returns_updated_member(api) -> None:
     assert promoted_payload["user_id"] == invited_payload["user_id"]
     assert promoted_payload["role"] == "admin"
     assert promoted_payload["status"] == "accepted"
+
+
+def test_project_admin_is_operator_in_existing_and_new_environments(api) -> None:
+    owner = api.register_user(prefix="owner")
+    bundle = api.create_project_bundle(
+        user=owner,
+        project_name="Operations",
+    )
+
+    invited = api.client.post(
+        f"/projects/{bundle.project['id']}/members/invite",
+        json={"email": "project-admin@example.com"},
+        headers=owner.headers,
+    )
+    assert invited.status_code == 201, invited.text
+    invited_payload = invited.json()
+
+    promoted = api.client.put(
+        f"/projects/{bundle.project['id']}/members/{invited_payload['user_id']}/role",
+        json={"role": "admin"},
+        headers=owner.headers,
+    )
+    assert promoted.status_code == 200, promoted.text
+
+    main_members_response = api.client.get(
+        f"/environments/{bundle.environment['id']}/members",
+        headers=owner.headers,
+    )
+    assert main_members_response.status_code == 200, main_members_response.text
+    main_members = {
+        member["user_id"]: member["role"]
+        for member in main_members_response.json()
+    }
+    assert main_members[owner.id] == "operator"
+    assert main_members[invited_payload["user_id"]] == "operator"
+
+    created_environment = api.client.post(
+        "/environments",
+        json={"project_id": bundle.project["id"], "name": "staging"},
+        headers=owner.headers,
+    )
+    assert created_environment.status_code == 201, created_environment.text
+    environment = created_environment.json()
+
+    new_members_response = api.client.get(
+        f"/environments/{environment['id']}/members",
+        headers=owner.headers,
+    )
+    assert new_members_response.status_code == 200, new_members_response.text
+    new_members = {
+        member["user_id"]: member["role"]
+        for member in new_members_response.json()
+    }
+    assert new_members[owner.id] == "operator"
+    assert new_members[invited_payload["user_id"]] == "operator"

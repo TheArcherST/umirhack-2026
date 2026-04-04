@@ -13,6 +13,8 @@ from hack_backend.core.models import (
     AgentBootstrapToken,
     AgentStatus,
     Environment,
+    EnvironmentMember,
+    EnvironmentMemberRole,
     GraphEdge,
     Host,
     InviteStatus,
@@ -213,6 +215,13 @@ async def create_project_defaults(
     )
     session.add(environment)
     await session.flush()
+    session.add(
+        EnvironmentMember(
+            environment_id=environment.id,
+            user_id=owner_id,
+            role=EnvironmentMemberRole.OPERATOR,
+        )
+    )
 
     await ensure_project_templates(session, project.id)
     return project

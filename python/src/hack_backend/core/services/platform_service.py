@@ -43,6 +43,89 @@ from hack_backend.core.security import new_secret, password_hasher
 class PlatformService:
     session: AsyncSession
 
+    async def _ensure_environment_operator_membership(
+        self,
+        *,
+        environment_id: str,
+        user_id: int,
+    ) -> EnvironmentMember:
+        member = await self.session.get(
+            EnvironmentMember,
+            {"environment_id": environment_id, "user_id": user_id},
+        )
+        if member is None:
+            member = EnvironmentMember(
+                environment_id=environment_id,
+                user_id=user_id,
+                role=EnvironmentMemberRole.OPERATOR,
+            )
+            self.session.add(member)
+        else:
+            member.role = EnvironmentMemberRole.OPERATOR
+        return member
+
+    async def _ensure_project_admin_environment_memberships(
+        self,
+        *,
+        project_id: str,
+        environment_ids: list[str] | None = None,
+        user_ids: list[int] | None = None,
+    ) -> None:
+        if environment_ids is None:
+            environment_ids = list(
+                await self.session.scalars(
+                    select(Environment.id).where(Environment.project_id == project_id)
+                )
+            )
+        else:
+            environment_ids = list(dict.fromkeys(environment_ids))
+
+        if not environment_ids:
+            return
+
+        if user_ids is None:
+            user_ids = list(
+                await self.session.scalars(
+                    select(ProjectMember.user_id).where(
+                        ProjectMember.project_id == project_id,
+                        ProjectMember.role == ProjectMemberRole.ADMIN,
+                        ProjectMember.invite_status == InviteStatus.ACCEPTED,
+                    )
+                )
+            )
+        else:
+            user_ids = list(dict.fromkeys(user_ids))
+
+        if not user_ids:
+            return
+
+        existing_members = (
+            await self.session.execute(
+                select(EnvironmentMember).where(
+                    EnvironmentMember.environment_id.in_(environment_ids),
+                    EnvironmentMember.user_id.in_(user_ids),
+                )
+            )
+        ).scalars()
+        existing_by_key = {
+            (member.environment_id, member.user_id): member
+            for member in existing_members
+        }
+
+        for environment_id in environment_ids:
+            for user_id in user_ids:
+                member = existing_by_key.get((environment_id, user_id))
+                if member is None:
+                    self.session.add(
+                        EnvironmentMember(
+                            environment_id=environment_id,
+                            user_id=user_id,
+                            role=EnvironmentMemberRole.OPERATOR,
+                        )
+                    )
+                    continue
+                member.role = EnvironmentMemberRole.OPERATOR
+
     async def _resolve_project_environments(
         self,
         *,
@@ -167,6 +250,11 @@ class PlatformService:
             else ProjectMemberRole.MEMBER
         )
         membership.invite_status = InviteStatus.ACCEPTED
+        if membership.role == ProjectMemberRole.ADMIN:
+            await self._ensure_project_admin_environment_memberships(
+                project_id=project_id,
+                user_ids=[user_id],
+            )
         user = await self.session.get(User, user_id)
         if user is None:
             raise HTTPException(status_code=404, detail="User not found")
@@ -202,12 +290,14 @@ class PlatformService:
         environment = Environment(project_id=project_id, name=name)
         self.session.add(environment)
         await self.session.flush()
-        self.session.add(
-            EnvironmentMember(
-                environment_id=environment.id,
-                user_id=creator_id,
-                role=EnvironmentMemberRole.OPERATOR,
-            )
+        await self._ensure_project_admin_environment_memberships(
+            project_id=project_id,
+            environment_ids=[environment.id],
+            user_ids=[creator_id],
+        )
+        await self._ensure_project_admin_environment_memberships(
+            project_id=project_id,
+            environment_ids=[environment.id],
         )
         return environment
 
