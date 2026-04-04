@@ -21,12 +21,14 @@
     "pending": "ожидание",
     "agent": "Агент",
     "agents": "Агенты",
+    "host": "Хост",
     "status": "Статус",
     "command": "Команда",
     "duration": "Длительность",
     "tasks": "Задачи",
     "task": "Задача",
     "connected": "подключено",
+    "never": "Никогда",
     "theme": {
       "switchToLight": "Переключить на светлую тему",
       "switchToDark": "Переключить на тёмную тему"
@@ -62,6 +64,7 @@
     "dashboard": "Дашборд",
     "agents": "Агенты",
     "members": "Участники",
+    "environment": "Окружение",
     "environments": "Окружения",
     "profileSettings": "Настройки профиля",
     "signOut": "Выйти",
@@ -173,7 +176,8 @@
     "emptyStepAgentDesc": "Подключайте агентов после того, как создан проект и структура окружений.",
     "agentsInEnv": "{count} агентов",
     "totalConnectivity": "Общая связность",
-    "acrossAllEnvs": "по всем окружениям"
+    "acrossAllEnvs": "по всем окружениям",
+    "loadingGraph": "Загрузка графа связности..."
   },
   "agent": {
     "addAgent": "Добавить агента",
@@ -264,6 +268,8 @@
     "memoryTotal": "Память",
     "interfaces": "Интерфейсы",
     "ipAddress": "IP-адрес",
-    "uptime": "Время работы"
+    "uptime": "Время работы",
+    "reachable": "Доступно",
+    "unreachable": "Недоступно"
   }
 }

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 import { stubGetHosts } from '@/api/stubs'
 import { timeAgo } from '@/lib/utils'
 import type { AgentStatus } from '@/api/types'
@@ -69,18 +70,25 @@ export default function EnvironmentHosts() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{t('common.agent')}</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{t('common.host')}</th>
                   <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden sm:table-cell">{t('agent.operatingSystem')}</th>
                   <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{t('common.status')}</th>
                   <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden md:table-cell">{t('agents.lastHeartbeat')}</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden lg:table-cell">{t('common.tasks')}</th>
                   <th className="px-4 py-2.5 w-10" />
                 </tr>
               </thead>
               <tbody>
-                {isLoading && (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-xs text-muted-foreground">{t('common.loading')}</td></tr>
-                )}
+                {isLoading && Array.from({length: 5}).map((_, i) => (
+                  <tr key={i} className="border-b border-border/50 last:border-0">
+                    <td colSpan={6} className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <Skeleton className="h-4 flex-1" />
+                        <Skeleton className="h-5 w-14 rounded" />
+                        <Skeleton className="h-4 w-16" />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
                 {!isLoading && hosts.map((host) => (
                   <tr
                     key={host.id}
@@ -102,8 +110,7 @@ export default function EnvironmentHosts() {
                         </span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 hidden md:table-cell font-mono text-xs text-muted-foreground">{timeAgo(host.last_seen_at)}</td>
-                    <td className="px-4 py-3 hidden lg:table-cell font-mono text-xs text-muted-foreground">{host.hostname ?? host.name}</td>
+                    <td className="px-4 py-3 hidden md:table-cell font-mono text-xs text-muted-foreground">{host.last_seen_at ? timeAgo(host.last_seen_at) : t('common.never')}</td>
                     <td className="px-4 py-3">
                       <button className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
                         <ChevronRight size={13} />

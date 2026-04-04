@@ -1,11 +1,13 @@
 import {BrowserRouter, Routes, Route, Navigate} from 'react-router-dom'
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
 import {AuthProvider, useAuth} from '@/hooks/useAuth'
+import {useIsPageReady} from '@/hooks/useIsPageReady'
 import {ProjectProvider} from '@/hooks/useProject'
 import {ThemeProvider} from '@/hooks/useTheme'
 import {I18nProvider} from '@/i18n'
 import {Layout} from '@/components/Layout'
 import {EnvironmentLayout} from '@/components/EnvironmentLayout'
+import {AuthBlurLoader} from '@/components/PageBlurLoader'
 import Auth from '@/pages/Auth'
 import Dashboard from '@/pages/Dashboard'
 import Agents from '@/pages/Agents'
@@ -29,10 +31,10 @@ const queryClient = new QueryClient({
 })
 
 function ProtectedRoutes() {
-    const {isAuthenticated, isLoading} = useAuth()
-    if (isLoading) return null
-    if (!isAuthenticated) return <Navigate to="/login" replace/>
-    return (
+    const {isAuthenticated} = useAuth()
+    const isPageReady = useIsPageReady()
+
+    const content = (
         <ProjectProvider>
             <Routes>
                 <Route element={<Layout/>}>
@@ -52,6 +54,14 @@ function ProtectedRoutes() {
                 </Route>
             </Routes>
         </ProjectProvider>
+    )
+
+    if (!isAuthenticated && isPageReady) return <Navigate to="/login" replace/>
+
+    return (
+        <AuthBlurLoader isLoading={!isPageReady}>
+            {content}
+        </AuthBlurLoader>
     )
 }
 

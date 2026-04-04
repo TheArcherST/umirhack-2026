@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ChevronLeft, Cpu, Network, Server } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 import { stubGetHost, stubGetHostInfo, stubGetHostServices, stubGetRecentTasks } from '@/api/stubs'
 import { formatDate, formatDuration, cn } from '@/lib/utils'
 import { agentStatusLabelKey, agentStatusTextTone, agentStatusTone } from '@/lib/agentStatus'
@@ -55,7 +56,7 @@ export default function EnvironmentHostDetail() {
     enabled: !!hostId,
   })
 
-  const { data: recentTasks = [], refetch } = useQuery({
+  const { data: recentTasks = [], isLoading: isLoadingHostTasks, refetch } = useQuery({
     queryKey: ['host-recent-tasks', hostId],
     queryFn: () => stubGetRecentTasks(10).then((tasks) =>
       hostId ? tasks.filter((t) => t.host_id === hostId) : tasks,
@@ -110,7 +111,14 @@ export default function EnvironmentHostDetail() {
                 </h2>
               </div>
               {loadingHost || !hostInfo ? (
-                <div className="px-4 py-6 text-xs text-muted-foreground">{t('common.loading')}</div>
+                <div className="px-4 py-3 space-y-3">
+                  {Array.from({length: 7}).map((_, i) => (
+                    <div key={i} className="flex items-center justify-between py-2.5 border-b border-border/50">
+                      <Skeleton className="h-3 w-20" />
+                      <Skeleton className="h-4 w-24" />
+                    </div>
+                  ))}
+                </div>
               ) : (
                 <div className="px-4 py-2">
                   <InfoRow label={t('env.hostname')} value={hostInfo.hostname} />
@@ -148,7 +156,20 @@ export default function EnvironmentHostDetail() {
                   )}
                 </div>
                 {loadingServices ? (
-                  <div className="px-4 py-6 text-xs text-muted-foreground">{t('common.loading')}</div>
+                  <div className="px-4 py-3 space-y-2">
+                    {Array.from({length: 3}).map((_, i) => (
+                      <div key={i} className="flex items-center justify-between py-2.5 border-b border-border/50 last:border-0">
+                        <div className="flex items-center gap-2">
+                          <Skeleton className="w-1.5 h-1.5 rounded-full" />
+                          <Skeleton className="h-4 w-20" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Skeleton className="h-4 w-10" />
+                          <Skeleton className="h-4 w-16 rounded" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 ) : services.length === 0 ? (
                   <div className="px-4 py-6 text-xs text-muted-foreground">{t('common.noResults')}</div>
                 ) : (
@@ -194,7 +215,18 @@ export default function EnvironmentHostDetail() {
                   )}
                 </div>
                 {loadingServices ? (
-                  <div className="px-4 py-6 text-xs text-muted-foreground">{t('common.loading')}</div>
+                  <div className="px-4 py-3 space-y-2">
+                    {Array.from({length: 3}).map((_, i) => (
+                      <div key={i} className="flex items-center justify-between py-2.5 border-b border-border/50 last:border-0">
+                        <div className="flex items-center gap-2">
+                          <Skeleton className="h-4 w-12" />
+                          <Skeleton className="h-4 w-14 rounded" />
+                          <Skeleton className="h-3 w-16" />
+                        </div>
+                        <Skeleton className="h-4 w-12 rounded" />
+                      </div>
+                    ))}
+                  </div>
                 ) : ports.length === 0 ? (
                   <div className="px-4 py-6 text-xs text-muted-foreground">{t('common.noResults')}</div>
                 ) : (
@@ -251,13 +283,23 @@ export default function EnvironmentHostDetail() {
                       </td>
                     </tr>
                   ))}
-                  {recentTasks.length === 0 && (
+                  {recentTasks.length === 0 && !isLoadingHostTasks && (
                     <tr>
                       <td colSpan={4} className="px-4 py-8 text-center text-xs text-muted-foreground">
                         {t('env.noTasks')}
                       </td>
                     </tr>
                   )}
+                  {isLoadingHostTasks && Array.from({length: 5}).map((_, i) => (
+                    <tr key={i} className="border-b border-border/50 last:border-0">
+                      <td colSpan={4} className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <Skeleton className="h-4 flex-1" />
+                          <Skeleton className="h-5 w-16 rounded" />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

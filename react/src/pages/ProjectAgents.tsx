@@ -4,6 +4,7 @@ import {Plus, Link as LinkIcon, Pencil, Trash2, CheckCircle2, X} from 'lucide-re
 import {Header} from '@/components/Header'
 import {Badge} from '@/components/ui/badge'
 import {Button} from '@/components/ui/button'
+import {Skeleton} from '@/components/ui/skeleton'
 import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover'
 import {stubGetAgentInstallScript, stubGetAgents, stubGetEnvironments} from '@/api/stubs'
 import {timeAgo} from '@/lib/utils'
@@ -26,7 +27,7 @@ export default function ProjectAgents() {
     const [copiedId, setCopiedId] = useState<string | null>(null)
     const [fallbackData, setFallbackData] = useState<{agentId: string; command: string} | null>(null)
     const [actionError, setActionError] = useState('')
-    const {t} = useI18n()
+    const {t, locale} = useI18n()
     const {environments} = useProject()
 
     const {data: agents = [], isLoading, refetch} = useQuery({
@@ -131,12 +132,17 @@ export default function ProjectAgents() {
                             </tr>
                             </thead>
                             <tbody>
-                            {isLoading && (
-                                <tr>
-                                    <td colSpan={7}
-                                        className="px-4 py-8 text-center text-xs text-muted-foreground">{t('common.loading')}</td>
+                            {isLoading && Array.from({length: 5}).map((_, i) => (
+                                <tr key={i} className="border-b border-border/50 last:border-0">
+                                    <td colSpan={7} className="px-4 py-3">
+                                        <div className="flex items-center gap-3">
+                                            <Skeleton className="h-4 flex-1" />
+                                            <Skeleton className="h-5 w-14 rounded" />
+                                            <Skeleton className="h-4 w-16" />
+                                        </div>
+                                    </td>
                                 </tr>
-                            )}
+                            ))}
                             {!isLoading && agents.map((agent) => (
                                 <tr
                                     key={agent.id}
@@ -179,7 +185,7 @@ export default function ProjectAgents() {
                                         </div>
                                     </td>
                                     <td className="px-4 py-3 hidden lg:table-cell font-mono text-xs text-muted-foreground">
-                                        {timeAgo(agent.last_heartbeat)}
+                                        {agent.last_heartbeat ? timeAgo(agent.last_heartbeat, locale) : t('common.never')}
                                     </td>
                                     <td className="px-4 py-3 hidden lg:table-cell font-mono text-xs text-muted-foreground">
                                         {agent.tasks_count}

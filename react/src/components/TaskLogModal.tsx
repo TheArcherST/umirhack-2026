@@ -6,6 +6,7 @@ import {
 } from '@/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 import { stubGetTask } from '@/api/stubs'
 import { formatDate, formatDuration } from '@/lib/utils'
 import { cn } from '@/lib/utils'
@@ -73,7 +74,18 @@ export function TaskLogModal({ taskId, onClose }: Props) {
         </DialogHeader>
 
         {isLoading && (
-          <div className="px-6 pb-6 text-xs text-muted-foreground">{t('common.loading')}</div>
+          <div className="px-6 pb-6 space-y-4">
+            <div className="rounded-md border border-border bg-muted/20 px-4 py-3 space-y-2">
+              {Array.from({length: 5}).map((_, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-4 w-32" />
+                </div>
+              ))}
+            </div>
+            <Skeleton className="h-8 w-32" />
+            <Skeleton className="h-32 w-full rounded-md" />
+          </div>
         )}
 
         {task && (

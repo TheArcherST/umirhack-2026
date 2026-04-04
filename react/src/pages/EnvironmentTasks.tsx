@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ChevronLeft, Plus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { stubGetEnvironments, stubGetRecentTasks } from '@/api/stubs'
 import { formatDate, formatDuration, cn } from '@/lib/utils'
 import { TaskLogModal } from '@/components/TaskLogModal'
@@ -40,7 +41,7 @@ export default function EnvironmentTasks() {
   })
   const currentEnv = envs?.find((e) => e.id === envId)
 
-  const { data: tasksPage, refetch } = useQuery({
+  const { data: tasksPage, isLoading: isLoadingTasks, refetch } = useQuery({
     queryKey: ['env-tasks', envId, statusFilter, page],
     queryFn: async () => {
       const allTasks = await stubGetRecentTasks(200)
@@ -116,7 +117,7 @@ export default function EnvironmentTasks() {
 
             {tasksPage && (
               <span className="ml-auto text-xs font-mono text-muted-foreground">
-                {tasksPage.total} {tasksPage.total === 1 ? t('agentTasks.taskCount', { count: tasksPage.total }) : t('agentTasks.taskCountPlural', { count: tasksPage.total })}
+                {tasksPage.total === 1 ? t('agentTasks.taskCount', { count: tasksPage.total }) : t('agentTasks.taskCountPlural', { count: tasksPage.total })}
               </span>
             )}
           </div>
@@ -163,7 +164,17 @@ export default function EnvironmentTasks() {
                     </td>
                   </tr>
                 ))}
-                {tasks.length === 0 && (
+                {isLoadingTasks && Array.from({length: 5}).map((_, i) => (
+                  <tr key={i} className="border-b border-border/50 last:border-0">
+                    <td colSpan={6} className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <Skeleton className="h-4 flex-1" />
+                        <Skeleton className="h-5 w-16 rounded" />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {!isLoadingTasks && tasks.length === 0 && (
                   <tr>
                     <td colSpan={6} className="px-4 py-8 text-center text-xs text-muted-foreground">
                       {t('env.noTasks')}
