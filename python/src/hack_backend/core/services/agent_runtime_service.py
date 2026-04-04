@@ -66,6 +66,9 @@ class AgentRuntimeService:
         )
         if bootstrap is None:
             raise HTTPException(status_code=401, detail="Invalid bootstrap token")
+        if bootstrap.expires_at is not None and ensure_utc(bootstrap.expires_at) <= utcnow():
+            bootstrap.revoked_at = utcnow()
+            raise HTTPException(status_code=401, detail="Bootstrap token expired")
 
         agent = await self.session.get(Agent, bootstrap.agent_id)
         if agent is None:

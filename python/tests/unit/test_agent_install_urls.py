@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from hack_backend.core.providers import ConfigHack, ConfigPostgres, ConfigRedis, ConfigServer
-from hack_backend.rest_server.agent_install import artifact_relative_path, render_install_script
+from hack_backend.rest_server.agent_install import (
+    artifact_relative_path,
+    render_install_error_script,
+    render_install_script,
+)
 from hack_backend.rest_server.routers.agents import _public_agent_url
 
 
@@ -79,6 +83,8 @@ def test_linux_install_script_prompts_before_replacing_existing_agent() -> None:
     assert "confirm_replace_if_needed" in script
     assert "This installer will replace it." in script
     assert "UMIRHACK_AGENT_REPLACE=1" in script
+    assert 'rm -f "$STATE_PATH"' in script
+    assert 'systemctl restart "$SERVICE_NAME"' in script
 
 
 def test_macos_install_script_prompts_before_replacing_existing_agent() -> None:
@@ -94,6 +100,8 @@ def test_macos_install_script_prompts_before_replacing_existing_agent() -> None:
     assert "confirm_replace_if_needed" in script
     assert "This installer will replace it." in script
     assert "UMIRHACK_AGENT_REPLACE=1" in script
+    assert 'rm -f "$STATE_PATH"' in script
+    assert 'launchctl kickstart -k "system/$PLIST_ID"' in script
 
 
 def test_windows_install_script_prompts_before_replacing_existing_agent() -> None:
@@ -109,3 +117,15 @@ def test_windows_install_script_prompts_before_replacing_existing_agent() -> Non
     assert "Confirm-ReplaceIfNeeded" in script
     assert "This installer will replace it." in script
     assert "UMIRHACK_AGENT_REPLACE" in script
+    assert "Remove-Item -Path (Join-Path $stateDir \"state.json\")" in script
+    assert "Stop-ScheduledTask -TaskName $taskName" in script
+
+
+def test_error_install_script_prints_expired_message() -> None:
+    script = render_install_error_script(
+        platform="linux",
+        message="Install link expired",
+    )
+
+    assert "Install link expired" in script
+    assert "exit 1" in script

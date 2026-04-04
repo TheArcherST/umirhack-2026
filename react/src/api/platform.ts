@@ -1017,7 +1017,13 @@ export async function stubGetScheduleRules(envId: string): Promise<ScheduleRule[
 
 export async function stubPatchScheduleRule(
     id: string,
-    patch: { is_enabled?: boolean; cron_expr?: string },
+    patch: {
+        is_enabled?: boolean
+        cron_expr?: string
+        host_ids?: string[]
+        approved_command?: string | null
+        target_endpoint?: string | null
+    },
 ): Promise<ScheduleRule> {
     const { data } = await apiClient.patch<ScheduleRule>(`/schedule-rules/${id}`, patch)
     return data

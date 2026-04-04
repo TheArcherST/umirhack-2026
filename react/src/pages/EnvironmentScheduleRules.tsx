@@ -17,12 +17,15 @@ import {
   stubPatchScheduleRule,
   stubDeleteScheduleRule,
   kindToTemplate,
+  stubGetHosts,
 } from '@/api/stubs'
 import { TASK_TEMPLATES } from '@/api/types'
 import { CreateCronRuleModal } from '@/components/CreateCronRuleModal'
+import { EndpointTargetInput } from '@/components/EndpointTargetInput'
 import { formatDate } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import type { ScheduleRule } from '@/api/types'
+import { Textarea } from '@/components/ui/textarea'
 
 const CRON_PRESETS = [
   { label: '*/5 * * * *', hint: 'Every 5 min' },
@@ -45,12 +48,27 @@ function EditCronModal({
   const queryClient = useQueryClient()
   const [cronExpr, setCronExpr] = useState(rule.cron_expr)
   const [isEnabled, setIsEnabled] = useState(rule.is_enabled)
+  const [target, setTarget] = useState(String(rule.target_selector_json.target_endpoint ?? ''))
+  const [command, setCommand] = useState(String(rule.target_selector_json.approved_command ?? ''))
+  const [selectedHostIds, setSelectedHostIds] = useState<string[]>(
+    Array.isArray(rule.target_selector_json.host_ids)
+      ? rule.target_selector_json.host_ids.filter((value): value is string => typeof value === 'string')
+      : [],
+  )
+  const selectedTemplate = TASK_TEMPLATES.find((tt) => tt.id === kindToTemplate(rule.task_kind))
+  const { data: hosts = [] } = useQuery({
+    queryKey: ['hosts-env', rule.environment_id],
+    queryFn: () => stubGetHosts(rule.environment_id),
+  })
 
   const mutation = useMutation({
     mutationFn: () =>
       stubPatchScheduleRule(rule.id, {
         cron_expr: cronExpr.trim() !== rule.cron_expr ? cronExpr.trim() : undefined,
         is_enabled: isEnabled !== rule.is_enabled ? isEnabled : undefined,
+        host_ids: selectedHostIds,
+        approved_command: command.trim() || null,
+        target_endpoint: target.trim() || null,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cron-rules', rule.environment_id] })
@@ -58,6 +76,12 @@ function EditCronModal({
       onClose()
     },
   })
+
+  const toggleHost = (id: string) => {
+    setSelectedHostIds((prev) =>
+      prev.includes(id) ? prev.filter((hostId) => hostId !== id) : [...prev, id],
+    )
+  }
 
   return (
     <Dialog open onOpenChange={(v) => { if (!v) onClose() }}>
@@ -69,9 +93,57 @@ function EditCronModal({
           <div className="space-y-1">
             <p className="text-xs text-muted-foreground">{t('cron.task')}</p>
             <p className="text-xs font-medium">
-              {(() => { const tpl = TASK_TEMPLATES.find((tt) => tt.id === kindToTemplate(rule.task_kind)); return tpl ? t(tpl.labelKey) : rule.task_name })()}
+              {selectedTemplate ? t(selectedTemplate.labelKey) : rule.task_name}
             </p>
           </div>
+          {selectedTemplate?.requiresTarget && (
+            <div className="space-y-1.5">
+              <Label>{t('env.taskTarget')}</Label>
+              <EndpointTargetInput
+                environmentId={rule.environment_id}
+                value={target}
+                onChange={setTarget}
+                placeholder={t('env.taskTargetPlaceholder')}
+              />
+            </div>
+          )}
+          {selectedTemplate?.requiresCommand && (
+            <div className="space-y-1.5">
+              <Label>{t('newTask.commandLabel')}</Label>
+              <Textarea
+                value={command}
+                onChange={(e) => setCommand(e.target.value)}
+                placeholder={t('newTask.commandPlaceholder')}
+                className="font-mono text-xs min-h-20"
+              />
+            </div>
+          )}
+          {hosts.length > 0 && (
+            <div className="space-y-1.5">
+              <Label>
+                {t('cron.targetHosts')}
+                <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                  {t('cron.allHostsHint')}
+                </span>
+              </Label>
+              <div className="flex flex-wrap gap-1.5">
+                {hosts.map((host) => (
+                  <button
+                    key={host.id}
+                    type="button"
+                    onClick={() => toggleHost(host.id)}
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-mono border transition-colors ${
+                      selectedHostIds.includes(host.id)
+                        ? 'bg-accent border-accent-foreground/20 text-foreground'
+                        : 'border-border text-muted-foreground hover:text-foreground hover:bg-accent/50'
+                    }`}
+                  >
+                    {host.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label>{t('cron.cronExpr')}</Label>
             <Input
@@ -134,6 +206,12 @@ export default function EnvironmentScheduleRules() {
     queryKey: ['environments'],
     queryFn: () => stubGetEnvironments(''),
   })
+  const { data: hosts = [] } = useQuery({
+    queryKey: ['hosts-env', envId],
+    queryFn: () => stubGetHosts(envId!),
+    enabled: !!envId,
+  })
+  const hostNameById = new Map(hosts.map((host) => [host.id, host.name]))
   const currentEnv = envs?.find((e) => e.id === envId)
 
   const { data: rules = [], isLoading } = useQuery({
@@ -223,7 +301,16 @@ export default function EnvironmentScheduleRules() {
                           {rule.target_selector_json.approved_command}
                         </code>
                       )}
-                      {!rule.target_selector_json.target_endpoint && !rule.target_selector_json.approved_command && (
+                      {Array.isArray(rule.target_selector_json.host_ids) && rule.target_selector_json.host_ids.length > 0 && (
+                        <p className="text-[10px] text-muted-foreground">
+                          {rule.target_selector_json.host_ids
+                            .map((hostId) => hostNameById.get(String(hostId)) ?? String(hostId))
+                            .join(', ')}
+                        </p>
+                      )}
+                      {!rule.target_selector_json.target_endpoint
+                        && !rule.target_selector_json.approved_command
+                        && (!Array.isArray(rule.target_selector_json.host_ids) || rule.target_selector_json.host_ids.length === 0) && (
                         <span className="text-xs text-muted-foreground/40">—</span>
                       )}
                     </td>

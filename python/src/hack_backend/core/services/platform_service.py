@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from fastapi import HTTPException
 from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from hack_backend.core.models import (
     Agent,
@@ -611,6 +611,7 @@ class PlatformService:
         return list(
             await self.session.scalars(
                 select(ScheduleRule)
+                .options(joinedload(ScheduleRule.task_template))
                 .where(ScheduleRule.environment_id == environment_id)
                 .order_by(ScheduleRule.created_at.desc())
             )
@@ -642,12 +643,17 @@ class PlatformService:
         )
         self.session.add(rule)
         await self.session.flush()
+        rule.task_template = task_template
         return rule
 
     async def get_schedule_rule(self, schedule_rule_id: str):
         from hack_backend.core.models import ScheduleRule
 
-        return await self.session.get(ScheduleRule, schedule_rule_id)
+        return await self.session.scalar(
+            select(ScheduleRule)
+            .options(joinedload(ScheduleRule.task_template))
+            .where(ScheduleRule.id == schedule_rule_id)
+        )
 
     async def patch_schedule_rule(
         self,
@@ -655,6 +661,8 @@ class PlatformService:
         *,
         is_enabled: bool | None = None,
         cron_expr: str | None = None,
+        target_selector_json: dict | None = None,
+        replace_target_selector: bool = False,
     ):
         from hack_backend.core.models import ScheduleRule
         from hack_backend.core.platform_ops import next_cron_run, utcnow
@@ -665,8 +673,10 @@ class PlatformService:
         if cron_expr is not None:
             rule.cron_expr = cron_expr
             rule.next_run_at = next_cron_run(cron_expr, utcnow())
+        if replace_target_selector:
+            rule.target_selector_json = target_selector_json or {}
         await self.session.flush()
-        return rule
+        return await self.get_schedule_rule(schedule_rule_id)
 
     async def delete_schedule_rule(self, schedule_rule_id: str) -> None:
         from hack_backend.core.models import ScheduleRule
