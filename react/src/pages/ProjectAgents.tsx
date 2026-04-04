@@ -145,6 +145,14 @@ export default function ProjectAgents() {
                                     <td className="px-4 py-3">
                                         <p className="text-xs font-mono font-medium">{agent.name}</p>
                                         <p className="text-xs text-muted-foreground">{agent.ip_address}</p>
+                                        <p className="text-[10px] font-mono text-muted-foreground">
+                                            {t('agent.installVersion')}: {agent.agent_version ?? '—'}
+                                        </p>
+                                        {agent.reported_agent_version && agent.reported_agent_version !== agent.agent_version && (
+                                            <p className="text-[10px] font-mono text-amber-500">
+                                                {t('agent.reportedVersion')}: {agent.reported_agent_version}
+                                            </p>
+                                        )}
                                     </td>
                                     <td className="px-4 py-3 hidden sm:table-cell">
                                         <Badge variant="outline" className="uppercase text-[10px]">{agent.os}</Badge>

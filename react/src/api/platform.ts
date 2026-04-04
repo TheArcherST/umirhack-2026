@@ -42,6 +42,7 @@ type AgentApi = {
     status: string
     last_seen_at: string | null
     agent_version: string | null
+    reported_agent_version: string | null
     environments: Environment[]
     created_at: string
 }
@@ -147,6 +148,16 @@ type StructuredServiceTelemetry = {
     }>
 }
 
+type StructuredPortScanTelemetry = {
+    ports?: Array<{
+        port?: unknown
+        protocol?: unknown
+        service?: unknown
+        state?: unknown
+    }>
+    sample?: unknown
+}
+
 function currentProjectId(): string | null {
     return localStorage.getItem(CURRENT_PROJECT_KEY)
 }
@@ -164,12 +175,25 @@ function secondsBetween(startedAt: string | null, finishedAt: string | null): nu
     return Math.max(0, (new Date(finishedAt).getTime() - new Date(startedAt).getTime()) / 1000)
 }
 
-function extractPortFromEndpoint(value: unknown): number | undefined {
-    const raw = String(value ?? '')
-    const match = raw.match(/:(\d+)(?:\/)?$/)
+function parsePort(value: unknown): number | undefined {
+    const normalized = String(value ?? '').trim()
+    if (!normalized) return undefined
+    const direct = Number(normalized)
+    if (Number.isFinite(direct) && direct > 0) return direct
+    const match = normalized.match(/(?::|\.)(\d+)$/)
     if (!match) return undefined
-    const port = Number(match[1])
-    return Number.isFinite(port) ? port : undefined
+    const parsed = Number(match[1])
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
+}
+
+function normalizePortProtocol(value: unknown): PortInfo['protocol'] {
+    return String(value ?? '').toLowerCase().startsWith('udp') ? 'udp' : 'tcp'
+}
+
+function normalizePortState(value: unknown): PortInfo['state'] {
+    const normalized = String(value ?? '').toLowerCase()
+    if (normalized.includes('listen')) return 'listening'
+    return 'established'
 }
 
 function normalizeServiceStatus(entry: {
@@ -192,24 +216,6 @@ function normalizeServiceStatus(entry: {
     return 'stopped'
 }
 
-function mapConnectivityServices(connectivity: TelemetryApi[]): ServiceInfo[] {
-    return connectivity.map((item) => ({
-        name: String(item.payload_json.target_endpoint ?? 'endpoint'),
-        status: item.payload_json.success ? 'running' : 'stopped',
-        port: extractPortFromEndpoint(item.payload_json.target_endpoint) ?? 443,
-        known: true,
-    }))
-}
-
-function mapConnectivityPorts(connectivity: TelemetryApi[]): PortInfo[] {
-    return connectivity.map((item) => ({
-        port: extractPortFromEndpoint(item.payload_json.target_endpoint) ?? 443,
-        protocol: 'tcp',
-        service: 'https',
-        state: item.payload_json.success ? 'listening' : 'established',
-    }))
-}
-
 function mapStructuredServices(
     payload: StructuredServiceTelemetry | undefined,
 ): ServiceInfo[] {
@@ -228,11 +234,110 @@ function mapStructuredServices(
     return Array.from(byName.values()).sort((left, right) => left.name.localeCompare(right.name))
 }
 
+function parseLinuxPortScanSample(sample: string): PortInfo[] {
+    const ports = new Map<string, PortInfo>()
+    for (const line of sample.split('\n')) {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith('Netid ') || trimmed.startsWith('State ')) continue
+        const parts = trimmed.split(/\s+/)
+        if (parts.length < 5) continue
+        const protocol = normalizePortProtocol(parts[0])
+        const state = normalizePortState(parts[1])
+        const port = parsePort(parts[4])
+        if (port == null) continue
+        const key = `${protocol}:${port}`
+        if (!ports.has(key)) {
+            ports.set(key, { port, protocol, state })
+        }
+    }
+    return Array.from(ports.values()).sort((left, right) => left.port - right.port)
+}
+
+function parseMacosPortScanSample(sample: string): PortInfo[] {
+    const ports = new Map<string, PortInfo>()
+    for (const line of sample.split('\n')) {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith('COMMAND ')) continue
+        const parts = trimmed.split(/\s+/)
+        if (parts.length < 9) continue
+        const protocol = normalizePortProtocol(parts[7])
+        const port = parsePort(parts[8])
+        if (port == null) continue
+        const key = `${protocol}:${port}`
+        if (!ports.has(key)) {
+            ports.set(key, {
+                port,
+                protocol,
+                state: 'listening',
+            })
+        }
+    }
+    return Array.from(ports.values()).sort((left, right) => left.port - right.port)
+}
+
+function parseWindowsPortScanSample(sample: string): PortInfo[] {
+    const ports = new Map<string, PortInfo>()
+    for (const line of sample.split('\n')) {
+        const trimmed = line.trim()
+        if (!trimmed || /^(Proto|Active Connections)/i.test(trimmed)) continue
+        const parts = trimmed.split(/\s+/)
+        if (parts.length < 4) continue
+        const protocol = normalizePortProtocol(parts[0])
+        const port = parsePort(parts[1])
+        if (port == null) continue
+        const state = protocol === 'udp' ? 'listening' : normalizePortState(parts[3])
+        const key = `${protocol}:${port}`
+        if (!ports.has(key)) {
+            ports.set(key, { port, protocol, state })
+        }
+    }
+    return Array.from(ports.values()).sort((left, right) => left.port - right.port)
+}
+
+function parsePortScanSample(sample: unknown): PortInfo[] {
+    const normalized = String(sample ?? '').trim()
+    if (!normalized) return []
+    if (normalized.includes('Netid') && normalized.includes('Local Address:Port')) {
+        return parseLinuxPortScanSample(normalized)
+    }
+    if (normalized.includes('COMMAND') && normalized.includes('NODE') && normalized.includes('NAME')) {
+        return parseMacosPortScanSample(normalized)
+    }
+    if (normalized.includes('Active Connections') || normalized.includes('Proto')) {
+        return parseWindowsPortScanSample(normalized)
+    }
+    return []
+}
+
+function mapStructuredPorts(
+    payload: StructuredPortScanTelemetry | undefined,
+): PortInfo[] {
+    if (Array.isArray(payload?.ports)) {
+        const bySocket = new Map<string, PortInfo>()
+        for (const entry of payload.ports) {
+            const port = parsePort(entry?.port)
+            if (port == null) continue
+            const protocol = normalizePortProtocol(entry?.protocol)
+            const key = `${protocol}:${port}`
+            bySocket.set(key, {
+                port,
+                protocol,
+                service: entry?.service ? String(entry.service) : undefined,
+                state: normalizePortState(entry?.state),
+            })
+        }
+        return Array.from(bySocket.values()).sort((left, right) => left.port - right.port)
+    }
+
+    return parsePortScanSample(payload?.sample)
+}
+
 function kindToTemplate(kind: string): TaskTemplate {
     const map: Record<string, TaskTemplate> = {
         'host.system_profile': 'system_info',
         'host.ip_interfaces': 'network_interfaces',
         'network.endpoint_connectivity': 'ping',
+        'agent.self_update': 'self_update',
         'diagnostic.command.custom': 'custom_command',
         'diagnostic.command.port_scan': 'port_scan',
         'diagnostic.command.disk_usage': 'disk_usage',
@@ -248,6 +353,7 @@ function templateToKind(template: TaskTemplate): string {
         ping: 'network.endpoint_connectivity',
         system_info: 'host.system_profile',
         network_interfaces: 'host.ip_interfaces',
+        self_update: 'agent.self_update',
         custom_command: 'diagnostic.command.custom',
         port_scan: 'diagnostic.command.port_scan',
         disk_usage: 'diagnostic.command.disk_usage',
@@ -264,12 +370,14 @@ function mapAgent(row: AgentApi): Agent {
         name: row.name,
         hostname: null,
         ip_address: '',
-        os: normalizeAgentOs(row.declared_os ?? row.agent_version ?? ''),
+        os: normalizeAgentOs(row.declared_os ?? ''),
         status: row.status as Agent['status'],
         last_heartbeat: row.last_seen_at,
         tasks_count: 0,
         environment_ids: row.environments.map((env) => env.id),
         safe_install: row.safe_install,
+        agent_version: row.agent_version,
+        reported_agent_version: row.reported_agent_version,
         created_at: row.created_at,
         environment_names: row.environments.map((env) => ({ id: env.id, name: env.name })),
     }
@@ -442,6 +550,7 @@ export async function stubCreateAgent(payload: CreateAgentPayload): Promise<{ ag
         name: payload.name,
         declared_os: payload.os,
         safe_install: payload.safe_install ?? false,
+        agent_version: payload.agent_version,
         environment_ids: payload.environment_ids ?? [],
     })
     const installScript = await stubGetAgentInstallScript(data.id)
@@ -455,6 +564,7 @@ export async function stubUpdateAgent(id: string, payload: UpdateAgentPayload): 
     const { data } = await apiClient.put<AgentApi>(`/agents/${id}`, {
         name: payload.name,
         safe_install: payload.safe_install,
+        agent_version: payload.agent_version,
         environment_ids: payload.environment_ids,
     })
     return mapAgent(data)
@@ -538,16 +648,11 @@ export async function stubGetHostInfo(hostId: string): Promise<HostInfo | null> 
 
 export async function stubGetHostServices(hostId: string): Promise<{ services: ServiceInfo[]; ports: PortInfo[] }> {
     const telemetry = await apiClient.get<TelemetryApi[]>(`/hosts/${hostId}/telemetry`)
-    const connectivity = telemetry.data.filter((item) => item.kind === 'network.endpoint_connectivity')
     const latestServiceStatus = telemetry.data.find((item) => item.kind === 'diagnostic.command.service_status')
+    const latestPortScan = telemetry.data.find((item) => item.kind === 'diagnostic.command.port_scan')
     const structuredServices = mapStructuredServices(latestServiceStatus?.payload_json as StructuredServiceTelemetry | undefined)
-    const hasStructuredServices = Array.isArray(
-        (latestServiceStatus?.payload_json as StructuredServiceTelemetry | undefined)?.services,
-    )
-    const services = hasStructuredServices
-        ? structuredServices
-        : mapConnectivityServices(connectivity)
-    const ports = mapConnectivityPorts(connectivity)
+    const ports = mapStructuredPorts(latestPortScan?.payload_json as StructuredPortScanTelemetry | undefined)
+    const services = structuredServices
     return { services, ports }
 }
 
@@ -694,6 +799,8 @@ export async function stubCreateTaskV2(payload: CreateTaskPayloadV2): Promise<Ta
         payload_overrides:
             payload.template === 'custom_command'
                 ? { approved_command: payload.command?.trim() ?? '' }
+                : payload.template === 'self_update'
+                    ? {}
                 : payload.target
                     ? { target_endpoint: payload.target }
                     : undefined,

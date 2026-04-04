@@ -140,7 +140,7 @@ mod tests {
             bootstrap_token: bootstrap_token.map(ToString::to_string),
             state_path: PathBuf::from("/tmp/hack-agent-test-state.json"),
             poll_interval_seconds: 5,
-            agent_version: "rust-test-agent/1".to_string(),
+            agent_version: "1.2.3".to_string(),
             safe_mode: false,
         }
     }
@@ -169,7 +169,7 @@ mod tests {
         .expect("register payload should build");
 
         assert_eq!(payload.bootstrap_token, "bootstrap-123");
-        assert_eq!(payload.agent_version, "rust-test-agent/1");
+        assert_eq!(payload.agent_version, "1.2.3");
         assert_eq!(payload.declared_os, super::declared_os());
         assert_eq!(payload.capabilities_json["safe_mode"], false);
         assert!(
@@ -194,7 +194,7 @@ mod tests {
         };
         let headers = super::auth_headers(&state).expect("headers should build");
 
-        assert_eq!(payload.agent_version, "rust-test-agent/1");
+        assert_eq!(payload.agent_version, "1.2.3");
         assert_eq!(payload.capabilities_json["safe_mode"], false);
         assert!(
             payload

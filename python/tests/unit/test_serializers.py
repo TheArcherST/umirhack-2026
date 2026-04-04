@@ -116,6 +116,8 @@ def test_agent_to_dto_accepts_enum_and_string_status(status) -> None:
             project_id="project-1",
             name="runner",
             status=status,
+            agent_version="1.2.3",
+            reported_agent_version="1.2.2",
             created_at=NOW,
         ),
         [
@@ -129,6 +131,8 @@ def test_agent_to_dto_accepts_enum_and_string_status(status) -> None:
     )
 
     assert dto.status == "online"
+    assert dto.agent_version == "1.2.3"
+    assert dto.reported_agent_version == "1.2.2"
     assert dto.environments[0].id == "env-1"
 
 
@@ -191,3 +195,47 @@ def test_task_run_to_dto_accepts_enum_and_string_status(status) -> None:
     assert dto.status == "running"
     assert dto.task_name == "System profile"
     assert dto.host_name == "node-1"
+
+
+def test_task_run_to_dto_formats_self_update_version_transition() -> None:
+    task_run = TaskRun(
+        id="task-run-1",
+        environment_id="env-1",
+        host_id="host-1",
+        agent_id="agent-1",
+        task_template_id="template-1",
+        status=TaskRunStatus.QUEUED,
+        attempt_no=1,
+        queued_at=NOW,
+        payload_override_json={
+            "from_version": "1.2.2",
+            "version": "1.2.3",
+        },
+        task_template=TaskTemplate(
+            id="template-1",
+            project_id="project-1",
+            kind="agent.self_update",
+            name="Self Update Agent",
+            payload_json={"template_code": "self_update"},
+            created_at=NOW,
+        ),
+        host=Host(
+            id="host-1",
+            environment_id="env-1",
+            agent_id="agent-1",
+            name="node-1",
+            internal_identifier="node-1",
+            created_at=NOW,
+        ),
+        agent=Agent(
+            id="agent-1",
+            project_id="project-1",
+            name="runner",
+            status=AgentStatus.ONLINE,
+            created_at=NOW,
+        ),
+    )
+
+    dto = task_run_to_dto(task_run)
+
+    assert dto.command == "self-update 1.2.2 -> 1.2.3"

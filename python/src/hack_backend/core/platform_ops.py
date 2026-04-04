@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -491,21 +492,37 @@ async def update_host_projection(
         }
     elif telemetry_kind == "host.ip_interfaces":
         interfaces = payload.get("interfaces") or []
-        primary_ipv4 = None
-        primary_ipv6 = None
-        for interface in interfaces:
-            ipv4 = interface.get("ipv4") or []
-            ipv6 = interface.get("ipv6") or []
-            if primary_ipv4 is None and ipv4:
-                primary_ipv4 = ipv4[0]
-            if primary_ipv6 is None and ipv6:
-                primary_ipv6 = ipv6[0]
-        host.primary_ipv4 = primary_ipv4 or host.primary_ipv4
-        host.primary_ipv6 = primary_ipv6 or host.primary_ipv6
+        host.primary_ipv4 = _select_primary_ip(interfaces, family="ipv4")
+        host.primary_ipv6 = _select_primary_ip(interfaces, family="ipv6")
         host.descriptive_fields_json = {
             **(host.descriptive_fields_json or {}),
             "interfaces": interfaces,
         }
+
+
+def _select_primary_ip(
+    interfaces: list[dict[str, Any]],
+    *,
+    family: str,
+) -> str | None:
+    for interface in interfaces:
+        addresses = interface.get(family) or []
+        for raw_address in addresses:
+            if not isinstance(raw_address, str):
+                continue
+            try:
+                address = ipaddress.ip_address(raw_address)
+            except ValueError:
+                continue
+            if (
+                address.is_loopback
+                or address.is_link_local
+                or address.is_multicast
+                or address.is_unspecified
+            ):
+                continue
+            return raw_address
+    return None
 
 
 async def materialize_metric_projection(
@@ -627,7 +644,7 @@ async def set_agent_online(
     agent.status = AgentStatus.ONLINE
     agent.last_seen_at = utcnow()
     if agent_version is not None:
-        agent.agent_version = agent_version
+        agent.reported_agent_version = agent_version
     if capabilities_json is not None:
         agent.capabilities_json = capabilities_json
 

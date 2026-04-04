@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 const DEFAULT_API_URL: &str = "http://127.0.0.1:8000/api";
 const DEFAULT_POLL_SECONDS: u64 = 5;
-const DEFAULT_AGENT_VERSION: &str = "rust-agent/1";
+const DEFAULT_AGENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Clone, Debug)]
 pub struct Config {

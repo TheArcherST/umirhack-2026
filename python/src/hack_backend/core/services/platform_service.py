@@ -37,11 +37,13 @@ from hack_backend.core.platform_ops import (
     sync_hosts_for_agent,
 )
 from hack_backend.core.security import new_secret, password_hasher
+from hack_backend.core.services.agent_versioning import AgentVersioningService
 
 
 @dataclass(slots=True)
 class PlatformService:
     session: AsyncSession
+    agent_versioning_service: AgentVersioningService
 
     async def _ensure_environment_operator_membership(
         self,
@@ -443,6 +445,7 @@ class PlatformService:
         declared_os: str | None,
         safe_install: bool,
         environment_ids: list[str],
+        agent_version: str | None,
     ) -> tuple[Agent, list[Environment]]:
         environments = await self._resolve_project_environments(
             project_id=project_id,
@@ -453,6 +456,9 @@ class PlatformService:
             name=name,
             declared_os=declared_os,
             safe_install=safe_install,
+            agent_version=self.agent_versioning_service.resolve_agent_target_version(
+                agent_version
+            ),
         )
         self.session.add(agent)
         await self.session.flush()
@@ -474,11 +480,16 @@ class PlatformService:
         name: str | None,
         safe_install: bool | None,
         environment_ids: list[str] | None,
+        agent_version: str | None,
     ) -> tuple[Agent, list[Environment]]:
         if name:
             agent.name = name
         if safe_install is not None:
             agent.safe_install = safe_install
+        if agent_version is not None:
+            agent.agent_version = self.agent_versioning_service.resolve_agent_target_version(
+                agent_version
+            )
         if environment_ids is not None:
             environments = await self._resolve_project_environments(
                 project_id=agent.project_id,
@@ -548,9 +559,11 @@ class PlatformService:
         self,
         *,
         agent: Agent,
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, str]:
+        target_version = self.agent_versioning_service.normalize_agent_version(agent)
+        self.agent_versioning_service.ensure_artifact_version_available(target_version)
         _, raw_token = await issue_bootstrap_token(self.session, agent_id=agent.id)
-        return agent.id, raw_token
+        return agent.id, raw_token, target_version
 
     async def list_agent_task_runs(self, agent_id: str) -> list[TaskRun]:
         return list(
@@ -663,14 +676,6 @@ class PlatformService:
                         detail="artifact_url override must be a non-empty string",
                     )
                 validated_payload_overrides["artifact_url"] = artifact_url.strip()
-            version = validated_payload_overrides.get("version")
-            if version is not None:
-                if not isinstance(version, str) or not version.strip():
-                    raise HTTPException(
-                        status_code=400,
-                        detail="version override must be a non-empty string",
-                    )
-                validated_payload_overrides["version"] = version.strip()
         resolved_host_ids = list(dict.fromkeys(host_ids))
         hosts = list(
             await self.session.scalars(
@@ -690,12 +695,43 @@ class PlatformService:
             selected_hosts = hosts
 
         for host in selected_hosts:
+            task_payload_overrides = dict(validated_payload_overrides)
+            if task_template.kind == "agent.self_update":
+                agent = await self.session.get(Agent, host.agent_id)
+                if agent is None:
+                    raise HTTPException(status_code=404, detail="Agent not found")
+                requested_version = task_payload_overrides.get("version")
+                if requested_version is not None:
+                    if (
+                        not isinstance(requested_version, str)
+                        or not requested_version.strip()
+                    ):
+                        raise HTTPException(
+                            status_code=400,
+                            detail="version override must be a non-empty string",
+                        )
+                    requested_version = requested_version.strip()
+                artifact_url = task_payload_overrides.get("artifact_url")
+                if artifact_url is not None and not isinstance(artifact_url, str):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="artifact_url override must be a string",
+                    )
+                from_version, target_version = (
+                    self.agent_versioning_service.resolve_self_update_versions(
+                        agent=agent,
+                        requested_version=requested_version,
+                        artifact_url=artifact_url,
+                    )
+                )
+                task_payload_overrides["from_version"] = from_version
+                task_payload_overrides["version"] = target_version
             task_run = TaskRun(
                 environment_id=environment.id,
                 host_id=host.id,
                 agent_id=host.agent_id,
                 task_template_id=task_template_id,
-                payload_override_json=validated_payload_overrides,
+                payload_override_json=task_payload_overrides,
             )
             self.session.add(task_run)
             task_runs.append(task_run)

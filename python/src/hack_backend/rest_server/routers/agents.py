@@ -50,12 +50,14 @@ class CreateAgentPayload(BaseModel):
     name: str
     declared_os: str | None = None
     safe_install: bool = False
+    agent_version: str | None = None
     environment_ids: list[str]
 
 
 class UpdateAgentPayload(BaseModel):
     name: str | None = None
     safe_install: bool | None = None
+    agent_version: str | None = None
     environment_ids: list[str] | None = None
 
 
@@ -107,6 +109,7 @@ async def create_agent(
         name=payload.name,
         declared_os=payload.declared_os,
         safe_install=payload.safe_install,
+        agent_version=payload.agent_version,
         environment_ids=payload.environment_ids,
     )
     await uow_ctl.commit()
@@ -134,6 +137,7 @@ async def update_agent(
         agent=agent,
         name=payload.name,
         safe_install=payload.safe_install,
+        agent_version=payload.agent_version,
         environment_ids=payload.environment_ids,
     )
     await uow_ctl.commit()
@@ -182,7 +186,7 @@ async def get_install_script(
         platform = normalize_install_platform(agent.declared_os)
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
-    resolved_agent_id, raw_token = await platform_service.issue_install_script(
+    resolved_agent_id, raw_token, target_version = await platform_service.issue_install_script(
         agent=agent,
     )
     script_url = _public_agent_url(
@@ -200,6 +204,7 @@ async def get_install_script(
     return InstallScriptDTO(
         command=command,
         agent_id=resolved_agent_id,
+        version=target_version,
         safe_install=agent.safe_install,
         platform=platform,
         script_kind=script_kind_for_platform(platform),
@@ -236,6 +241,10 @@ async def get_agent_install_script_payload(
     )
     if agent is None:
         raise HTTPException(status_code=404, detail="Install script token not found")
+    target_version = platform_service.agent_versioning_service.normalize_agent_version(agent)
+    platform_service.agent_versioning_service.ensure_artifact_version_available(
+        target_version
+    )
     api_url = _public_agent_url(
         str(request.base_url).rstrip("/"),
         config=config,
@@ -244,6 +253,7 @@ async def get_agent_install_script_payload(
         str(
             request.url_for(
                 "download_agent_artifact",
+                version=target_version,
                 platform=normalized_platform,
                 arch="ARCH_PLACEHOLDER",
                 filename="FILE_PLACEHOLDER",
@@ -257,33 +267,55 @@ async def get_agent_install_script_payload(
         api_url=api_url,
         bootstrap_token=bootstrap_token,
         artifact_root_url=artifact_root_url,
+        agent_version=target_version,
         safe_install=agent.safe_install,
     )
     return PlainTextResponse(content, media_type="text/plain; charset=utf-8")
 
 
 @router.get(
-    "/agent-artifacts/{platform}/{arch}/{filename}",
+    "/agent-artifacts/{version}/{platform}/{arch}/{filename}",
     name="download_agent_artifact",
     response_class=FileResponse,
     response_model=None,
 )
 @inject
 async def download_agent_artifact(
+    version: str,
     platform: str,
     arch: str,
     filename: str,
     config: FromDishka[ConfigHack],
+    platform_service: FromDishka[PlatformService],
 ) -> FileResponse:
     try:
         normalized_platform = parse_install_platform(platform)
-        expected_path = artifact_relative_path(platform=normalized_platform, arch=arch)
+        normalized_version = (
+            platform_service.agent_versioning_service.validate_semver(
+                version,
+                field_name="agent_version",
+            )
+        )
+        expected_path = artifact_relative_path(
+            version=normalized_version,
+            platform=normalized_platform,
+            arch=arch,
+        )
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
+    except HTTPException as error:
+        raise HTTPException(status_code=404, detail=error.detail) from error
     if expected_path.name != filename:
         raise HTTPException(status_code=404, detail="Artifact not found")
 
     base_dir = Path(config.server.agent_artifacts_dir).resolve()
+    if (
+        platform_service.agent_versioning_service.resolve_artifact_version_dir(
+            normalized_version
+        )
+        is None
+    ):
+        raise HTTPException(status_code=404, detail="Artifact not found")
     artifact_path = (base_dir / expected_path).resolve()
     if base_dir not in artifact_path.parents and artifact_path != base_dir:
         raise HTTPException(status_code=404, detail="Artifact not found")

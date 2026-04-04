@@ -9,6 +9,7 @@ export type TaskTemplate =
     | 'ping'
     | 'system_info'
     | 'network_interfaces'
+    | 'self_update'
     | 'custom_command'
     | 'port_scan'
     | 'disk_usage'
@@ -28,6 +29,7 @@ export const TASK_TEMPLATES: TaskTemplateOption[] = [
     { id: 'ping', label: 'Ping', description: 'Connectivity to an endpoint', requiresTarget: true },
     { id: 'system_info', label: 'System Info', description: 'OS profile and host metadata' },
     { id: 'network_interfaces', label: 'Network Interfaces', description: 'Addressing and interfaces' },
+    { id: 'self_update', label: 'Self Update', description: 'Reinstall or upgrade the agent to its assigned version' },
     { id: 'custom_command', label: 'Custom Command', description: 'Run an arbitrary shell command', requiresCommand: true },
     { id: 'port_scan', label: 'Port Scan', description: 'Listening sockets snapshot' },
     { id: 'disk_usage', label: 'Disk Usage', description: 'Filesystem usage sample' },
@@ -81,6 +83,8 @@ export interface Agent {
     tasks_count: number
     environment_ids: string[]
     safe_install: boolean
+    agent_version: string | null
+    reported_agent_version: string | null
     created_at: string
     environment_names?: AgentEnvironmentRef[]
 }
@@ -247,12 +251,14 @@ export interface CreateAgentPayload {
     name: string
     os: AgentOS
     safe_install?: boolean
+    agent_version?: string
     environment_ids?: string[]
 }
 
 export interface UpdateAgentPayload {
     name?: string
     safe_install?: boolean
+    agent_version?: string
     environment_ids?: string[]
 }
 
@@ -270,6 +276,7 @@ export interface AssignEnvRolePayload {
 export interface InstallScript {
     command: string
     agent_id: string
+    version: string
     safe_install: boolean
     platform: 'linux' | 'macos' | 'windows'
     script_kind: 'bash' | 'powershell'
