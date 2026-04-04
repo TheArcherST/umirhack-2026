@@ -10,7 +10,7 @@ services:
     expose:
       - "80"
     volumes:
-      - ./artifacts/hack-agent:/opt/hack-agent-artifacts:ro
+      - ./artifacts/rust/hack-agent:/opt/hack-agent-artifacts:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/openapi.json"]
       interval: 10s
@@ -34,7 +34,7 @@ services:
     expose:
       - "80"
     volumes:
-      - ./artifacts/hack-agent:/opt/hack-agent-artifacts:ro
+      - ./artifacts/rust/hack-agent:/opt/hack-agent-artifacts:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/openapi.json"]
       interval: 10s
@@ -81,7 +81,7 @@ services:
   tool-artifacts:
     profiles:
       - tools
-    build: ./tools/artifacts-builder
+    build: ./artifacts
     entrypoint:
       - sh
       - -lc

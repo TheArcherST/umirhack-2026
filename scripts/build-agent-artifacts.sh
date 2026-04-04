@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ARTIFACT_DIR="$ROOT_DIR/artifacts/hack-agent"
+ARTIFACT_DIR="$ROOT_DIR/artifacts/rust/hack-agent"
 WORKSPACE_DIR="$ROOT_DIR/rust"
 mkdir -p "$ROOT_DIR/artifacts/.tmp"
 TMP_ARTIFACT_DIR="$(mktemp -d "$ROOT_DIR/artifacts/.tmp/hack-agent-artifacts.XXXXXX")"

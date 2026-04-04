@@ -25,7 +25,7 @@ Environment variables match the current backend agent API:
 
 ## Packaged Artifacts
 
-Hosted onboarding now expects built agent artifacts under `artifacts/hack-agent/`:
+Hosted onboarding now expects built agent artifacts under `artifacts/rust/hack-agent/`:
 
 - `linux/amd64/hack-agent`
 - `linux/arm64/hack-agent`
@@ -47,7 +47,7 @@ For CI/CD and Linux deployment hosts without a Rust toolchain, use:
 make artifacts args="--clean --container-only"
 ```
 
-That runs the compose-backed `tool-artifacts` container, which rebuilds the published Linux and Windows artifacts from scratch through Docker cross-build containers and replaces the existing `artifacts/hack-agent/` contents with the fresh output.
+That runs the compose-backed `tool-artifacts` container, which rebuilds the published Linux and Windows artifacts from scratch through Docker cross-build containers and replaces the existing `artifacts/rust/hack-agent/` contents with the fresh output.
 
 For production deploys on a Linux host that should keep any separately published macOS artifacts intact, use:
 
@@ -55,4 +55,4 @@ For production deploys on a Linux host that should keep any separately published
 make artifacts
 ```
 
-That refreshes only the Linux and Windows subdirectories under `artifacts/hack-agent/`.
+That refreshes only the Linux and Windows subdirectories under `artifacts/rust/hack-agent/`.
