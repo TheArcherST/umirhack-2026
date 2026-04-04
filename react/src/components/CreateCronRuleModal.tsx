@@ -18,6 +18,7 @@ import type { TaskTemplate } from '@/api/types'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 import type { CreateCronPayload } from '@/api/platform'
+import { EndpointTargetInput } from '@/components/EndpointTargetInput'
 
 const CRON_PRESETS = [
   { label: '*/5 * * * *', hint: 'Every 5 min' },
@@ -131,11 +132,11 @@ export function CreateCronRuleModal({ open, envId, onClose, onCreated }: Props) 
             {selectedTpl?.requiresTarget && (
               <div className="space-y-1.5">
                 <Label>{t('env.taskTarget')}</Label>
-                <Input
+                <EndpointTargetInput
+                  environmentId={envId}
                   value={target}
-                  onChange={(e) => setTarget(e.target.value)}
+                  onChange={setTarget}
                   placeholder={t('env.taskTargetPlaceholder')}
-                  className="font-mono text-xs"
                   autoFocus
                 />
               </div>

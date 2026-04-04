@@ -33,6 +33,7 @@ import type {
     TaskTemplate,
     ScheduleRule,
     TaskTemplateItem,
+    EndpointSuggestion,
 } from './types'
 
 type AgentApi = {
@@ -189,6 +190,9 @@ function parsePort(value: unknown): number | undefined {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined
 }
 
+const HTTP_PORTS = new Set([80, 81, 3000, 4173, 5000, 5173, 8000, 8008, 8080, 8081, 8888])
+const HTTPS_PORTS = new Set([443, 444, 8443, 9443])
+
 function normalizePortProtocol(value: unknown): PortInfo['protocol'] {
     return String(value ?? '').toLowerCase().startsWith('udp') ? 'udp' : 'tcp'
 }
@@ -333,6 +337,54 @@ function mapStructuredPorts(
     }
 
     return parsePortScanSample(payload?.sample)
+}
+
+function registerEndpointSuggestion(
+    suggestions: Map<string, EndpointSuggestion>,
+    suggestion: EndpointSuggestion,
+): void {
+    const value = suggestion.value.trim()
+    if (!value) return
+    const key = value.toLowerCase()
+    if (suggestions.has(key)) return
+    suggestions.set(key, {
+        ...suggestion,
+        value,
+        label: suggestion.label.trim() || value,
+        source: suggestion.source.trim(),
+    })
+}
+
+function hostEndpointAliases(host: Host): string[] {
+    return Array.from(
+        new Set(
+            [
+                host.hostname,
+                host.primary_ipv4,
+                host.primary_ipv6,
+                host.name,
+            ]
+                .map((value) => String(value ?? '').trim())
+                .filter(Boolean),
+        ),
+    )
+}
+
+function isHttpsPort(port: PortInfo): boolean {
+    const service = String(port.service ?? '').toLowerCase()
+    return HTTPS_PORTS.has(port.port) || service.includes('https') || service.includes('tls')
+}
+
+function isHttpPort(port: PortInfo): boolean {
+    const service = String(port.service ?? '').toLowerCase()
+    return HTTP_PORTS.has(port.port) || service.includes('http') || service.includes('web')
+}
+
+function endpointSuggestionRank(kind: EndpointSuggestion['kind']): number {
+    if (kind === 'host') return 0
+    if (kind === 'url') return 1
+    if (kind === 'socket') return 2
+    return 3
 }
 
 export function kindToTemplate(kind: string): TaskTemplate {
@@ -622,6 +674,115 @@ export async function stubGetHost(hostId: string): Promise<Host | null> {
 export async function stubGetEnvironmentGraph(envId: string): Promise<GraphEdge[]> {
     const { data } = await apiClient.get<GraphEdge[]>(`/environments/${envId}/graph`)
     return data
+}
+
+export async function stubGetEnvironmentEndpointSuggestions(
+    envId: string,
+): Promise<EndpointSuggestion[]> {
+    const [hosts, graphEdges] = await Promise.all([
+        stubGetHosts(envId),
+        stubGetEnvironmentGraph(envId),
+    ])
+    const portsByHost = await Promise.all(
+        hosts.map(async (host) => {
+            try {
+                return [host.id, await stubGetHostPorts(host.id)] as const
+            } catch {
+                return [host.id, []] as const
+            }
+        }),
+    )
+
+    const hostById = new Map(hosts.map((host) => [host.id, host]))
+    const hostPorts = new Map(portsByHost)
+    const suggestions = new Map<string, EndpointSuggestion>()
+
+    for (const host of hosts) {
+        for (const alias of hostEndpointAliases(host)) {
+            registerEndpointSuggestion(suggestions, {
+                value: alias,
+                label: alias,
+                source: host.name,
+                kind: 'host',
+                host_id: host.id,
+            })
+        }
+    }
+
+    for (const edge of graphEdges) {
+        if (!edge.target_host_id || !edge.target_label || edge.status !== 'reachable') continue
+        const targetHost = hostById.get(edge.target_host_id)
+        registerEndpointSuggestion(suggestions, {
+            value: edge.target_label,
+            label: edge.target_label,
+            source: targetHost ? `${targetHost.name} observed` : 'Observed in environment',
+            kind: 'observed',
+            host_id: edge.target_host_id,
+        })
+    }
+
+    for (const host of hosts) {
+        const listeningPorts = (hostPorts.get(host.id) ?? []).filter((port) => port.state === 'listening')
+        if (listeningPorts.length === 0) continue
+
+        for (const port of listeningPorts) {
+            const aliases = hostEndpointAliases(host)
+            const protocolLabel = `${port.protocol.toUpperCase()}/${port.port}`
+            for (const alias of aliases) {
+                registerEndpointSuggestion(suggestions, {
+                    value: `${alias}:${port.port}`,
+                    label: `${alias}:${port.port}`,
+                    source: `${host.name} ${protocolLabel}`,
+                    kind: 'socket',
+                    host_id: host.id,
+                })
+
+                if (port.protocol !== 'tcp') continue
+                if (isHttpPort(port)) {
+                    registerEndpointSuggestion(suggestions, {
+                        value: `http://${alias}:${port.port}`,
+                        label: `http://${alias}:${port.port}`,
+                        source: `${host.name} HTTP`,
+                        kind: 'url',
+                        host_id: host.id,
+                    })
+                    if (port.port === 80) {
+                        registerEndpointSuggestion(suggestions, {
+                            value: `http://${alias}`,
+                            label: `http://${alias}`,
+                            source: `${host.name} HTTP`,
+                            kind: 'url',
+                            host_id: host.id,
+                        })
+                    }
+                }
+                if (isHttpsPort(port)) {
+                    registerEndpointSuggestion(suggestions, {
+                        value: `https://${alias}:${port.port}`,
+                        label: `https://${alias}:${port.port}`,
+                        source: `${host.name} HTTPS`,
+                        kind: 'url',
+                        host_id: host.id,
+                    })
+                    if (port.port === 443) {
+                        registerEndpointSuggestion(suggestions, {
+                            value: `https://${alias}`,
+                            label: `https://${alias}`,
+                            source: `${host.name} HTTPS`,
+                            kind: 'url',
+                            host_id: host.id,
+                        })
+                    }
+                }
+            }
+        }
+    }
+
+    return Array.from(suggestions.values()).sort((left, right) => {
+        const rankDelta = endpointSuggestionRank(left.kind) - endpointSuggestionRank(right.kind)
+        if (rankDelta !== 0) return rankDelta
+        return left.label.localeCompare(right.label)
+    })
 }
 
 export async function stubGetHostInfo(hostId: string): Promise<HostInfo | null> {

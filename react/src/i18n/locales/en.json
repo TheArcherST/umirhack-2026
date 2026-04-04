@@ -256,6 +256,8 @@
     "selectTask": "Select Task",
     "taskTarget": "Target (for ping)",
     "taskTargetPlaceholder": "e.g. 8.8.8.8 or google.com",
+    "taskTargetSuggestionsHint": "Quick picks from inbound endpoints discovered inside this environment. Free-form values are still allowed.",
+    "taskTargetSuggestionsLoading": "Loading environment endpoints...",
     "taskCreated": "Task created",
     "hostInfo": "Host Info",
     "services": "Services",

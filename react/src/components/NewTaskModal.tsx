@@ -6,7 +6,6 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -15,6 +14,7 @@ import { stubGetAgents, stubCreateTaskV2 } from '@/api/stubs'
 import { TASK_TEMPLATES } from '@/api/types'
 import type { TaskTemplate } from '@/api/types'
 import { useI18n } from '@/i18n'
+import { EndpointTargetInput } from '@/components/EndpointTargetInput'
 
 interface Props {
   open: boolean
@@ -40,6 +40,9 @@ export function NewTaskModal({ open, onClose, onCreated, defaultAgentId }: Props
 
   const selectedTemplate = TASK_TEMPLATES.find((item) => item.id === template)
   const selectedAgent = agents.find((agent) => agent.id === agentId)
+  const suggestionEnvId = selectedAgent?.environment_ids.length === 1
+    ? selectedAgent.environment_ids[0]
+    : undefined
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -123,11 +126,11 @@ export function NewTaskModal({ open, onClose, onCreated, defaultAgentId }: Props
             {selectedTemplate?.requiresTarget && (
               <div className="space-y-1.5">
                 <Label>{t('env.taskTarget')}</Label>
-                <Input
+                <EndpointTargetInput
+                  environmentId={suggestionEnvId}
                   placeholder={t('env.taskTargetPlaceholder')}
                   value={target}
-                  onChange={(e) => setTarget(e.target.value)}
-                  className="font-mono text-xs"
+                  onChange={setTarget}
                   autoFocus
                 />
               </div>

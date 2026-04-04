@@ -256,6 +256,8 @@
     "selectTask": "Выберите задачу",
     "taskTarget": "Цель (для ping)",
     "taskTargetPlaceholder": "например 8.8.8.8 или google.com",
+    "taskTargetSuggestionsHint": "Быстрые варианты из inbound-эндпоинтов, обнаруженных внутри этого окружения. Ввести произвольное значение по-прежнему можно.",
+    "taskTargetSuggestionsLoading": "Загрузка эндпоинтов окружения...",
     "taskCreated": "Задача создана",
     "hostInfo": "Информация о хосте",
     "services": "Сервисы",

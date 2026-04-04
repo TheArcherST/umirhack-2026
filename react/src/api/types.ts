@@ -196,6 +196,14 @@ export interface GraphEdge {
     payload_json: Record<string, any>
 }
 
+export interface EndpointSuggestion {
+    value: string
+    label: string
+    source: string
+    kind: 'host' | 'socket' | 'url' | 'observed'
+    host_id?: string
+}
+
 export interface Task {
     id: string
     agent_id: string
