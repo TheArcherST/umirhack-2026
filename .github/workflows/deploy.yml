@@ -57,6 +57,22 @@ jobs:
         working-directory: rust
         run: cargo test --workspace --all-targets
 
+  rust-agent-artifacts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build fresh agent artifacts through cross-build containers
+        run: make artifacts args="--clean --container-only"
+
+      - name: Verify published agent artifacts
+        run: |
+          test -f artifacts/hack-agent/linux/amd64/hack-agent
+          test -f artifacts/hack-agent/linux/arm64/hack-agent
+          test -f artifacts/hack-agent/windows/amd64/hack-agent.exe
+
   react-typecheck-and-build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -88,6 +104,7 @@ jobs:
     needs:
       - backend-integration-tests
       - rust-agent-tests
+      - rust-agent-artifacts
       - react-typecheck-and-build
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
     environment: prod

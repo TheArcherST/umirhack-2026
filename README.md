@@ -35,8 +35,9 @@ API contract workflow:
 CI/CD deployment workflow:
 1. Push to `master`
 2. GitHub Actions runs `make test`
-3. If tests pass, Actions SSHes to the server and runs `./scripts/deploy.sh <tested-sha>`
-4. The server fetches the repository, checks out the exact tested revision, and runs `make up`
+3. GitHub Actions also runs `make artifacts args="--clean --container-only"` to verify fresh Linux and Windows agent artifacts can be produced from the tested revision
+4. If all checks pass, Actions SSHes to the server and runs `./scripts/deploy.sh <tested-sha>`
+5. The server fetches the repository, checks out the exact tested revision, runs `make artifacts` through the compose tool container to refresh Linux and Windows agent artifacts, and then runs `make up`
 
 Required GitHub Actions secrets:
 - `DEPLOY_HOST`

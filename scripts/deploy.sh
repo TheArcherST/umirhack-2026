@@ -16,6 +16,7 @@ run_deploy() {
     git fetch origin
     git checkout --detach "$REVISION"
 
+    make artifacts
     make up
 }
 

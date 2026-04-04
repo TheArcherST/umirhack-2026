@@ -78,6 +78,20 @@ services:
       postgres:
         condition: service_healthy
 
+  tool-artifacts:
+    profiles:
+      - tools
+    build: ./tools/artifacts-builder
+    entrypoint:
+      - sh
+      - -lc
+      - /workspace/scripts/build-agent-artifacts.sh $${ARTIFACTS_ARGS:---container-only}
+    restart: no
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+
   run-integration-tests:
     profiles:
       - tests

@@ -40,3 +40,19 @@ Build them from the repository root with:
 ```
 
 That script uses containerized cross-target builders for Linux and Windows, and native `cargo` builds for macOS when run on a Darwin host with the Apple Rust targets installed.
+
+For CI/CD and Linux deployment hosts without a Rust toolchain, use:
+
+```bash
+make artifacts args="--clean --container-only"
+```
+
+That runs the compose-backed `tool-artifacts` container, which rebuilds the published Linux and Windows artifacts from scratch through Docker cross-build containers and replaces the existing `artifacts/hack-agent/` contents with the fresh output.
+
+For production deploys on a Linux host that should keep any separately published macOS artifacts intact, use:
+
+```bash
+make artifacts
+```
+
+That refreshes only the Linux and Windows subdirectories under `artifacts/hack-agent/`.

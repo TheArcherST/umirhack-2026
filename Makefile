@@ -1,6 +1,10 @@
+.PHONY: alembic artifacts run-migrations generate-migrations up openapi lint-python format-python install-hooks deploy test update logs down
+
 # related with migrations
 alembic:
 	docker compose run --rm --build tool-alembic $(command)
+artifacts:
+	docker compose --profile tools run --rm --build -e ARTIFACTS_ARGS='$(if $(args),$(args),--container-only)' tool-artifacts
 run-migrations:
 	make alembic command="upgrade head"
 generate-migrations:
