@@ -2,7 +2,7 @@ from dishka import FromDishka
 from dishka.integrations.taskiq import inject
 
 from hack_backend.core.providers import ConfigEmail
-from hack_backend.core.services.email import send_password_change_email, send_verification_email
+from hack_backend.core.services.email import send_password_change_email, send_project_invitation_email, send_verification_email
 from hack_backend.tasksd.broker import broker
 
 
@@ -53,4 +53,31 @@ async def send_password_change_email_task(
         app_name=email_config.app_name,
         validity_hours=email_config.password_change_validity_hours,
         request_ip=request_ip,
+    )
+
+
+@broker.task(retry_on_error=True, max_retries=2)
+@inject(patch_module=True)
+async def send_project_invitation_email_task(
+    email_address: str,
+    user_name: str,
+    project_name: str,
+    invited_by: str,
+    accept_url: str,
+    decline_url: str,
+    email_config: FromDishka[ConfigEmail],
+) -> None:
+    """Background task: send project invitation email via Resend template."""
+    await send_project_invitation_email(
+        to_address=email_address,
+        user_name=user_name,
+        project_name=project_name,
+        invited_by=invited_by,
+        accept_url=accept_url,
+        decline_url=decline_url,
+        api_key=email_config.resend_api_key,
+        from_address=email_config.from_address,
+        template_name=email_config.invite_template_name,
+        app_name=email_config.app_name,
+        invite_validity_hours=email_config.invite_validity_hours,
     )

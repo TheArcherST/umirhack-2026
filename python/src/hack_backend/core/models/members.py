@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from sqlalchemy import ForeignKey
+from datetime import datetime
+
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, CreatedAt
@@ -25,6 +27,8 @@ class ProjectMember(Base):
     invite_status: Mapped[InviteStatus] = mapped_column(
         default=InviteStatus.PENDING,
     )
+    invite_token_hash: Mapped[str | None] = mapped_column(String(), nullable=True)
+    invite_expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
     invited_at: Mapped[CreatedAt]
 
 

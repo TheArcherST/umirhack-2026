@@ -75,3 +75,39 @@ async def send_password_change_email(
     })
 
     logger.info("Password change email sent to %s, id: %s", to_address, r["id"])
+
+
+async def send_project_invitation_email(
+    to_address: str,
+    user_name: str,
+    project_name: str,
+    invited_by: str,
+    accept_url: str,
+    decline_url: str,
+    api_key: str,
+    from_address: str,
+    template_name: str,
+    app_name: str = "Linkoo",
+    invite_validity_hours: int = 48,
+) -> None:
+    """Send a project invitation email using Resend template."""
+    resend.api_key = api_key
+
+    r = resend.Emails.send({
+        "from": from_address,
+        "to": [to_address],
+        "template": {
+            "id": template_name,
+            "variables": {
+                "app_name": app_name,
+                "user_name": user_name,
+                "project_name": project_name,
+                "invited_by": invited_by,
+                "accept_url": accept_url,
+                "decline_url": decline_url,
+                "invite_validity_hours": invite_validity_hours,
+            },
+        },
+    })
+
+    logger.info("Project invitation email sent to %s, id: %s", to_address, r["id"])
