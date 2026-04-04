@@ -97,6 +97,12 @@ def utcnow() -> datetime:
     return datetime.now(tz=UTC)
 
 
+def ensure_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
 def merged_payload(task_template: TaskTemplate, task_run: TaskRun) -> dict[str, Any]:
     payload = dict(task_template.payload_json or {})
     payload.update(task_run.payload_override_json or {})
@@ -558,7 +564,10 @@ async def materialize_graph_projection(
 
 def is_graph_edge_stale(edge: GraphEdge, *, now: datetime | None = None) -> bool:
     current_time = now or utcnow()
-    return edge.expires_at is not None and edge.expires_at <= current_time
+    return (
+        edge.expires_at is not None
+        and ensure_utc(edge.expires_at) <= current_time
+    )
 
 
 async def find_host_for_endpoint(
@@ -608,7 +617,7 @@ async def refresh_agent_state(
         if agent.last_seen_at is None:
             agent.status = AgentStatus.OFFLINE
             continue
-        age = now - agent.last_seen_at
+        age = now - ensure_utc(agent.last_seen_at)
         if age > offline_after:
             agent.status = AgentStatus.OFFLINE
         elif age > stale_after:

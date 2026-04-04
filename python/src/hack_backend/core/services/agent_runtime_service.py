@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import lazyload, selectinload
 
 from hack_backend.core.models import (
     Agent,
@@ -16,6 +17,7 @@ from hack_backend.core.models import (
     TaskRunStatus,
 )
 from hack_backend.core.platform_ops import (
+    ensure_utc,
     merged_payload,
     queue_bootstrap_tasks_for_host,
     refresh_agent_state,
@@ -103,6 +105,11 @@ class AgentRuntimeService:
         task_runs = list(
             await self.session.scalars(
                 select(TaskRun)
+                .options(
+                    lazyload("*"),
+                    selectinload(TaskRun.task_template),
+                    selectinload(TaskRun.host),
+                )
                 .where(
                     TaskRun.agent_id == agent.id,
                     TaskRun.status == TaskRunStatus.QUEUED,
@@ -213,7 +220,7 @@ class AgentRuntimeService:
     def _validate_lease(self, task_run: TaskRun, lease_token: str) -> None:
         if task_run.status not in {TaskRunStatus.LEASED, TaskRunStatus.RUNNING}:
             raise HTTPException(status_code=409, detail="Task run is not leased")
-        if task_run.leased_until is None or task_run.leased_until <= utcnow():
+        if task_run.leased_until is None or ensure_utc(task_run.leased_until) <= utcnow():
             raise HTTPException(status_code=409, detail="Lease expired")
         if not verify_secret(lease_token, task_run.lease_token):
             raise HTTPException(status_code=409, detail="Invalid lease token")

@@ -1,9 +1,15 @@
 x-dev-volumes: &dev-volumes
   volumes:
     - ./python/src:/usr/src/app/src
+    - ./python/tests:/usr/src/app/tests
+    - ./python/prepare_test_db.py:/usr/src/app/prepare_test_db.py:ro
+    - ./python/run-integration-tests.sh:/usr/src/app/run-integration-tests.sh:ro
+    - ./python/run-rest-server-test.sh:/usr/src/app/run-rest-server-test.sh:ro
 
 services:
   rest-server:
+    <<: *dev-volumes
+  rest-server-test:
     <<: *dev-volumes
   tool-alembic:
     <<: *dev-volumes

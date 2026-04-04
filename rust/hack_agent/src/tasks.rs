@@ -373,6 +373,99 @@ fn allowed_commands_for_kind(kind: &str) -> &'static [&'static str] {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+    use crate::models::{AgentExecutionHost, AgentExecutionTemplate, AgentTaskLease};
+
+    use super::execute_task;
+
+    fn lease_for_kind(
+        kind: &str,
+        payload_json: serde_json::Value,
+        approved_command: Option<&str>,
+    ) -> AgentTaskLease {
+        AgentTaskLease {
+            id: "task-1".to_string(),
+            environment_id: "env-1".to_string(),
+            host_id: "host-1".to_string(),
+            lease_token: "lease-token".to_string(),
+            lease_until: "2099-01-01T00:00:00Z".to_string(),
+            task_template: AgentExecutionTemplate {
+                id: "template-1".to_string(),
+                kind: kind.to_string(),
+                name: kind.to_string(),
+                payload_json,
+                approved_command: approved_command.map(ToString::to_string),
+            },
+            host: AgentExecutionHost {
+                id: "host-1".to_string(),
+                name: "alpha".to_string(),
+                hostname: Some("alpha.internal".to_string()),
+                primary_ipv4: Some("127.0.0.1".to_string()),
+                primary_ipv6: None,
+            },
+        }
+    }
+
+    #[tokio::test]
+    async fn system_profile_task_returns_structured_success() {
+        let task = lease_for_kind("host.system_profile", json!({}), None);
+
+        let result = execute_task(&task).await;
+
+        assert_eq!(result.status, "succeeded");
+        assert_eq!(result.telemetry_kind.as_deref(), Some("host.system_profile"));
+        let payload = result
+            .telemetry_payload
+            .expect("system profile should include telemetry payload");
+        assert!(payload.get("hostname").is_some());
+        assert!(payload.get("os_name").is_some());
+    }
+
+    #[tokio::test]
+    async fn connectivity_task_requires_target_endpoint() {
+        let task = lease_for_kind(
+            "network.endpoint_connectivity",
+            json!({}),
+            None,
+        );
+
+        let result = execute_task(&task).await;
+
+        assert_eq!(result.status, "failed");
+        assert_eq!(result.telemetry_kind, None);
+        assert!(
+            result
+                .failure_reason
+                .as_deref()
+                .expect("failure should be described")
+                .contains("missing target endpoint")
+        );
+    }
+
+    #[tokio::test]
+    async fn diagnostic_task_rejects_unapproved_command_override() {
+        let task = lease_for_kind(
+            "diagnostic.command.port_scan",
+            json!({}),
+            Some("rm -rf /"),
+        );
+
+        let result = execute_task(&task).await;
+
+        assert_eq!(result.status, "failed");
+        assert_eq!(result.telemetry_kind, None);
+        assert!(
+            result
+                .failure_reason
+                .as_deref()
+                .expect("failure should be described")
+                .contains("not approved")
+        );
+    }
+}
+
 fn hostname_fallback() -> String {
     std::env::var("HOSTNAME")
         .or_else(|_| std::env::var("COMPUTERNAME"))

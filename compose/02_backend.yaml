@@ -24,7 +24,7 @@ services:
     profiles:
       - tests
     build: ./python
-    command: run-rest-server
+    entrypoint: ["sh", "/usr/src/app/run-rest-server-test.sh"]
     restart: no
     env_file: ./python/.env
     environment:

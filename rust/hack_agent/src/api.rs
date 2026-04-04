@@ -27,25 +27,12 @@ impl AgentApi {
     }
 
     pub async fn register(&self) -> Result<AgentRegisterResponse> {
-        let bootstrap_token = self
-            .config
-            .bootstrap_token
-            .clone()
-            .context("missing HACK_AGENT_BOOTSTRAP_TOKEN for first registration")?;
-        let payload = AgentRegisterPayload {
-            bootstrap_token,
-            agent_version: self.config.agent_version.clone(),
-            declared_os: declared_os().to_string(),
-            capabilities_json: capabilities_json(),
-        };
+        let payload = build_register_payload(&self.config)?;
         self.post_json("/agent/register", None, &payload).await
     }
 
     pub async fn heartbeat(&self, state: &AgentState) -> Result<()> {
-        let payload = AgentHeartbeatPayload {
-            agent_version: self.config.agent_version.clone(),
-            capabilities_json: capabilities_json(),
-        };
+        let payload = build_heartbeat_payload(&self.config);
         let _: serde_json::Value = self
             .post_json("/agent/heartbeat", Some(state), &payload)
             .await?;
@@ -117,4 +104,113 @@ fn auth_headers(state: &AgentState) -> Result<HeaderMap> {
         HeaderValue::from_str(&state.registration_token)?,
     );
     Ok(headers)
+}
+
+fn build_register_payload(config: &Config) -> Result<AgentRegisterPayload> {
+    let bootstrap_token = config
+        .bootstrap_token
+        .clone()
+        .context("missing HACK_AGENT_BOOTSTRAP_TOKEN for first registration")?;
+    Ok(AgentRegisterPayload {
+        bootstrap_token,
+        agent_version: config.agent_version.clone(),
+        declared_os: declared_os().to_string(),
+        capabilities_json: capabilities_json(),
+    })
+}
+
+fn build_heartbeat_payload(config: &Config) -> AgentHeartbeatPayload {
+    AgentHeartbeatPayload {
+        agent_version: config.agent_version.clone(),
+        capabilities_json: capabilities_json(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use crate::config::Config;
+    use crate::state::AgentState;
+
+    fn test_config(api_url: String, bootstrap_token: Option<&str>) -> Config {
+        Config {
+            api_url,
+            bootstrap_token: bootstrap_token.map(ToString::to_string),
+            state_path: PathBuf::from("/tmp/hack-agent-test-state.json"),
+            poll_interval_seconds: 5,
+            agent_version: "rust-test-agent/1".to_string(),
+        }
+    }
+
+    #[test]
+    fn register_payload_requires_bootstrap_token() {
+        let error = super::build_register_payload(&test_config(
+            "http://example.invalid".to_string(),
+            None,
+        ))
+        .expect_err("missing bootstrap token should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("missing HACK_AGENT_BOOTSTRAP_TOKEN")
+        );
+    }
+
+    #[test]
+    fn register_payload_includes_agent_metadata_and_capabilities() {
+        let payload = super::build_register_payload(&test_config(
+            "http://example.invalid".to_string(),
+            Some("bootstrap-123"),
+        ))
+        .expect("register payload should build");
+
+        assert_eq!(payload.bootstrap_token, "bootstrap-123");
+        assert_eq!(payload.agent_version, "rust-test-agent/1");
+        assert_eq!(payload.declared_os, super::declared_os());
+        assert!(
+            payload
+                .capabilities_json["task_kinds"]
+                .as_array()
+                .expect("task kinds should be an array")
+                .len()
+                >= 3
+        );
+    }
+
+    #[test]
+    fn heartbeat_payload_and_auth_headers_include_agent_identity() {
+        let payload = super::build_heartbeat_payload(&test_config(
+            "http://example.invalid".to_string(),
+            None,
+        ));
+        let state = AgentState {
+            agent_id: "agent-42".to_string(),
+            registration_token: "registration-secret".to_string(),
+        };
+        let headers = super::auth_headers(&state).expect("headers should build");
+
+        assert_eq!(payload.agent_version, "rust-test-agent/1");
+        assert!(
+            payload
+                .capabilities_json["task_kinds"]
+                .as_array()
+                .expect("task kinds should be an array")
+                .len()
+                >= 3
+        );
+        assert_eq!(
+            headers
+                .get("X-Agent-Id")
+                .expect("agent id header should exist"),
+            "agent-42"
+        );
+        assert_eq!(
+            headers
+                .get("X-Agent-Token")
+                .expect("agent token header should exist"),
+            "registration-secret"
+        );
+    }
 }

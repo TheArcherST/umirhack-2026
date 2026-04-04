@@ -110,7 +110,7 @@ async def heartbeat(
     return {"status": "ok"}
 
 
-@router.post("/poll")
+@router.post("/poll", response_model=list[AgentTaskLeaseDTO])
 @inject
 async def poll_tasks(
     payload: AgentPollPayload,

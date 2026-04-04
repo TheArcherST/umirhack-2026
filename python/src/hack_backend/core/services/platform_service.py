@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from fastapi import HTTPException
 from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from hack_backend.core.models import (
     Agent,
@@ -561,4 +562,14 @@ class PlatformService:
             self.session.add(task_run)
             task_runs.append(task_run)
         await self.session.flush()
-        return task_runs
+        return list(
+            await self.session.scalars(
+                select(TaskRun)
+                .options(
+                    selectinload(TaskRun.task_template),
+                    selectinload(TaskRun.host),
+                    selectinload(TaskRun.agent),
+                )
+                .where(TaskRun.id.in_([task_run.id for task_run in task_runs]))
+            )
+        )
