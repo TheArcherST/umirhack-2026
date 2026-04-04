@@ -8,7 +8,7 @@ generate-migrations:
 
 # related with end-user workflow
 up:
-	docker compose up --build -d && make run-migrations
+	docker compose up --build -d && make run-migrations && docker compose restart nginx
 openapi:
 	mkdir -p shared
 	cd python && UV_CACHE_DIR=/tmp/uv-cache uv run python -m hack_backend.rest_server.main.export_openapi ../shared/openapi.json
