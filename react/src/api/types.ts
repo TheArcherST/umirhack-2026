@@ -2,15 +2,51 @@
 
 export type AgentStatus = 'online' | 'offline'
 export type TaskStatus = 'pending' | 'running' | 'success' | 'failed' | 'timeout'
+export type MemberRole = 'none' | 'owner' | 'admin' | 'operator' | 'observer'
+export type EnvRole = 'none' | 'admin' | 'operator' | 'observer'
+export type AgentOS = 'linux' | 'windows' | 'macos'
+
+export interface Project {
+    id: string
+    name: string
+    owner_id: string
+    created_at: string
+}
+
+export interface Environment {
+    id: string
+    name: string
+    project_id: string
+    created_at: string
+}
+
+export type InviteStatus = 'pending' | 'accepted'
+
+export interface ProjectMember {
+    user_id: string
+    email: string
+    name: string
+    role: MemberRole
+    status: InviteStatus
+    invited_at: string
+}
+
+export interface EnvMemberAssignment {
+    user_id: string
+    env_id: string
+    role: EnvRole
+}
 
 export interface Agent {
     id: string
     name: string
     hostname: string
     ip_address: string
+    os: AgentOS
     status: AgentStatus
     last_heartbeat: string   // ISO 8601
     tasks_count: number
+    environment_ids: string[]
     created_at: string
 }
 
@@ -48,7 +84,7 @@ export interface Stats {
     failed_tasks: number
 }
 
-// ─── Request/response shapes ─────────────────────────────────────────────────
+// Request/response shapes
 
 export interface PaginatedResponse<T> {
     items: T[]
@@ -75,19 +111,78 @@ export interface ListTasksParams {
 
 export interface ListAgentsParams {
     status?: AgentStatus | ''
+    environment_id?: string
+}
+
+// Project / Environment
+
+export interface CreateProjectPayload {
+    name: string
+}
+
+export interface CreateEnvironmentPayload {
+    name: string
+    project_id: string
+}
+
+export interface CreateAgentPayload {
+    name: string
+    os: AgentOS
+    environment_ids: string[]
+}
+
+export interface UpdateAgentPayload {
+    name?: string
+    environment_ids?: string[]
+}
+
+export interface InviteMemberPayload {
+    project_id: string
+    email: string
+}
+
+export interface AssignEnvRolePayload {
+    user_id: string
+    env_id: string
+    role: EnvRole;
+}
+
+export interface InstallScript {
+    command: string
+    agent_id: string
+}
+
+export interface UserSearchResult {
+    user_id: string
+    email: string
+    name: string
 }
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 export interface LoginPayload {
-    email: string
+    username: string
     password: string
 }
 
+export interface LoginResponse {
+    login_session_uid: string
+    login_session_token: string
+}
+
 export interface RegisterPayload {
-    email: string
+    username: string
     password: string
-    name: string
+    email: string
+}
+
+export interface VerifyCodePayload {
+    username: string
+    code: string
+}
+
+export interface ResendCodePayload {
+    username: string
 }
 
 export interface AuthUser {
@@ -99,4 +194,21 @@ export interface AuthUser {
 export interface AuthResponse {
     token: string
     user: AuthUser
+}
+
+export interface RegisterResponse {
+    message: string
+    email_verification_required: boolean
+}
+
+export interface VerifyResponse {
+    message: string
+}
+
+export interface ResendResponse {
+    message: string
+}
+
+export interface ApiError {
+    detail: { loc: (string | number)[]; msg: string; type: string }[]
 }
