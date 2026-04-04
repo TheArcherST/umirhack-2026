@@ -3,6 +3,7 @@ import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import {
   LayoutDashboard, Server, ClipboardList, ArrowLeft,
   LayoutDashboard as DashboardIcon,
+  CalendarClock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
@@ -19,6 +20,7 @@ export function EnvironmentSidebar() {
     { to: `/environments/${envId}`, icon: DashboardIcon, labelKey: 'env.dashboard', end: true },
     { to: `/environments/${envId}/hosts`, icon: Server, labelKey: 'env.hosts' },
     { to: `/environments/${envId}/tasks`, icon: ClipboardList, labelKey: 'env.tasks' },
+    { to: `/environments/${envId}/schedule`, icon: CalendarClock, labelKey: 'env.schedule' },
   ]
 
   return (

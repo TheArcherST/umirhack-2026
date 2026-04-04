@@ -18,22 +18,22 @@ export type TaskTemplate =
 
 export interface TaskTemplateOption {
     id: TaskTemplate
-    label: string
-    description: string
+    labelKey: string
+    descriptionKey: string
     requiresTarget?: boolean
     requiresCommand?: boolean
 }
 
 export const TASK_TEMPLATES: TaskTemplateOption[] = [
-    { id: 'ping', label: 'Ping', description: 'Connectivity to an endpoint', requiresTarget: true },
-    { id: 'system_info', label: 'System Info', description: 'OS profile and host metadata' },
-    { id: 'network_interfaces', label: 'Network Interfaces', description: 'Addressing and interfaces' },
-    { id: 'custom_command', label: 'Custom Command', description: 'Run an arbitrary shell command', requiresCommand: true },
-    { id: 'port_scan', label: 'Port Scan', description: 'Listening sockets snapshot' },
-    { id: 'disk_usage', label: 'Disk Usage', description: 'Filesystem usage sample' },
-    { id: 'memory_cpu', label: 'Memory & CPU', description: 'Runtime load snapshot' },
-    { id: 'service_status', label: 'Service Status', description: 'Running services inventory' },
-    { id: 'system_logs', label: 'System Logs', description: 'Recent diagnostic logs' },
+    { id: 'ping',               labelKey: 'taskTemplates.ping',              descriptionKey: 'taskTemplates.pingDesc',              requiresTarget: true },
+    { id: 'system_info',        labelKey: 'taskTemplates.systemInfo',        descriptionKey: 'taskTemplates.systemInfoDesc' },
+    { id: 'network_interfaces', labelKey: 'taskTemplates.networkInterfaces', descriptionKey: 'taskTemplates.networkInterfacesDesc' },
+    { id: 'custom_command',     labelKey: 'taskTemplates.customCommand',     descriptionKey: 'taskTemplates.customCommandDesc',     requiresCommand: true },
+    { id: 'port_scan',          labelKey: 'taskTemplates.portScan',          descriptionKey: 'taskTemplates.portScanDesc' },
+    { id: 'disk_usage',         labelKey: 'taskTemplates.diskUsage',         descriptionKey: 'taskTemplates.diskUsageDesc' },
+    { id: 'memory_cpu',         labelKey: 'taskTemplates.memoryCpu',         descriptionKey: 'taskTemplates.memoryCpuDesc' },
+    { id: 'service_status',     labelKey: 'taskTemplates.serviceStatus',     descriptionKey: 'taskTemplates.serviceStatusDesc' },
+    { id: 'system_logs',        labelKey: 'taskTemplates.systemLogs',        descriptionKey: 'taskTemplates.systemLogsDesc' },
 ]
 
 export interface Project {
@@ -145,6 +145,37 @@ export interface MetricSnapshot {
     metric_kind: string
     computed_at: string
     value_json: Record<string, any>
+}
+
+export interface ScheduleRule {
+    id: string
+    environment_id: string
+    task_template_id: string
+    cron_expr: string
+    target_selector_json: { host_ids?: string[]; target_endpoint?: string; approved_command?: string }
+    is_enabled: boolean
+    next_run_at: string | null
+    created_at: string
+    task_name: string
+    task_kind: string
+}
+
+export interface TaskTemplateItem {
+    id: string
+    project_id: string
+    kind: string
+    name: string
+    payload_json: Record<string, any>
+    approved_command: string | null
+    created_at: string
+}
+
+export interface CreateScheduleRulePayload {
+    environment_id: string
+    task_template_id: string
+    cron_expr: string
+    host_ids?: string[]
+    is_enabled?: boolean
 }
 
 export interface GraphEdge {

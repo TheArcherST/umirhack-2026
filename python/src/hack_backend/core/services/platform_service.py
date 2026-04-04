@@ -628,6 +628,38 @@ class PlatformService:
         await self.session.flush()
         return rule
 
+    async def get_schedule_rule(self, schedule_rule_id: str):
+        from hack_backend.core.models import ScheduleRule
+
+        return await self.session.get(ScheduleRule, schedule_rule_id)
+
+    async def patch_schedule_rule(
+        self,
+        schedule_rule_id: str,
+        *,
+        is_enabled: bool | None = None,
+        cron_expr: str | None = None,
+    ):
+        from hack_backend.core.models import ScheduleRule
+        from hack_backend.core.platform_ops import next_cron_run, utcnow
+
+        rule = await self.session.get(ScheduleRule, schedule_rule_id)
+        if is_enabled is not None:
+            rule.is_enabled = is_enabled
+        if cron_expr is not None:
+            rule.cron_expr = cron_expr
+            rule.next_run_at = next_cron_run(cron_expr, utcnow())
+        await self.session.flush()
+        return rule
+
+    async def delete_schedule_rule(self, schedule_rule_id: str) -> None:
+        from hack_backend.core.models import ScheduleRule
+
+        rule = await self.session.get(ScheduleRule, schedule_rule_id)
+        if rule is not None:
+            await self.session.delete(rule)
+            await self.session.flush()
+
     async def create_task_runs(
         self,
         *,
