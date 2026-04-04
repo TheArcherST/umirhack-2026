@@ -30,6 +30,9 @@ dependencies = [
     "validators (>=0.35.0,<0.36.0)",
     "aiodns (>=3.5.0,<4.0.0)",
     "httpx>=0.28.1",
+    "pyotp>=2.9.0",
+    "resend>=2.0.0",
+    "email-validator>=2.0.0",
 ]
 
 [build-system]

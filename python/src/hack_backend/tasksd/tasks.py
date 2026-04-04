@@ -1,35 +1,17 @@
 from traceback import print_exception
 from uuid import UUID
 
-from dishka import FromDishka, make_async_container
-from dishka.integrations.taskiq import TaskiqProvider, inject, setup_dishka
-from taskiq import SimpleRetryMiddleware, TaskiqScheduler
-from taskiq.schedule_sources import LabelScheduleSource
-from taskiq_redis import ListQueueBroker
+from dishka import FromDishka
+from dishka.integrations.taskiq import inject
 
-from hack_backend.bindingd.main import NoAuthorizedUser
-from hack_backend.core.providers import ProviderConfig, ProviderDatabase
 from hack_backend.core.services.agent import AgentService
 from hack_backend.core.services.checks import CheckService
-from hack_backend.core.services.providers import ProviderServices
 from hack_backend.core.services.uow_ctl import UoWCtl
+from hack_backend.tasksd.broker import broker, container, setup_full_container
 from hack_protocol.checks.unions import AnyCheckTaskResult
 
-providers = (
-    ProviderConfig(),
-    ProviderDatabase(),
-    ProviderServices(),
-    NoAuthorizedUser(),
-    TaskiqProvider(),
-)
-
-broker = ListQueueBroker("redis://redis:6379/1").with_middlewares(
-    SimpleRetryMiddleware(default_retry_count=3)
-)
-
-non_dynamic_scheduler = TaskiqScheduler(
-    broker, sources=[LabelScheduleSource(broker)]
-)
+# Re-setup with full providers
+container = setup_full_container()
 
 
 @broker.task(retry_on_error=True, max_retries=3)
@@ -75,7 +57,3 @@ async def process_check_task(
         raise RuntimeError("Retry?") from e
 
     return None
-
-
-container = make_async_container(*providers)
-setup_dishka(container=container, broker=broker)

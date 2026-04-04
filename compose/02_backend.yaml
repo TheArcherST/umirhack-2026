@@ -82,6 +82,15 @@ services:
     deploy:
       replicas: 2
 
+  email-tasks-worker:
+    build: ./python
+    command: taskiq worker hack_backend.tasksd.email_tasks:broker
+    restart: unless-stopped
+    env_file: ./python/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+
   bindingd:
     build: ./python
     command: run-bindingd
