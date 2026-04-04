@@ -8,8 +8,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { MultiAgentSelect } from '@/components/ui/multi-agent-select'
 import { MultiMemberSelect } from '@/components/ui/multi-member-select'
-import { stubCreateEnvironment, stubGetProjectMembers, stubGetAgents, stubAssignEnvRole } from '@/api/stubs'
-import type { MemberRole, Agent } from '@/api/types'
+import { stubCreateEnvironment, stubGetProjectMembers, stubGetAgents, stubAssignEnvRole, stubUpdateAgent } from '@/api/stubs'
+import type { Agent, EnvRole } from '@/api/types'
 import { useI18n } from '@/i18n'
 import { useProject } from '@/hooks/useProject'
 
@@ -21,7 +21,7 @@ interface Props {
 
 export function CreateEnvironmentModal({ open, onClose, onCreated }: Props) {
   const { t } = useI18n()
-  const { currentProject, selectEnvironment } = useProject()
+  const { currentProject, selectEnvironment, refreshEnvironments } = useProject()
   const [name, setName] = useState('')
   const [selectedAgents, setSelectedAgents] = useState<string[]>([])
   const [selectedMembers, setSelectedMembers] = useState<{ userId: string; role: string }[]>([])
@@ -54,14 +54,26 @@ export function CreateEnvironmentModal({ open, onClose, onCreated }: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name.trim() || !currentProject) return
+    if (!name.trim()) return
+    if (!currentProject) {
+      setError('No active project selected')
+      return
+    }
     setError('')
     setLoading(true)
     try {
       const env = await stubCreateEnvironment({ name: name.trim(), project_id: currentProject.id })
+      await refreshEnvironments(currentProject.id)
+
+      for (const agentId of selectedAgents) {
+        const agent = agents.find((item) => item.id === agentId)
+        if (!agent) continue
+        const nextEnvironmentIds = Array.from(new Set([...agent.environment_ids, env.id]))
+        await stubUpdateAgent(agent.id, { environment_ids: nextEnvironmentIds })
+      }
 
       for (const m of selectedMembers) {
-        await stubAssignEnvRole({ user_id: m.userId, env_id: env.id, role: m.role as MemberRole })
+        await stubAssignEnvRole({ user_id: m.userId, env_id: env.id, role: m.role as EnvRole })
       }
 
       setSuccess(true)
@@ -156,7 +168,7 @@ export function CreateEnvironmentModal({ open, onClose, onCreated }: Props) {
               <Button type="button" variant="ghost" size="sm" onClick={handleClose} disabled={loading}>
                 {t('common.cancel')}
               </Button>
-              <Button type="submit" size="sm" disabled={loading || !name.trim()}>
+              <Button type="submit" size="sm" disabled={loading || !name.trim() || !currentProject}>
                 {loading ? <Loader2 size={13} className="animate-spin" /> : t('project.createEnvironment')}
               </Button>
             </DialogFooter>

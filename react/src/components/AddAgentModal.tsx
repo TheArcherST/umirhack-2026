@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/select'
 import {MultiEnvSelect} from '@/components/ui/multi-env-select'
 import {stubCreateAgent, stubGetEnvironments} from '@/api/stubs'
-import type {AgentOS} from '@/api/types'
+import type {AgentOS, InstallScript} from '@/api/types'
 import {useI18n} from '@/i18n'
 import {useProject} from '@/hooks/useProject'
 import {cn} from '@/lib/utils'
@@ -38,7 +38,7 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
     const [error, setError] = useState('')
 
     const [step, setStep] = useState<'form' | 'script'>('form')
-    const [installScript, setInstallScript] = useState('')
+    const [installScript, setInstallScript] = useState<InstallScript | null>(null)
     const [copied, setCopied] = useState(false)
 
     // Default: only "main" env selected
@@ -46,6 +46,8 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
         if (open && environments.length > 0) {
             const mainEnv = environments.find((e) => e.name === 'main')
             setSelectedEnvs(mainEnv ? [mainEnv.id] : [environments[0].id])
+        } else if (open) {
+            setSelectedEnvs([])
         }
     }, [open, environments])
 
@@ -57,12 +59,12 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (!name.trim() || selectedEnvs.length === 0) return
+        if (!name.trim()) return
         setError('')
         setLoading(true)
         try {
             const result = await stubCreateAgent({name: name.trim(), os, environment_ids: selectedEnvs})
-            setInstallScript(result.installScript.command)
+            setInstallScript(result.installScript)
             setStep('script')
             onCreated()
         } catch (err: any) {
@@ -73,7 +75,8 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
     }
 
     const copyScript = () => {
-        navigator.clipboard.writeText(installScript)
+        if (!installScript) return
+        navigator.clipboard.writeText(installScript.command)
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
     }
@@ -84,10 +87,17 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
         setSelectedEnvs([])
         setError('')
         setStep('form')
-        setInstallScript('')
+        setInstallScript(null)
         setCopied(false)
         onClose()
     }
+
+    const installHint =
+        installScript?.platform === 'windows'
+            ? 'Windows PowerShell (run as Administrator)'
+            : installScript?.platform === 'macos'
+                ? 'macOS shell (run with sudo/root)'
+                : 'Linux shell (run with sudo/root)'
 
     return (
         <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
@@ -120,7 +130,12 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
                                     </SelectTrigger>
                                     <SelectContent>
                                         {OS_OPTIONS.map((opt) => (
-                                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                            <SelectItem
+                                                key={opt.value}
+                                                value={opt.value}
+                                            >
+                                                {opt.label}
+                                            </SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
@@ -146,7 +161,7 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
                             <Button
                                 type="submit"
                                 size="sm"
-                                disabled={loading || !name.trim() || selectedEnvs.length === 0}
+                                disabled={loading || !name.trim()}
                             >
                                 {loading ? <Loader2 size={13} className="animate-spin"/> : t('agent.addAgent')}
                             </Button>
@@ -155,6 +170,9 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
                 ) : (
                     <div className="px-6 pb-4 space-y-3">
                         <p className="text-xs text-muted-foreground">{t('agent.installScript')}</p>
+                        <p className="text-[11px] text-muted-foreground font-mono">
+                            {installHint}
+                        </p>
                         <div className="relative rounded-md border border-border bg-muted/30 overflow-hidden">
                             <div className="absolute top-2 right-2 z-10">
                                 <button
@@ -166,7 +184,7 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
                             </div>
                             <pre
                                 className="p-4 text-xs font-mono leading-relaxed overflow-x-auto max-h-40 overflow-y-auto text-foreground/80 whitespace-pre-wrap break-all select-all">
-                {installScript}
+                {installScript?.command ?? ''}
               </pre>
                         </div>
                         <p className="text-xs text-green-400 font-mono">✓ {t('agent.agentAdded')}</p>

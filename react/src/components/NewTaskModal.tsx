@@ -6,12 +6,13 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
-import { stubGetAgents, stubCreateTask } from '@/api/stubs'
+import { stubGetAgents, stubCreateTaskV2 } from '@/api/stubs'
+import { TASK_TEMPLATES } from '@/api/types'
+import type { TaskTemplate } from '@/api/types'
 import { useI18n } from '@/i18n'
 
 interface Props {
@@ -23,8 +24,8 @@ interface Props {
 
 export function NewTaskModal({ open, onClose, onCreated, defaultAgentId }: Props) {
   const [agentId, setAgentId] = useState(defaultAgentId ?? '')
-  const [command, setCommand] = useState('')
-  const [timeout, setTimeout_] = useState('30')
+  const [template, setTemplate] = useState<TaskTemplate>('system_info')
+  const [target, setTarget] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const { t } = useI18n()
@@ -35,18 +36,21 @@ export function NewTaskModal({ open, onClose, onCreated, defaultAgentId }: Props
     enabled: open,
   })
 
+  const selectedTemplate = TASK_TEMPLATES.find((item) => item.id === template)
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!agentId || !command.trim()) return
+    if (!agentId) return
+    if (selectedTemplate?.requiresTarget && !target.trim()) return
     setError('')
     setLoading(true)
     try {
-      await stubCreateTask({
+      await stubCreateTaskV2({
         agent_id: agentId,
-        command: command.trim(),
-        timeout: parseInt(timeout, 10) || 30,
+        template,
+        target: selectedTemplate?.requiresTarget ? target.trim() : undefined,
       })
-      setCommand('')
+      setTarget('')
       onCreated()
     } catch (err: any) {
       setError(err.message ?? t('newTask.createFailed'))
@@ -58,7 +62,7 @@ export function NewTaskModal({ open, onClose, onCreated, defaultAgentId }: Props
   const handleOpenChange = (open: boolean) => {
     if (!open) {
       onClose()
-      setCommand('')
+      setTarget('')
       setError('')
     }
   }
@@ -91,27 +95,36 @@ export function NewTaskModal({ open, onClose, onCreated, defaultAgentId }: Props
             </div>
 
             <div className="space-y-1.5">
-              <Label>{t('newTask.commandLabel')}</Label>
-              <Textarea
-                placeholder={t('newTask.commandPlaceholder')}
-                value={command}
-                onChange={(e) => setCommand(e.target.value)}
-                className="h-24 font-mono text-xs"
-                autoFocus
-              />
+              <Label>{t('env.selectTask')}</Label>
+              <Select value={template} onValueChange={(value) => setTemplate(value as TaskTemplate)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TASK_TEMPLATES.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      <div>
+                        <span className="font-medium text-xs">{item.label}</span>
+                        <span className="ml-2 text-muted-foreground text-xs">{item.description}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            <div className="space-y-1.5">
-              <Label>{t('newTask.timeoutLabel')}</Label>
-              <Input
-                type="number"
-                min="1"
-                max="300"
-                value={timeout}
-                onChange={(e) => setTimeout_(e.target.value)}
-                className="w-24 font-mono text-xs"
-              />
-            </div>
+            {selectedTemplate?.requiresTarget && (
+              <div className="space-y-1.5">
+                <Label>{t('env.taskTarget')}</Label>
+                <Input
+                  placeholder={t('env.taskTargetPlaceholder')}
+                  value={target}
+                  onChange={(e) => setTarget(e.target.value)}
+                  className="font-mono text-xs"
+                  autoFocus
+                />
+              </div>
+            )}
 
             {error && <p className="text-xs text-red-400 font-mono">{error}</p>}
           </div>
@@ -123,7 +136,7 @@ export function NewTaskModal({ open, onClose, onCreated, defaultAgentId }: Props
             <Button
               type="submit"
               size="sm"
-              disabled={loading || !agentId || !command.trim()}
+              disabled={loading || !agentId || (selectedTemplate?.requiresTarget && !target.trim())}
             >
               {loading ? <Loader2 size={13} className="animate-spin" /> : t('newTask.runTask')}
             </Button>

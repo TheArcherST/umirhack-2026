@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { ChevronLeft, Plus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { stubGetAgents, stubGetEnvironments, stubGetTasks, stubGetRecentTasks } from '@/api/stubs'
+import { stubGetEnvironments, stubGetRecentTasks } from '@/api/stubs'
 import { formatDate, formatDuration, cn } from '@/lib/utils'
 import { TaskLogModal } from '@/components/TaskLogModal'
 import { CreateTaskModal } from '@/components/CreateTaskModal'
@@ -34,26 +34,18 @@ export default function EnvironmentTasks() {
   const [logTaskId, setLogTaskId] = useState<string | null>(null)
   const [createTaskOpen, setCreateTaskOpen] = useState(false)
 
-  const { data: agents = [] } = useQuery({
-    queryKey: ['agents-env-tasks', envId],
-    queryFn: () => stubGetAgents({ environment_id: envId }),
-    refetchInterval: 15_000,
-  })
-
   const { data: envs } = useQuery({
     queryKey: ['environments'],
     queryFn: () => stubGetEnvironments(''),
   })
   const currentEnv = envs?.find((e) => e.id === envId)
 
-  const agentIds = new Set(agents.map((a) => a.id))
-
   const { data: tasksPage, refetch } = useQuery({
     queryKey: ['env-tasks', envId, statusFilter, page],
     queryFn: async () => {
       const allTasks = await stubGetRecentTasks(200)
       const filtered = allTasks.filter(
-        (task) => agentIds.has(task.agent_id) && (!statusFilter || task.status === statusFilter),
+        (task) => task.environment_id === envId && (!statusFilter || task.status === statusFilter),
       )
       const perPage = 20
       const start = (page - 1) * perPage

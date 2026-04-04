@@ -71,4 +71,5 @@ class EmailVerificationService:
             raise InvalidVerificationCode("Invalid code")
 
         user.email_verified = True
+        user.otp_secret = None
         return True

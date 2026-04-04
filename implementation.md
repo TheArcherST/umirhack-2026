@@ -12,23 +12,6 @@ Because there are no external dependents, the implementation should prefer a cle
 
 Do not evolve `Check`, `CheckTask`, `Resource`, SSH keypair management, or the current push-style agent execution flow. Those concepts do not match the whitepaper and will distort the implementation if retained.
 
-Replace them with these first-class concepts:
-
-- `Project`
-- `Environment`
-- `ProjectMember`
-- `EnvironmentMember`
-- `Agent`
-- `AgentBootstrapToken`
-- `Host`
-- `TaskTemplate`
-- `TaskRun`
-- `TaskRunResult`
-- `TelemetryRecord`
-- `MetricDefinition`
-- `MetricSnapshot`
-- `GraphEdgeSnapshot`
-
 ### 1.2 Host is the primary infrastructure entity
 
 Per clause 5, host identity is environment-scoped agent identity. In practice:
@@ -122,7 +105,7 @@ The current frontend already encodes several valid product intentions that shoul
 
 The whitepaper should refine those flows, not replace them with a graph-only product. The graph is the primary environment overview, but not the only operational interface.
 
-## 2. Target domain model
+## 2. Target domain model (may be changed during implementation process if changes are makes sense)
 
 ### 2.1 Projects and environments
 
@@ -373,17 +356,6 @@ Do not reuse the current “checks” naming. Rename the whole protocol around t
 
 The whitepaper explicitly requires a Rust daemon. That should be implemented as a new top-level workspace, not by evolving the current Python agent.
 
-Recommended layout:
-
-```text
-agent-rs/
-  Cargo.toml
-  crates/
-    agent-app/
-    agent-protocol/
-    collectors/
-```
-
 ### 4.1 Agent responsibilities
 
 The Rust agent should:
@@ -445,7 +417,7 @@ Split the backend into two logical API surfaces:
 - control plane API for frontend
 - agent plane API for Rust agents
 
-Recommended endpoints:
+Possible endpoints:
 
 Control plane:
 
@@ -734,52 +706,6 @@ There is also a smaller RBAC mismatch in current frontend types left over from e
 
 Those type definitions should be corrected as the frontend is migrated onto the new backend contracts.
 
-## 9. Codebase restructuring
-
-A clean rename is justified.
-
-Recommended Python layout:
-
-```text
-python/src/infra_backend/
-  domain/
-    agents/
-    hosts/
-    environments/
-    tasks/
-    telemetry/
-    metrics/
-    graph/
-  api/
-    control_plane/
-    agent_plane/
-  worker/
-  db/
-  settings.py
-```
-
-Recommended shared protocol layout:
-
-```text
-python/src/infra_protocol/
-  task_types/
-  metric_types/
-  agent_api/
-```
-
-Then delete or retire:
-
-- `hack_backend/core/models/check.py`
-- `hack_backend/core/models/check_task/*`
-- `hack_backend/core/models/resource.py`
-- `hack_backend/tasksd/*`
-- `hack_backend/bindingd/*`
-- `hack_backend/heartbeatd/*`
-- `hack_agent/*`
-- protocol names using `checks`
-
-The main rule is simple: stop encoding the legacy terminology into the new architecture.
-
 ## 10. Migration strategy
 
 There is no reason to preserve old behavior externally, but an internal phased rollout is still useful to control complexity.
@@ -787,7 +713,6 @@ There is no reason to preserve old behavior externally, but an internal phased r
 ### Phase 1. Introduce the new domain skeleton
 
 - create new tables
-- create new package layout
 - add control plane API skeleton
 - add agent plane API skeleton
 - add auth, membership, and role models
@@ -795,7 +720,6 @@ There is no reason to preserve old behavior externally, but an internal phased r
 
 ### Phase 2. Implement Rust agent and registration flow
 
-- create `agent-rs`
 - implement registration, heartbeat, polling, result upload
 - remove SSH connector dependency from the new path
 

@@ -1,0 +1,3 @@
+[workspace]
+members = ["hack_agent"]
+resolver = "2"

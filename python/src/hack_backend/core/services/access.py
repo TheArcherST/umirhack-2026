@@ -17,6 +17,10 @@ class ErrorUnauthorized(ServiceAccessError):
     pass
 
 
+class ErrorEmailNotVerified(ServiceAccessError):
+    pass
+
+
 class AccessService:
     def __init__(
         self,
@@ -69,7 +73,20 @@ class AccessService:
             await self._dummy_authentication()
             raise ErrorUnauthorized
         await self._authenticate_user(user, password)
+        if user.email and not user.email_verified:
+            raise ErrorEmailNotVerified
 
+        return await self.create_login_session(
+            user=user,
+            user_agent=user_agent,
+        )
+
+    async def create_login_session(
+        self,
+        *,
+        user: User,
+        user_agent: str | None,
+    ) -> LoginSession:
         login_session = LoginSession(
             user_agent=user_agent,
             token=secrets.token_hex(nbytes=32),

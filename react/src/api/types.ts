@@ -1,38 +1,37 @@
-// ─── Core domain types ──────────────────────────────────────────────────────
-
 export type AgentStatus = 'online' | 'offline'
 export type TaskStatus = 'pending' | 'running' | 'success' | 'failed' | 'timeout'
-export type MemberRole = 'owner' | 'admin' | 'operator' | 'observer'
+export type MemberRole = 'owner' | 'admin' | 'member' | 'operator' | 'observer'
 export type EnvRole = 'operator' | 'observer'
 export type AgentOS = 'linux' | 'windows' | 'macos'
+export type InviteStatus = 'pending' | 'accepted'
 
-// ─── Task Templates ─────────────────────────────────────────────────────────
-
-export type TaskTemplate = 'ping' | 'system_info' | 'network_interfaces' | 'port_scan' | 'disk_usage' | 'memory_cpu' | 'service_status' | 'system_logs'
+export type TaskTemplate =
+    | 'ping'
+    | 'system_info'
+    | 'network_interfaces'
+    | 'port_scan'
+    | 'disk_usage'
+    | 'memory_cpu'
+    | 'service_status'
+    | 'system_logs'
 
 export interface TaskTemplateOption {
     id: TaskTemplate
     label: string
     description: string
-    requiresTarget?: boolean  // true if user needs to select a target (e.g. ping)
+    requiresTarget?: boolean
 }
 
 export const TASK_TEMPLATES: TaskTemplateOption[] = [
-    { id: 'ping', label: 'Ping', description: 'Ping a host or domain', requiresTarget: true },
-    { id: 'system_info', label: 'System Info', description: 'OS version, hostname, interfaces' },
-    { id: 'network_interfaces', label: 'Network Interfaces', description: 'IP addresses, routes, interfaces' },
-    { id: 'port_scan', label: 'Port Scan', description: 'List listening ports and services' },
-    { id: 'disk_usage', label: 'Disk Usage', description: 'Disk space and partitions' },
-    { id: 'memory_cpu', label: 'Memory & CPU', description: 'RAM, CPU load, uptime' },
-    { id: 'service_status', label: 'Service Status', description: 'Running services (nginx, postgres, etc.)' },
-    { id: 'system_logs', label: 'System Logs', description: 'Recent system logs (journalctl)' },
+    { id: 'ping', label: 'Ping', description: 'Connectivity to an endpoint', requiresTarget: true },
+    { id: 'system_info', label: 'System Info', description: 'OS profile and host metadata' },
+    { id: 'network_interfaces', label: 'Network Interfaces', description: 'Addressing and interfaces' },
+    { id: 'port_scan', label: 'Port Scan', description: 'Listening sockets snapshot' },
+    { id: 'disk_usage', label: 'Disk Usage', description: 'Filesystem usage sample' },
+    { id: 'memory_cpu', label: 'Memory & CPU', description: 'Runtime load snapshot' },
+    { id: 'service_status', label: 'Service Status', description: 'Running services inventory' },
+    { id: 'system_logs', label: 'System Logs', description: 'Recent diagnostic logs' },
 ]
-
-export interface CreateTaskPayloadV2 {
-    agent_id: string
-    template: TaskTemplate
-    target?: string  // For ping: domain/IP or host
-}
 
 export interface Project {
     id: string
@@ -48,8 +47,6 @@ export interface Environment {
     created_at: string
 }
 
-export type InviteStatus = 'pending' | 'accepted'
-
 export interface ProjectMember {
     user_id: string
     email: string
@@ -62,20 +59,41 @@ export interface ProjectMember {
 export interface EnvMemberAssignment {
     user_id: string
     env_id: string
-    role: EnvRole | 'admin'  // 'admin' for auto-assigned creator
+    role: EnvRole | 'admin'
+}
+
+export interface AgentEnvironmentRef {
+    id: string
+    name: string
 }
 
 export interface Agent {
     id: string
     name: string
-    hostname: string
+    hostname: string | null
     ip_address: string
     os: AgentOS
     status: AgentStatus
-    last_heartbeat: string   // ISO 8601
+    last_heartbeat: string | null
     tasks_count: number
     environment_ids: string[]
     created_at: string
+    environment_names?: AgentEnvironmentRef[]
+}
+
+export interface Host {
+    id: string
+    environment_id: string
+    agent_id: string
+    name: string
+    hostname: string | null
+    os_name: string | null
+    status: AgentStatus
+    primary_ipv4: string | null
+    primary_ipv6: string | null
+    last_seen_at: string | null
+    freshness: string | null
+    descriptive_fields: Record<string, unknown>
 }
 
 export interface HostInfo {
@@ -95,7 +113,7 @@ export interface ServiceInfo {
     name: string
     status: 'running' | 'stopped'
     port?: number
-    known: boolean  // true for known services like nginx, postgres, mongo
+    known: boolean
 }
 
 export interface PortInfo {
@@ -105,14 +123,51 @@ export interface PortInfo {
     state: 'listening' | 'established'
 }
 
+export interface TelemetryRecord {
+    id: string
+    task_run_id: string
+    host_id: string
+    environment_id: string
+    kind: string
+    schema_version: number
+    collected_at: string
+    payload_json: Record<string, any>
+}
+
+export interface MetricSnapshot {
+    id: string
+    host_id: string
+    environment_id: string
+    metric_kind: string
+    computed_at: string
+    value_json: Record<string, any>
+}
+
+export interface GraphEdge {
+    id: string
+    environment_id: string
+    source_host_id: string
+    target_host_id: string | null
+    target_label: string | null
+    relation_kind: string
+    status: string
+    observed_at: string
+    expires_at: string | null
+    payload_json: Record<string, any>
+}
+
 export interface Task {
     id: string
     agent_id: string
     agent_name: string
+    host_id: string
+    host_name: string
+    environment_id: string
     command: string
+    template?: TaskTemplate
     status: TaskStatus
-    timeout: number          // seconds
-    duration: number | null  // seconds
+    timeout: number
+    duration: number | null
     started_at: string | null
     completed_at: string | null
     created_at: string
@@ -139,8 +194,6 @@ export interface Stats {
     failed_tasks: number
 }
 
-// Request/response shapes
-
 export interface PaginatedResponse<T> {
     items: T[]
     total: number
@@ -153,6 +206,13 @@ export interface CreateTaskPayload {
     agent_id: string
     command: string
     timeout?: number
+}
+
+export interface CreateTaskPayloadV2 {
+    agent_id: string
+    environment_id: string
+    template: TaskTemplate
+    target?: string
 }
 
 export interface ListTasksParams {
@@ -169,8 +229,6 @@ export interface ListAgentsParams {
     environment_id?: string
 }
 
-// Project / Environment
-
 export interface CreateProjectPayload {
     name: string
 }
@@ -183,7 +241,7 @@ export interface CreateEnvironmentPayload {
 export interface CreateAgentPayload {
     name: string
     os: AgentOS
-    environment_ids: string[]
+    environment_ids?: string[]
 }
 
 export interface UpdateAgentPayload {
@@ -199,12 +257,15 @@ export interface InviteMemberPayload {
 export interface AssignEnvRolePayload {
     user_id: string
     env_id: string
-    role: EnvRole;
+    role: EnvRole
 }
 
 export interface InstallScript {
     command: string
     agent_id: string
+    platform: 'linux' | 'macos' | 'windows'
+    script_kind: 'bash' | 'powershell'
+    script_url: string
 }
 
 export interface UserSearchResult {
@@ -213,16 +274,14 @@ export interface UserSearchResult {
     name: string
 }
 
-// ─── Auth ─────────────────────────────────────────────────────────────────────
-
 export interface LoginPayload {
     username: string
     password: string
 }
 
 export interface LoginResponse {
-    login_session_uid: string
-    login_session_token: string
+    token: string
+    user: AuthUser
 }
 
 export interface RegisterPayload {
@@ -254,10 +313,12 @@ export interface AuthResponse {
 export interface RegisterResponse {
     message: string
     email_verification_required: boolean
+    auth: LoginResponse | null
 }
 
 export interface VerifyResponse {
     message: string
+    auth: LoginResponse
 }
 
 export interface ResendResponse {
@@ -265,5 +326,5 @@ export interface ResendResponse {
 }
 
 export interface ApiError {
-    detail: { loc: (string | number)[]; msg: string; type: string }[]
+    detail: { loc: (string | number)[]; msg: string; type: string }[] | string
 }

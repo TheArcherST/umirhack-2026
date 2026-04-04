@@ -1,13 +1,12 @@
 import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ChevronLeft, Cpu, HardDrive, MemoryStick, Clock, Network, Server } from 'lucide-react'
+import { ChevronLeft, Cpu, Network, Server } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { stubGetAgents, stubGetHostInfo, stubGetHostServices, stubGetRecentTasks } from '@/api/stubs'
-import { formatDate, formatDuration, timeAgo, cn } from '@/lib/utils'
+import { stubGetHost, stubGetHostInfo, stubGetHostServices, stubGetRecentTasks } from '@/api/stubs'
+import { formatDate, formatDuration, cn } from '@/lib/utils'
 import { TaskLogModal } from '@/components/TaskLogModal'
-import type { Task, TaskStatus } from '@/api/types'
+import type { Task } from '@/api/types'
 import { useI18n } from '@/i18n'
 
 function StatusBadge({ status }: { status: Task['status'] }) {
@@ -37,11 +36,11 @@ export default function EnvironmentHostDetail() {
   const { t } = useI18n()
   const [logTaskId, setLogTaskId] = React.useState<string | null>(null)
 
-  const { data: agents = [] } = useQuery({
-    queryKey: ['agents'],
-    queryFn: () => stubGetAgents(),
+  const { data: host } = useQuery({
+    queryKey: ['host', hostId],
+    queryFn: () => stubGetHost(hostId!),
+    enabled: !!hostId,
   })
-  const agent = agents.find((a) => a.id === hostId)
 
   const { data: hostInfo, isLoading: loadingHost } = useQuery({
     queryKey: ['host-info', hostId],
@@ -58,7 +57,7 @@ export default function EnvironmentHostDetail() {
   const { data: recentTasks = [], refetch } = useQuery({
     queryKey: ['host-recent-tasks', hostId],
     queryFn: () => stubGetRecentTasks(10).then((tasks) =>
-      hostId ? tasks.filter((t) => t.agent_id === hostId) : tasks,
+      hostId ? tasks.filter((t) => t.host_id === hostId) : tasks,
     ),
     refetchInterval: 8_000,
   })
@@ -78,19 +77,19 @@ export default function EnvironmentHostDetail() {
         </button>
         <div className="flex items-center gap-2">
           <h1 className="text-sm font-semibold text-foreground font-mono">
-            {agent?.name ?? hostId}
+            {host?.name ?? hostId}
           </h1>
-          {agent && (
+          {host && (
             <div className="flex items-center gap-1.5">
               <span className={cn(
                 'w-1.5 h-1.5 rounded-full',
-                agent.status === 'online' ? 'bg-green-400 status-pulse' : 'bg-muted-foreground/40',
+                host.status === 'online' ? 'bg-green-400 status-pulse' : 'bg-muted-foreground/40',
               )} />
               <span className={cn(
                 'text-xs font-mono',
-                agent.status === 'online' ? 'text-green-400' : 'text-muted-foreground',
+                host.status === 'online' ? 'text-green-400' : 'text-muted-foreground',
               )}>
-                {agent.status === 'online' ? t('common.online') : t('common.offline')}
+                {host.status === 'online' ? t('common.online') : t('common.offline')}
               </span>
             </div>
           )}

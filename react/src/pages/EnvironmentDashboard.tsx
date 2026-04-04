@@ -3,9 +3,14 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Server, Activity, CheckCircle2, XCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { stubGetAgents, stubGetEnvironments, stubGetTasks } from '@/api/stubs'
-import { formatDate, formatDuration, timeAgo } from '@/lib/utils'
-import type { Task, Agent } from '@/api/types'
+import {
+  stubGetEnvironmentGraph,
+  stubGetEnvironments,
+  stubGetHosts,
+  stubGetTasks,
+} from '@/api/stubs'
+import { formatDate, formatDuration } from '@/lib/utils'
+import type { Task } from '@/api/types'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
@@ -41,10 +46,11 @@ export default function EnvironmentDashboard() {
   const { envId } = useParams<{ envId: string }>()
   const { t } = useI18n()
 
-  const { data: agents = [] } = useQuery({
-    queryKey: ['agents-env', envId],
-    queryFn: () => stubGetAgents({ environment_id: envId }),
+  const { data: hosts = [] } = useQuery({
+    queryKey: ['hosts-env', envId],
+    queryFn: () => stubGetHosts(envId!),
     refetchInterval: 15_000,
+    enabled: !!envId,
   })
 
   const { data: envs } = useQuery({
@@ -59,12 +65,17 @@ export default function EnvironmentDashboard() {
     refetchInterval: 10_000,
   })
 
-  // Filter tasks for agents in this env
-  const agentIds = new Set(agents.map((a) => a.id))
-  const envTasks = tasks.filter((task) => agentIds.has(task.agent_id))
+  const envTasks = tasks.filter((task) => task.environment_id === envId)
 
-  const online = agents.filter((a) => a.status === 'online').length
-  const offline = agents.length - online
+  const { data: graphEdges = [] } = useQuery({
+    queryKey: ['graph-env', envId],
+    queryFn: () => stubGetEnvironmentGraph(envId!),
+    refetchInterval: 15_000,
+    enabled: !!envId,
+  })
+
+  const online = hosts.filter((host) => host.status === 'online').length
+  const offline = hosts.length - online
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -79,10 +90,62 @@ export default function EnvironmentDashboard() {
         <div className="p-5 space-y-6">
           {/* Stats */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatCard icon={Server} label={t('dashboard.totalAgents')} value={agents.length} />
+            <StatCard icon={Server} label={t('dashboard.totalAgents')} value={hosts.length} />
             <StatCard icon={Activity} label={t('dashboard.onlineNow')} value={online} sub={offline > 0 ? `${offline} offline` : undefined} />
             <StatCard icon={CheckCircle2} label={t('dashboard.successful')} value={envTasks.filter((t) => t.status === 'success').length} />
             <StatCard icon={XCircle} label={t('dashboard.failedTasks')} value={envTasks.filter((t) => t.status === 'failed').length} />
+          </div>
+
+          <div>
+            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+              Connectivity Graph
+            </h2>
+            <div className="rounded-lg border border-border bg-card overflow-hidden">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-border/50">
+                <div className="bg-card px-4 py-3">
+                  <p className="text-[10px] uppercase text-muted-foreground">Hosts</p>
+                  <p className="text-2xl font-semibold font-display tracking-tight">{hosts.length}</p>
+                </div>
+                <div className="bg-card px-4 py-3">
+                  <p className="text-[10px] uppercase text-muted-foreground">Edges</p>
+                  <p className="text-2xl font-semibold font-display tracking-tight">{graphEdges.length}</p>
+                </div>
+                <div className="bg-card px-4 py-3">
+                  <p className="text-[10px] uppercase text-muted-foreground">Reachable</p>
+                  <p className="text-2xl font-semibold font-display tracking-tight">
+                    {graphEdges.filter((edge) => edge.status === 'reachable').length}
+                  </p>
+                </div>
+                <div className="bg-card px-4 py-3">
+                  <p className="text-[10px] uppercase text-muted-foreground">Unreachable</p>
+                  <p className="text-2xl font-semibold font-display tracking-tight">
+                    {graphEdges.filter((edge) => edge.status !== 'reachable').length}
+                  </p>
+                </div>
+              </div>
+              <div className="divide-y divide-border/50">
+                {graphEdges.slice(0, 8).map((edge) => (
+                  <div key={edge.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="text-xs font-mono truncate">
+                        {hosts.find((host) => host.id === edge.source_host_id)?.name ?? edge.source_host_id}
+                        {' -> '}
+                        {edge.target_label ?? edge.target_host_id ?? 'endpoint'}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground truncate">{edge.relation_kind}</p>
+                    </div>
+                    <Badge variant={edge.status === 'reachable' ? 'success' : 'destructive'}>
+                      {edge.status}
+                    </Badge>
+                  </div>
+                ))}
+                {graphEdges.length === 0 && (
+                  <div className="px-4 py-8 text-center text-xs text-muted-foreground">
+                    No graph edges yet for this environment.
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Hosts overview */}
@@ -91,28 +154,28 @@ export default function EnvironmentDashboard() {
               {t('env.hosts')}
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {agents.map((agent) => (
+              {hosts.map((host) => (
                 <div
-                  key={agent.id}
+                  key={host.id}
                   className="rounded-lg border border-border bg-card p-4 hover:bg-accent/20 transition-colors cursor-pointer"
-                  onClick={() => navigate(`/environments/${envId}/hosts/${agent.id}`)}
+                  onClick={() => navigate(`/environments/${envId}/hosts/${host.id}`)}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-mono font-medium">{agent.name}</p>
+                    <p className="text-sm font-mono font-medium">{host.name}</p>
                     <span className={cn(
                       'w-2 h-2 rounded-full',
-                      agent.status === 'online' ? 'bg-green-400 status-pulse' : 'bg-muted-foreground/40',
+                      host.status === 'online' ? 'bg-green-400 status-pulse' : 'bg-muted-foreground/40',
                     )} />
                   </div>
-                  <p className="text-xs text-muted-foreground font-mono">{agent.ip_address}</p>
+                  <p className="text-xs text-muted-foreground font-mono">{host.primary_ipv4 ?? host.primary_ipv6 ?? '—'}</p>
                   <div className="flex items-center gap-2 mt-2">
-                    <Badge variant="outline" className="text-[10px] uppercase">{agent.os}</Badge>
-                    <span className="text-xs text-muted-foreground">{agent.tasks_count} tasks</span>
+                    <Badge variant="outline" className="text-[10px] uppercase">{host.os_name ?? 'unknown'}</Badge>
+                    <span className="text-xs text-muted-foreground">{host.hostname ?? host.name}</span>
                   </div>
                 </div>
               ))}
             </div>
-            {agents.length === 0 && (
+            {hosts.length === 0 && (
               <p className="text-xs text-muted-foreground">{t('env.noHosts')}</p>
             )}
           </div>

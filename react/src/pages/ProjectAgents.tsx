@@ -4,7 +4,7 @@ import {Plus, Link as LinkIcon, Pencil, Trash2, CheckCircle2} from 'lucide-react
 import {Header} from '@/components/Header'
 import {Badge} from '@/components/ui/badge'
 import {Button} from '@/components/ui/button'
-import {stubGetAgents, stubGetEnvironments} from '@/api/stubs'
+import {stubGetAgentInstallScript, stubGetAgents, stubGetEnvironments} from '@/api/stubs'
 import {timeAgo} from '@/lib/utils'
 import type {AgentStatus, Agent} from '@/api/types'
 import {cn} from '@/lib/utils'
@@ -22,6 +22,7 @@ export default function ProjectAgents() {
     const [editAgent, setEditAgent] = useState<Agent | null>(null)
     const [deleteAgent, setDeleteAgent] = useState<Agent | null>(null)
     const [copiedId, setCopiedId] = useState<string | null>(null)
+    const [actionError, setActionError] = useState('')
     const {t} = useI18n()
     const {environments} = useProject()
 
@@ -47,14 +48,23 @@ export default function ProjectAgents() {
     ]
 
     const copyInstallLink = async (agent: Agent) => {
-        const script = `curl -sSL https://diag-platform.internal/install.sh | bash -s -- --token diag-token-${agent.id} --agent-id ${agent.id} --platform ${agent.os}`
+        let command = ''
         try {
-            await navigator.clipboard.writeText(script)
+            const script = await stubGetAgentInstallScript(agent.id)
+            setActionError('')
+            command = script.command
+        } catch (error: any) {
+            setActionError(error?.message ?? 'Failed to issue install command')
+            return
+        }
+
+        try {
+            await navigator.clipboard.writeText(command)
             setCopiedId(agent.id)
             setTimeout(() => setCopiedId(null), 1500)
         } catch {
             const ta = document.createElement('textarea')
-            ta.value = script
+            ta.value = command
             document.body.appendChild(ta)
             ta.select()
             document.execCommand('copy')
@@ -85,6 +95,9 @@ export default function ProjectAgents() {
 
             <div className="flex-1 overflow-y-auto">
                 <div className="p-5 space-y-4">
+                    {actionError && (
+                        <p className="text-xs font-mono text-red-400">{actionError}</p>
+                    )}
                     {/* Filter bar */}
                     <div className="flex items-center gap-2">
                         {filters.map(([val, label, color, count]) => (

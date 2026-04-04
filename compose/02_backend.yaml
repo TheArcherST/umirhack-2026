@@ -6,8 +6,11 @@ services:
     env_file: ./python/.env
     environment:
       HACK__SERVER__ROOT_PATH: /api
+      HACK__SERVER__AGENT_ARTIFACTS_DIR: /opt/hack-agent-artifacts
     expose:
       - "80"
+    volumes:
+      - ./artifacts/hack-agent:/opt/hack-agent-artifacts:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/openapi.json"]
       interval: 10s
@@ -27,8 +30,11 @@ services:
     environment:
       HACK__POSTGRES__USE_TEST_BY_DEFAULT: "true"
       HACK__SERVER__ROOT_PATH: ""
+      HACK__SERVER__AGENT_ARTIFACTS_DIR: /opt/hack-agent-artifacts
     expose:
       - "80"
+    volumes:
+      - ./artifacts/hack-agent:/opt/hack-agent-artifacts:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/openapi.json"]
       interval: 10s
@@ -38,49 +44,14 @@ services:
       postgres:
         condition: service_healthy
 
-  heartbeatd-non-dynamic-scheduler:
+  worker:
     build: ./python
-    command: taskiq scheduler hack_backend.heartbeatd.main:non_dynamic_scheduler
+    command: run-worker
     restart: unless-stopped
     env_file: ./python/.env
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  heartbeatd-scheduler:
-    build: ./python
-    command: taskiq scheduler hack_backend.heartbeatd.main:scheduler
-    restart: unless-stopped
-    env_file: ./python/.env
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  heartbeatd-worker:
-    build: ./python
-    command: taskiq worker hack_backend.heartbeatd.main:broker
-    restart: unless-stopped
-    env_file: ./python/.env
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  tasksd-worker:
-    build: ./python
-    command: taskiq worker hack_backend.tasksd.tasks:broker
-    restart: unless-stopped
-    env_file: ./python/.env
-    depends_on:
-      postgres:
-        condition: service_healthy
-    deploy:
-      replicas: 2
 
   email-tasks-worker:
     build: ./python
@@ -89,15 +60,6 @@ services:
     env_file: ./python/.env
     depends_on:
       redis:
-        condition: service_healthy
-
-  bindingd:
-    build: ./python
-    command: run-bindingd
-    restart: unless-stopped
-    env_file: ./python/.env
-    depends_on:
-      postgres:
         condition: service_healthy
 
   tool-alembic:

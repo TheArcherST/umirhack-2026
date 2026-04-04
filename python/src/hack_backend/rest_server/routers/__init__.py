@@ -1,21 +1,33 @@
 from fastapi import APIRouter
 
 from . import (
+    agent_api,
     access,
     agents,
-    checks,
     dev_router,
     email_verification,
+    environments,
+    hosts,
+    projects,
+    schedule_rules,
+    task_runs,
+    task_templates,
 )
 
 router = APIRouter()
 
 
 router.include_router(access.router)
-router.include_router(checks.router)
-router.include_router(agents.router)
-router.include_router(dev_router.router)
 router.include_router(email_verification.router)
+router.include_router(dev_router.router)
+router.include_router(projects.router)
+router.include_router(environments.router)
+router.include_router(agents.router)
+router.include_router(hosts.router)
+router.include_router(task_templates.router)
+router.include_router(task_runs.router)
+router.include_router(schedule_rules.router)
+router.include_router(agent_api.router)
 
 
 __all__ = [

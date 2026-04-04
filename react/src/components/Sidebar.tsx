@@ -37,6 +37,7 @@ export function Sidebar() {
     { to: '/agents', icon: Server, labelKey: 'sidebar.agents' },
     { to: '/members', icon: Users, labelKey: 'sidebar.members' },
   ]
+  const hasProject = projects.length > 0 && !!currentProject
 
   return (
     <>
@@ -98,6 +99,7 @@ export function Sidebar() {
               className={({ isActive }) =>
                 cn(
                   'flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm transition-colors group',
+                  !hasProject && to !== '/dashboard' && 'pointer-events-none opacity-45',
                   isActive
                     ? 'bg-accent text-foreground'
                     : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
@@ -126,6 +128,7 @@ export function Sidebar() {
                 onClick={() => setCreateEnvOpen(true)}
                 className="p-1 mr-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
                 title={t('project.createEnvironment')}
+                disabled={!hasProject}
               >
                 <Plus size={14} />
               </button>
@@ -148,9 +151,14 @@ export function Sidebar() {
                     <span className="truncate">{env.name}</span>
                   </button>
                 ))}
-                {environments.length === 0 && (
+                {hasProject && environments.length === 0 && (
                   <p className="px-2 py-1 text-xs text-muted-foreground/50">
                     {t('project.noEnvironments')}
+                  </p>
+                )}
+                {!hasProject && (
+                  <p className="px-2 py-1 text-xs text-muted-foreground/50">
+                    {t('project.createProjectFirst')}
                   </p>
                 )}
               </div>

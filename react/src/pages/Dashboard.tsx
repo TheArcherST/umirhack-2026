@@ -1,9 +1,18 @@
 import React, {useState} from 'react'
 import {useQuery} from '@tanstack/react-query'
 import {useNavigate} from 'react-router-dom'
-import {Server, Activity, CheckCircle2, XCircle, ChevronRight, FolderOpen} from 'lucide-react'
+import {
+    Server,
+    Activity,
+    CheckCircle2,
+    XCircle,
+    ChevronRight,
+    FolderOpen,
+    Plus,
+} from 'lucide-react'
 import {Header} from '@/components/Header'
 import {Badge} from '@/components/ui/badge'
+import {Button} from '@/components/ui/button'
 import {stubGetStats, stubGetRecentTasks, stubGetEnvironments, stubGetAgents} from '@/api/stubs'
 import {formatDate, formatDuration, timeAgo} from '@/lib/utils'
 import type {Task, Environment, Agent} from '@/api/types'
@@ -11,6 +20,7 @@ import {TaskLogModal} from '@/components/TaskLogModal'
 import {useI18n} from '@/i18n'
 import {useProject} from '@/hooks/useProject'
 import {cn} from '@/lib/utils'
+import {CreateProjectModal} from '@/components/CreateProjectModal'
 
 function StatusBadge({status}: { status: Task['status'] }) {
     const {t} = useI18n()
@@ -78,14 +88,16 @@ function EnvCard({env, agents}: { env: Environment; agents: Agent[] }) {
 export default function Dashboard() {
     const navigate = useNavigate()
     const {t} = useI18n()
-    const {currentProject, environments} = useProject()
+    const {currentProject, createProject} = useProject()
     const [logTaskId, setLogTaskId] = useState<string | null>(null)
+    const [createOpen, setCreateOpen] = useState(false)
 
     // Load stats
     const {data: stats} = useQuery({
         queryKey: ['stats'],
         queryFn: stubGetStats,
         refetchInterval: 15_000,
+        enabled: !!currentProject,
     })
 
     // Load all agents (across all envs)
@@ -93,6 +105,7 @@ export default function Dashboard() {
         queryKey: ['agents-all'],
         queryFn: () => stubGetAgents(),
         refetchInterval: 15_000,
+        enabled: !!currentProject,
     })
 
     // Load recent tasks
@@ -100,6 +113,7 @@ export default function Dashboard() {
         queryKey: ['recent-tasks'],
         queryFn: () => stubGetRecentTasks(8),
         refetchInterval: 10_000,
+        enabled: !!currentProject,
     })
 
     // Load envs
@@ -117,6 +131,73 @@ export default function Dashboard() {
             agentsByEnv[envId].push(a)
         })
     })
+
+    if (!currentProject) {
+        return (
+            <>
+                <Header title={t('dashboard.title')}/>
+
+                <div className="flex-1 overflow-y-auto">
+                    <div className="min-h-full p-5 flex items-center justify-center">
+                        <div className="w-full max-w-2xl rounded-2xl border border-border bg-card overflow-hidden">
+                            <div className="px-8 py-10 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.08),_transparent_45%),linear-gradient(135deg,rgba(255,255,255,0.04),transparent_60%)]">
+                                <div className="w-12 h-12 rounded-xl border border-border/80 bg-background/80 flex items-center justify-center mb-5">
+                                    <FolderOpen size={20} className="text-foreground/70"/>
+                                </div>
+                                <h2 className="text-2xl font-semibold font-display tracking-tight">
+                                    {t('project.noProjectTitle')}
+                                </h2>
+                                <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+                                    {t('project.noProjectDescription')}
+                                </p>
+                                <div className="mt-6 flex items-center gap-3">
+                                    <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5">
+                                        <Plus size={13}/>
+                                        {t('project.createProject')}
+                                    </Button>
+                                </div>
+                            </div>
+
+                            <div className="px-8 py-6 border-t border-border bg-background/40">
+                                <div className="grid gap-3 sm:grid-cols-3">
+                                    <div className="rounded-lg border border-border/70 p-4">
+                                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                                            {t('project.emptyStepProject')}
+                                        </p>
+                                        <p className="mt-1 text-sm text-foreground/80">
+                                            {t('project.emptyStepProjectDesc')}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-lg border border-border/70 p-4">
+                                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                                            {t('project.emptyStepEnvironment')}
+                                        </p>
+                                        <p className="mt-1 text-sm text-foreground/80">
+                                            {t('project.emptyStepEnvironmentDesc')}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-lg border border-border/70 p-4">
+                                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                                            {t('project.emptyStepAgent')}
+                                        </p>
+                                        <p className="mt-1 text-sm text-foreground/80">
+                                            {t('project.emptyStepAgentDesc')}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <CreateProjectModal
+                    open={createOpen}
+                    onClose={() => setCreateOpen(false)}
+                    onCreate={createProject}
+                />
+            </>
+        )
+    }
 
     return (
         <>

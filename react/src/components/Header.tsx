@@ -1,4 +1,5 @@
 import { Sun, Moon } from 'lucide-react'
+import { API_BASE_URL } from '@/api/client'
 import { useTheme } from '@/hooks/useTheme'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -13,14 +14,12 @@ interface HeaderProps {
 // Simple backend connection health check — tries to ping /api/health
 function useBackendStatus() {
   const [connected, setConnected] = React.useState(false)
-  const apiBaseUrl = import.meta.env.VITE_API_URL ?? ''
 
   React.useEffect(() => {
     let cancelled = false
     const check = async () => {
       try {
-        const url = apiBaseUrl ? `${apiBaseUrl}/api/health` : '/api/health'
-        const res = await fetch(url, { signal: AbortSignal.timeout(2000) })
+        const res = await fetch(`${API_BASE_URL}/health`, { signal: AbortSignal.timeout(2000) })
         if (!cancelled) setConnected(res.ok)
       } catch {
         if (!cancelled) setConnected(false)
@@ -29,7 +28,7 @@ function useBackendStatus() {
     check()
     const id = setInterval(check, 10_000)
     return () => { cancelled = true; clearInterval(id) }
-  }, [apiBaseUrl])
+  }, [])
 
   return connected
 }

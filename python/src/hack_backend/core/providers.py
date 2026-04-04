@@ -3,7 +3,6 @@ from collections.abc import AsyncGenerator, Iterable
 from dishka import Provider, Scope, provide
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from redis.asyncio import Redis as AsyncRedis
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -66,6 +65,7 @@ class ConfigRedis(BaseModel):
 
 class ConfigServer(BaseModel):
     root_path: str = ""
+    agent_artifacts_dir: str = "/opt/hack-agent-artifacts"
 
 
 class ConfigEmail(BaseModel):
@@ -102,13 +102,6 @@ class ProviderConfig(Provider):
         return config.postgres
 
     @provide(scope=Scope.APP)
-    def get_config_redis(
-        self,
-        config: ConfigHack,
-    ) -> ConfigRedis:
-        return config.redis
-
-    @provide(scope=Scope.APP)
     def get_config_email(
         self,
         config: ConfigHack,
@@ -136,27 +129,6 @@ class ProviderDatabase(Provider):
             expire_on_commit=False,
         ) as session:
             yield session
-
-
-class ProviderRedis(Provider):
-    @provide(scope=Scope.APP)
-    async def get_redis_client(
-        self,
-        config: ConfigRedis,
-    ) -> AsyncGenerator[AsyncRedis, None]:
-        client = AsyncRedis.from_url(
-            config.get_redis_url(),
-            decode_responses=config.decode_responses,
-            max_connections=config.max_connections,
-            socket_timeout=config.socket_timeout,
-            ssl=config.ssl,
-        )
-        try:
-            yield client
-        finally:
-            await client.close()
-            if client.connection_pool:
-                await client.connection_pool.disconnect()
 
 
 class ProviderTestDatabase(Provider):

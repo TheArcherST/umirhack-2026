@@ -45,14 +45,10 @@ export default function Auth() {
     try {
       if (mode === 'login') {
         const res = await apiLogin({
-          username: username.trim() || email.trim(),
+          username: username.trim(),
           password,
         })
-        // Save session
-        localStorage.setItem('auth_token', res.login_session_token)
-        const user = { id: res.login_session_uid, email: email.trim() || username.trim(), name: username.trim() || email.trim() }
-        localStorage.setItem('auth_user', JSON.stringify(user))
-        login(res.login_session_token, user)
+        login(res.token, res.user)
         navigate('/dashboard')
       } else {
         const res = await apiRegister({
@@ -62,9 +58,8 @@ export default function Auth() {
         })
         if (res.email_verification_required) {
           setStep('verify')
-        } else {
-          // Already verified, auto-login
-          login('', { id: username.trim(), email: email.trim(), name: username.trim() })
+        } else if (res.auth) {
+          login(res.auth.token, res.auth.user)
           navigate('/dashboard')
         }
       }
@@ -117,9 +112,8 @@ export default function Auth() {
     setError('')
     setLoading(true)
     try {
-      await apiVerifyCode({ username: username.trim(), code })
-      // After verification, auto-login
-      login('', { id: username.trim(), email: email.trim(), name: username.trim() })
+      const res = await apiVerifyCode({ username: username.trim(), code })
+      login(res.auth.token, res.auth.user)
       navigate('/dashboard')
     } catch (err: any) {
       setError(extractError(err))

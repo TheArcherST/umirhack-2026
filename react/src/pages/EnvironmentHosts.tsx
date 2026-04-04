@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { stubGetAgents } from '@/api/stubs'
+import { stubGetHosts } from '@/api/stubs'
 import { timeAgo } from '@/lib/utils'
 import type { AgentStatus } from '@/api/types'
 import { cn } from '@/lib/utils'
@@ -17,14 +17,18 @@ export default function EnvironmentHosts() {
   const [filter, setFilter] = useState<Filter>('')
   const { t } = useI18n()
 
-  const { data: agents = [], isLoading } = useQuery({
+  const { data: hosts = [], isLoading } = useQuery({
     queryKey: ['hosts-env', envId, filter],
-    queryFn: () => stubGetAgents({ environment_id: envId, status: filter || undefined }),
+    queryFn: async () => {
+      const rows = await stubGetHosts(envId!)
+      return filter ? rows.filter((host) => host.status === filter) : rows
+    },
     refetchInterval: 15_000,
+    enabled: !!envId,
   })
 
-  const online = agents.filter((a) => a.status === 'online').length
-  const offline = agents.length - online
+  const online = hosts.filter((host) => host.status === 'online').length
+  const offline = hosts.length - online
 
   const filters: [Filter, string, string?, string?][] = [
     ['', t('common.all')],
@@ -74,29 +78,29 @@ export default function EnvironmentHosts() {
                 {isLoading && (
                   <tr><td colSpan={6} className="px-4 py-8 text-center text-xs text-muted-foreground">{t('common.loading')}</td></tr>
                 )}
-                {!isLoading && agents.map((agent) => (
+                {!isLoading && hosts.map((host) => (
                   <tr
-                    key={agent.id}
+                    key={host.id}
                     className="border-b border-border/50 last:border-0 hover:bg-accent/30 transition-colors cursor-pointer"
-                    onClick={() => navigate(`/environments/${envId}/hosts/${agent.id}`)}
+                    onClick={() => navigate(`/environments/${envId}/hosts/${host.id}`)}
                   >
                     <td className="px-4 py-3">
-                      <p className="text-xs font-mono font-medium">{agent.name}</p>
-                      <p className="text-xs text-muted-foreground">{agent.ip_address}</p>
+                      <p className="text-xs font-mono font-medium">{host.name}</p>
+                      <p className="text-xs text-muted-foreground">{host.primary_ipv4 ?? host.primary_ipv6 ?? '—'}</p>
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell">
-                      <Badge variant="outline" className="uppercase text-[10px]">{agent.os}</Badge>
+                      <Badge variant="outline" className="uppercase text-[10px]">{host.os_name ?? 'unknown'}</Badge>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
-                        <span className={cn('w-1.5 h-1.5 rounded-full', agent.status === 'online' ? 'bg-green-400 status-pulse' : 'bg-muted-foreground/40')} />
-                        <span className={cn('text-xs font-mono', agent.status === 'online' ? 'text-green-400' : 'text-muted-foreground')}>
-                          {agent.status === 'online' ? t('common.online') : t('common.offline')}
+                        <span className={cn('w-1.5 h-1.5 rounded-full', host.status === 'online' ? 'bg-green-400 status-pulse' : 'bg-muted-foreground/40')} />
+                        <span className={cn('text-xs font-mono', host.status === 'online' ? 'text-green-400' : 'text-muted-foreground')}>
+                          {host.status === 'online' ? t('common.online') : t('common.offline')}
                         </span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 hidden md:table-cell font-mono text-xs text-muted-foreground">{timeAgo(agent.last_heartbeat)}</td>
-                    <td className="px-4 py-3 hidden lg:table-cell font-mono text-xs text-muted-foreground">{agent.tasks_count}</td>
+                    <td className="px-4 py-3 hidden md:table-cell font-mono text-xs text-muted-foreground">{timeAgo(host.last_seen_at)}</td>
+                    <td className="px-4 py-3 hidden lg:table-cell font-mono text-xs text-muted-foreground">{host.hostname ?? host.name}</td>
                     <td className="px-4 py-3">
                       <button className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
                         <ChevronRight size={13} />
@@ -104,7 +108,7 @@ export default function EnvironmentHosts() {
                     </td>
                   </tr>
                 ))}
-                {!isLoading && agents.length === 0 && (
+                {!isLoading && hosts.length === 0 && (
                   <tr><td colSpan={6} className="px-4 py-8 text-center text-xs text-muted-foreground">{t('env.noHosts')}</td></tr>
                 )}
               </tbody>

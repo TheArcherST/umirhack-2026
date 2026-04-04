@@ -48,6 +48,7 @@ export function CreateTaskModal({ open, onClose, onCreated, envId }: Props) {
     try {
       await stubCreateTaskV2({
         agent_id: agentId,
+        environment_id: envId || '',
         template,
         target: selectedTemplate?.requiresTarget ? target.trim() : undefined,
       })

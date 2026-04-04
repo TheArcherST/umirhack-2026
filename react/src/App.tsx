@@ -32,25 +32,25 @@ function ProtectedRoutes() {
     const {isAuthenticated} = useAuth()
     if (!isAuthenticated) return <Navigate to="/login" replace/>
     return (
-        <Routes>
-            {/* Project routes */}
-            <Route element={<Layout/>}>
-                <Route index element={<Navigate to="/dashboard" replace/>}/>
-                <Route path="dashboard" element={<Dashboard/>}/>
-                <Route path="agents" element={<ProjectAgents/>}/>
-                <Route path="agents/:agentId/tasks" element={<AgentTasks/>}/>
-                <Route path="members" element={<ProjectMembers/>}/>
-                <Route path="members/:memberId" element={<MemberDetail/>}/>
-                <Route path="settings/profile" element={<ProfileSettings/>}/>
-            </Route>
-            {/* Environment routes */}
-            <Route element={<EnvironmentLayout/>}>
-                <Route path="environments/:envId" element={<EnvironmentDashboard/>}/>
-                <Route path="environments/:envId/hosts" element={<EnvironmentHosts/>}/>
-                <Route path="environments/:envId/hosts/:hostId" element={<EnvironmentHostDetail/>}/>
-                <Route path="environments/:envId/tasks" element={<EnvironmentTasks/>}/>
-            </Route>
-        </Routes>
+        <ProjectProvider>
+            <Routes>
+                <Route element={<Layout/>}>
+                    <Route index element={<Navigate to="/dashboard" replace/>}/>
+                    <Route path="dashboard" element={<Dashboard/>}/>
+                    <Route path="agents" element={<ProjectAgents/>}/>
+                    <Route path="agents/:agentId/tasks" element={<AgentTasks/>}/>
+                    <Route path="members" element={<ProjectMembers/>}/>
+                    <Route path="members/:memberId" element={<MemberDetail/>}/>
+                    <Route path="settings/profile" element={<ProfileSettings/>}/>
+                </Route>
+                <Route element={<EnvironmentLayout/>}>
+                    <Route path="environments/:envId" element={<EnvironmentDashboard/>}/>
+                    <Route path="environments/:envId/hosts" element={<EnvironmentHosts/>}/>
+                    <Route path="environments/:envId/hosts/:hostId" element={<EnvironmentHostDetail/>}/>
+                    <Route path="environments/:envId/tasks" element={<EnvironmentTasks/>}/>
+                </Route>
+            </Routes>
+        </ProjectProvider>
     )
 }
 
@@ -58,18 +58,16 @@ export default function App() {
     return (
         <QueryClientProvider client={queryClient}>
             <I18nProvider>
-                <ProjectProvider>
-                    <ThemeProvider>
-                        <AuthProvider>
-                            <BrowserRouter>
-                                <Routes>
-                                    <Route path="/login" element={<Auth/>}/>
-                                    <Route path="/*" element={<ProtectedRoutes/>}/>
-                                </Routes>
-                            </BrowserRouter>
-                        </AuthProvider>
-                    </ThemeProvider>
-                </ProjectProvider>
+                <ThemeProvider>
+                    <AuthProvider>
+                        <BrowserRouter>
+                            <Routes>
+                                <Route path="/login" element={<Auth/>}/>
+                                <Route path="/*" element={<ProtectedRoutes/>}/>
+                            </Routes>
+                        </BrowserRouter>
+                    </AuthProvider>
+                </ThemeProvider>
             </I18nProvider>
         </QueryClientProvider>
     )

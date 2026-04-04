@@ -10,6 +10,7 @@ interface ProjectContextValue {
     selectProject: (id: string) => void
     selectEnvironment: (id: string | null) => void
     createProject: (name: string, members: string[]) => Promise<void>
+    refreshEnvironments: (projectId?: string) => Promise<void>
     loading: boolean
 }
 
@@ -29,6 +30,16 @@ export function ProjectProvider({children}: { children: React.ReactNode }) {
     const currentProject = projects.find((p) => p.id === currentProjectId) ?? null
     const currentEnv = environments.find((e) => e.id === currentEnvId) ?? null
 
+    const refreshEnvironments = useCallback(async (projectId?: string) => {
+        const resolvedProjectId = projectId ?? currentProjectId
+        if (!resolvedProjectId) {
+            setEnvironments([])
+            return
+        }
+        const data = await stubGetEnvironments(resolvedProjectId)
+        setEnvironments(data)
+    }, [currentProjectId])
+
     // Load projects on mount
     useEffect(() => {
         let cancelled = false
@@ -37,8 +48,12 @@ export function ProjectProvider({children}: { children: React.ReactNode }) {
                 const data = await stubGetProjects()
                 if (!cancelled) {
                     setProjects(data)
-                    if (!currentProjectId && data.length > 0) {
+                    if (
+                        data.length > 0 &&
+                        (!currentProjectId || !data.some((project) => project.id === currentProjectId))
+                    ) {
                         setCurrentProjectId(data[0].id)
+                        localStorage.setItem('currentProjectId', data[0].id)
                     }
                 }
             } catch { /* ignore */
@@ -62,6 +77,9 @@ export function ProjectProvider({children}: { children: React.ReactNode }) {
             }
         }
         load()
+        return () => {
+            cancelled = true
+        }
     }, [currentProjectId])
 
     const selectProject = useCallback((id: string) => {
@@ -73,6 +91,7 @@ export function ProjectProvider({children}: { children: React.ReactNode }) {
     const selectEnvironment = useCallback((id: string | null) => {
         setCurrentEnvId(id)
         if (id) localStorage.setItem('currentEnvId', id)
+        else localStorage.removeItem('currentEnvId')
     }, [])
 
     const createProject = useCallback(async (name: string, _members: string[]) => {
@@ -81,13 +100,11 @@ export function ProjectProvider({children}: { children: React.ReactNode }) {
             const project = await stubCreateProject({name})
             setProjects((prev) => [...prev, project])
             selectProject(project.id)
-            // Reload environments
-            const envs = await stubGetEnvironments(project.id)
-            setEnvironments(envs)
+            await refreshEnvironments(project.id)
         } finally {
             setLoading(false)
         }
-    }, [selectProject])
+    }, [refreshEnvironments, selectProject])
 
     return (
         <ProjectContext.Provider
@@ -99,6 +116,7 @@ export function ProjectProvider({children}: { children: React.ReactNode }) {
                 selectProject,
                 selectEnvironment,
                 createProject,
+                refreshEnvironments,
                 loading
             }}
         >

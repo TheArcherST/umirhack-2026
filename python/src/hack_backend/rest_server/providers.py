@@ -1,14 +1,13 @@
-import uuid
 from typing import NewType
-from uuid import UUID
 
 from dishka import Provider, Scope, from_context, provide
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.requests import Request
 from starlette.testclient import TestClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from hack_backend.core.models import LoginSession, User
-from hack_backend.core.services.access import AccessService, ErrorUnauthorized
+from hack_backend.rest_server.dependencies import resolve_bearer_login_session
 
 AuthorizedUser = NewType("AuthorizedUser", User)
 CurrentLoginSession = NewType("CurrentLoginSession", LoginSession)
@@ -26,29 +25,12 @@ class ProviderServer(Provider):
     async def get_current_login_session(
         self,
         request: Request,
-        access_service: AccessService,
+        orm_session: AsyncSession,
     ) -> CurrentLoginSession:
-        login_session_uid = request.headers.get(
-            "X-Login-Session-Uid",
-            str(uuid.uuid4()),
+        login_session = await resolve_bearer_login_session(
+            authorization=request.headers.get("Authorization"),
+            session=orm_session,
         )
-        login_session_uid = UUID(login_session_uid)
-        login_session_token = request.headers.get(
-            "X-Login-Session-Token",
-            "stub-token",
-        )
-
-        try:
-            login_session = await access_service.lookup_login_session(
-                login_session_uid=login_session_uid,
-                login_session_token=login_session_token,
-            )
-        except ErrorUnauthorized as e:
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid login session",
-            ) from e
-
         return CurrentLoginSession(login_session)
 
     @provide(scope=Scope.REQUEST)
@@ -57,8 +39,3 @@ class ProviderServer(Provider):
         current_login_session: CurrentLoginSession,
     ) -> AuthorizedUser:
         return AuthorizedUser(current_login_session.user)
-
-    get_access_service = provide(
-        AccessService,
-        scope=Scope.REQUEST,
-    )
