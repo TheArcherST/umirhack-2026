@@ -81,7 +81,9 @@ services:
   tool-artifacts:
     profiles:
       - tools
-    build: ./artifacts
+    build:
+      context: .
+      dockerfile: artifacts/Dockerfile
     entrypoint:
       - bash
       - -c

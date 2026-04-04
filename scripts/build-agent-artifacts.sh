@@ -70,7 +70,6 @@ build_linux_target() {
   local output_name="$3"
 
   prepare_output_dir "$output_dir"
-  ensure_rust_target "$target"
   (
     cd "$WORKSPACE_DIR"
     cargo zigbuild --release -p hack_agent --target "$target"
@@ -86,7 +85,6 @@ build_windows_target() {
   local output_name="$3"
 
   prepare_output_dir "$output_dir"
-  ensure_rust_target "$target"
   (
     cd "$WORKSPACE_DIR"
     cargo build --release -p hack_agent --target "$target"
@@ -133,20 +131,41 @@ need_cmd cargo
 need_cmd rustup
 need_cmd cargo-zigbuild
 
+# Pre-add all cross-compilation targets upfront — rustup is not safe to call
+# concurrently, so we do it here before launching parallel builds.
+rustup target add \
+  x86_64-unknown-linux-musl \
+  aarch64-unknown-linux-musl \
+  x86_64-pc-windows-gnu \
+  >/dev/null
+
+# Build all container targets in parallel and collect their PIDs.
+pids=()
+
 build_linux_target \
   "x86_64-unknown-linux-musl" \
   "linux/amd64" \
-  "hack-agent"
+  "hack-agent" &
+pids+=($!)
 
 build_linux_target \
   "aarch64-unknown-linux-musl" \
   "linux/arm64" \
-  "hack-agent"
+  "hack-agent" &
+pids+=($!)
 
 build_windows_target \
   "x86_64-pc-windows-gnu" \
   "windows/amd64" \
-  "hack-agent.exe"
+  "hack-agent.exe" &
+pids+=($!)
+
+# Wait for all parallel builds; fail if any of them failed.
+failed=0
+for pid in "${pids[@]}"; do
+  wait "$pid" || failed=1
+done
+[ "$failed" -eq 0 ] || { echo "One or more container builds failed" >&2; exit 1; }
 
 if [[ "$CONTAINER_ONLY" -eq 1 ]]; then
   echo "Skipping macOS artifacts in container-only mode."
@@ -161,17 +180,28 @@ elif [[ "$(uname -s)" == "Darwin" ]]; then
     fi
   done
 
+  # macOS native builds also in parallel
+  pids=()
+
   build_native_target \
     "aarch64-apple-darwin" \
     "macos/arm64" \
     "hack_agent" \
-    "hack-agent"
+    "hack-agent" &
+  pids+=($!)
 
   build_native_target \
     "x86_64-apple-darwin" \
     "macos/amd64" \
     "hack_agent" \
-    "hack-agent"
+    "hack-agent" &
+  pids+=($!)
+
+  failed=0
+  for pid in "${pids[@]}"; do
+    wait "$pid" || failed=1
+  done
+  [ "$failed" -eq 0 ] || { echo "One or more macOS builds failed" >&2; exit 1; }
 else
   echo "Skipping macOS artifacts on non-Darwin host."
   echo "Run this script on macOS with Rust targets installed to publish Darwin builds."
