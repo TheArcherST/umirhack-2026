@@ -11,9 +11,9 @@ from hack_backend.core.models import Project, ProjectMember, User
 from hack_backend.core.models.enums import InviteStatus
 from hack_backend.core.providers import ConfigEmail, ConfigServer
 from hack_backend.core.security import hash_secret, new_secret, verify_secret
+from hack_backend.core.services.access import AccessService
 from hack_backend.core.services.platform_service import PlatformService
 from hack_backend.core.services.uow_ctl import UoWCtl
-from hack_backend.rest_server.dependencies import require_project_member
 from hack_backend.rest_server.providers import AuthorizedUser
 from hack_backend.rest_server.schemas.platform import ProjectDTO, ProjectMemberDTO
 from hack_backend.rest_server.serializers import (
@@ -65,11 +65,11 @@ async def create_project(
 async def list_project_members(
     project_id: str,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
 ) -> list[ProjectMemberDTO]:
-    await require_project_member(
+    await access_service.require_project_member(
         project_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     rows = await platform_service.list_project_members(project_id)
@@ -86,14 +86,14 @@ async def invite_project_member(
     project_id: str,
     payload: InviteMemberPayload,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
     email_config: FromDishka[ConfigEmail],
     server_config: FromDishka[ConfigServer],
     uow_ctl: FromDishka[UoWCtl],
 ) -> ProjectMemberDTO:
-    await require_project_member(
+    await access_service.require_project_member(
         project_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     project = await platform_service.session.get(Project, project_id)
@@ -199,12 +199,12 @@ async def remove_project_member(
     project_id: str,
     user_id: int,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
     uow_ctl: FromDishka[UoWCtl],
 ) -> None:
-    project = await require_project_member(
+    project = await access_service.require_project_member(
         project_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     await platform_service.remove_project_member(project=project, user_id=user_id)
@@ -221,12 +221,12 @@ async def update_project_role(
     user_id: int,
     payload: UpdateProjectRolePayload,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
     uow_ctl: FromDishka[UoWCtl],
 ) -> ProjectMemberDTO:
-    await require_project_member(
+    await access_service.require_project_member(
         project_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     membership, user = await platform_service.update_project_member_role(

@@ -3,15 +3,15 @@ from urllib.parse import urlsplit, urlunsplit
 
 from dishka import FromDishka
 from dishka.integrations.fastapi import inject
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from hack_backend.core.providers import ConfigHack
-from hack_backend.core.models import Agent, AgentBootstrapToken, User
+from hack_backend.core.models import Agent, AgentBootstrapToken
 from hack_backend.core.security import hash_secret
+from hack_backend.core.services.access import AccessService
 from hack_backend.core.services.platform_service import PlatformService
 from hack_backend.core.services.uow_ctl import UoWCtl
 from hack_backend.rest_server.agent_install import (
@@ -22,7 +22,6 @@ from hack_backend.rest_server.agent_install import (
     render_install_script,
     script_kind_for_platform,
 )
-from hack_backend.rest_server.dependencies import get_session, require_project_member
 from hack_backend.rest_server.providers import AuthorizedUser
 from hack_backend.rest_server.schemas.platform import AgentDTO, InstallScriptDTO, TaskRunDTO
 from hack_backend.rest_server.serializers import agent_to_dto, task_run_to_dto
@@ -65,14 +64,14 @@ class UpdateAgentPayload(BaseModel):
 async def list_agents(
     project_id: str,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
     uow_ctl: FromDishka[UoWCtl],
     environment_id: str | None = None,
     status: str | None = None,
 ) -> list[AgentDTO]:
-    await require_project_member(
+    await access_service.require_project_member(
         project_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     agents, environments_by_agent = await platform_service.list_agents(
@@ -95,12 +94,12 @@ async def list_agents(
 async def create_agent(
     payload: CreateAgentPayload,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
     uow_ctl: FromDishka[UoWCtl],
 ) -> AgentDTO:
-    await require_project_member(
+    await access_service.require_project_member(
         payload.project_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     agent, environments = await platform_service.create_agent(
@@ -120,15 +119,15 @@ async def update_agent(
     agent_id: str,
     payload: UpdateAgentPayload,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
     uow_ctl: FromDishka[UoWCtl],
 ) -> AgentDTO:
     agent = await platform_service.session.get(Agent, agent_id)
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
-    await require_project_member(
+    await access_service.require_project_member(
         agent.project_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     agent, environments = await platform_service.update_agent(
@@ -146,15 +145,15 @@ async def update_agent(
 async def delete_agent(
     agent_id: str,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
     uow_ctl: FromDishka[UoWCtl],
 ) -> None:
     agent = await platform_service.session.get(Agent, agent_id)
     if agent is None:
         return
-    await require_project_member(
+    await access_service.require_project_member(
         agent.project_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     await platform_service.delete_agent(agent_id)
@@ -168,15 +167,15 @@ async def get_install_script(
     request: Request,
     config: FromDishka[ConfigHack],
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
     uow_ctl: FromDishka[UoWCtl],
 ) -> InstallScriptDTO:
     agent = await platform_service.session.get(Agent, agent_id)
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
-    await require_project_member(
+    await access_service.require_project_member(
         agent.project_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     try:
@@ -220,14 +219,14 @@ async def get_agent_install_script_payload(
     bootstrap_token: str,
     request: Request,
     config: FromDishka[ConfigHack],
-    session: AsyncSession = Depends(get_session),
+    platform_service: FromDishka[PlatformService],
 ) -> PlainTextResponse:
     try:
         normalized_platform = parse_install_platform(platform)
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     token_hash = hash_secret(bootstrap_token)
-    agent = await session.scalar(
+    agent = await platform_service.session.scalar(
         select(Agent)
         .join(AgentBootstrapToken, AgentBootstrapToken.agent_id == Agent.id)
         .where(
@@ -304,14 +303,14 @@ async def download_agent_artifact(
 async def list_agent_task_runs(
     agent_id: str,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
 ) -> list[TaskRunDTO]:
     agent = await platform_service.session.get(Agent, agent_id)
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
-    await require_project_member(
+    await access_service.require_project_member(
         agent.project_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     task_runs = await platform_service.list_agent_task_runs(agent_id)

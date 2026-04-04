@@ -4,9 +4,9 @@ from dishka import FromDishka
 from dishka.integrations.fastapi import inject
 from fastapi import APIRouter, HTTPException
 
-from hack_backend.core.models import Host, User
+from hack_backend.core.models import Host
+from hack_backend.core.services.access import AccessService
 from hack_backend.core.services.platform_service import PlatformService
-from hack_backend.rest_server.dependencies import require_environment_member
 from hack_backend.rest_server.providers import AuthorizedUser
 from hack_backend.rest_server.schemas.platform import (
     HostDetailDTO,
@@ -27,14 +27,14 @@ router = APIRouter(tags=["hosts"])
 async def get_host(
     host_id: str,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
 ) -> HostDetailDTO:
     host = await platform_service.session.get(Host, host_id)
     if host is None:
         raise HTTPException(status_code=404, detail="Host not found")
-    await require_environment_member(
+    await access_service.require_environment_member(
         host.environment_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     return host_detail_to_dto(host)
@@ -45,14 +45,14 @@ async def get_host(
 async def list_host_telemetry(
     host_id: str,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
 ) -> list[TelemetryRecordDTO]:
     host = await platform_service.session.get(Host, host_id)
     if host is None:
         raise HTTPException(status_code=404, detail="Host not found")
-    await require_environment_member(
+    await access_service.require_environment_member(
         host.environment_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     records = await platform_service.list_host_telemetry(host_id)
@@ -64,14 +64,14 @@ async def list_host_telemetry(
 async def list_host_metrics(
     host_id: str,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
 ) -> list[MetricSnapshotDTO]:
     host = await platform_service.session.get(Host, host_id)
     if host is None:
         raise HTTPException(status_code=404, detail="Host not found")
-    await require_environment_member(
+    await access_service.require_environment_member(
         host.environment_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     metrics = await platform_service.list_host_metrics(host_id)

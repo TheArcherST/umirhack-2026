@@ -4,10 +4,19 @@ from uuid import UUID
 
 from argon2 import PasswordHasher
 from argon2 import exceptions as argon2_exceptions
+from fastapi import HTTPException
 from sqlalchemy import func, or_, select
+from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from hack_backend.core.models import LoginSession, User
+from hack_backend.core.models import (
+    Environment,
+    EnvironmentMember,
+    LoginSession,
+    Project,
+    ProjectMember,
+    User,
+)
 from hack_backend.core.security import hash_secret, new_secret, verify_secret
 
 
@@ -143,6 +152,75 @@ class AccessService:
         await self.orm_session.flush()
 
         return login_session
+
+    async def resolve_bearer_login_session(
+        self,
+        authorization: str | None,
+    ) -> LoginSession:
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing bearer token")
+
+        token = authorization.removeprefix("Bearer ").strip()
+        if not token:
+            raise HTTPException(status_code=401, detail="Missing bearer token")
+
+        login_session = await self.orm_session.scalar(
+            select(LoginSession)
+            .options(joinedload(LoginSession.user))
+            .where(LoginSession.token == token)
+        )
+        if login_session is None:
+            raise HTTPException(status_code=401, detail="Invalid bearer token")
+        return login_session
+
+    async def require_project_member(
+        self,
+        project_id: str,
+        *,
+        user_id: int,
+    ) -> Project:
+        project = await self.orm_session.get(Project, project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        if project.owner_id == user_id:
+            return project
+
+        membership = await self.orm_session.get(
+            ProjectMember,
+            {"project_id": project_id, "user_id": user_id},
+        )
+        if membership is None:
+            raise HTTPException(status_code=403, detail="Project access denied")
+        return project
+
+    async def require_environment_member(
+        self,
+        environment_id: str,
+        *,
+        user_id: int,
+    ) -> Environment:
+        environment = await self.orm_session.get(Environment, environment_id)
+        if environment is None:
+            raise HTTPException(status_code=404, detail="Environment not found")
+
+        project = await self.require_project_member(
+            environment.project_id,
+            user_id=user_id,
+        )
+        if project.owner_id == user_id:
+            return environment
+
+        membership = await self.orm_session.get(
+            EnvironmentMember,
+            {"environment_id": environment_id, "user_id": user_id},
+        )
+        if membership is None:
+            raise HTTPException(
+                status_code=403,
+                detail="Environment access denied",
+            )
+        return environment
 
     async def lookup_login_session(
         self,
