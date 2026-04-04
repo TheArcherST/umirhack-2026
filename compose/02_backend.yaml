@@ -83,8 +83,8 @@ services:
       - tools
     build: ./artifacts
     entrypoint:
-      - sh
-      - -lc
+      - bash
+      - -c
       - bash /workspace/scripts/build-agent-artifacts.sh $${ARTIFACTS_ARGS:---container-only}
     restart: no
     working_dir: /workspace
