@@ -1,0 +1,7 @@
+react/node_modules
+react/dist
+python/.venv
+rust/target
+artifacts/rust/hack-agent
+.git
+*.log
