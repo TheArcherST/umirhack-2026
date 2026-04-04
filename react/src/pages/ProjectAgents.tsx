@@ -7,7 +7,7 @@ import {Button} from '@/components/ui/button'
 import {stubGetAgentInstallScript, stubGetAgents, stubGetEnvironments} from '@/api/stubs'
 import {timeAgo} from '@/lib/utils'
 import type {AgentStatus, Agent} from '@/api/types'
-import {cn} from '@/lib/utils'
+import {cn, copyText} from '@/lib/utils'
 import {useI18n} from '@/i18n'
 import {useProject} from '@/hooks/useProject'
 import {AddAgentModal} from '@/components/AddAgentModal'
@@ -59,18 +59,14 @@ export default function ProjectAgents() {
         }
 
         try {
-            await navigator.clipboard.writeText(command)
+            const copied = await copyText(command)
+            if (!copied) {
+                throw new Error('Copy command failed')
+            }
             setCopiedId(agent.id)
             setTimeout(() => setCopiedId(null), 1500)
-        } catch {
-            const ta = document.createElement('textarea')
-            ta.value = command
-            document.body.appendChild(ta)
-            ta.select()
-            document.execCommand('copy')
-            document.body.removeChild(ta)
-            setCopiedId(agent.id)
-            setTimeout(() => setCopiedId(null), 1500)
+        } catch (error: any) {
+            setActionError(error?.message ?? 'Failed to copy install command')
         }
     }
 

@@ -188,6 +188,7 @@
     "agentAdded": "Agent added successfully",
     "installScript": "To connect the agent, run this script on the target machine:",
     "copyScript": "Copy command",
+    "copyFailed": "Failed to copy command",
     "copied": "Copied!",
     "editAgent": "Edit Agent",
     "deleteAgent": "Delete Agent",

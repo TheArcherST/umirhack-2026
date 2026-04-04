@@ -35,3 +35,33 @@ export function timeAgo(dateStr: string): string {
     if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
     return `${Math.floor(diff / 86400)}d ago`
 }
+
+export async function copyText(text: string): Promise<boolean> {
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text)
+            return true
+        }
+    } catch {
+        // Fall back to execCommand below for browsers that block Clipboard API.
+    }
+
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.setAttribute('readonly', '')
+    textarea.style.position = 'fixed'
+    textarea.style.top = '0'
+    textarea.style.left = '0'
+    textarea.style.opacity = '0'
+
+    document.body.appendChild(textarea)
+    textarea.focus()
+    textarea.select()
+    textarea.setSelectionRange(0, textarea.value.length)
+
+    try {
+        return document.execCommand('copy')
+    } finally {
+        document.body.removeChild(textarea)
+    }
+}

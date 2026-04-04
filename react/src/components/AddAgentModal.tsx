@@ -14,7 +14,7 @@ import {stubCreateAgent, stubGetEnvironments} from '@/api/stubs'
 import type {AgentOS, InstallScript} from '@/api/types'
 import {useI18n} from '@/i18n'
 import {useProject} from '@/hooks/useProject'
-import {cn} from '@/lib/utils'
+import {cn, copyText} from '@/lib/utils'
 
 interface Props {
     open: boolean
@@ -80,9 +80,14 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
         }
     }
 
-    const copyScript = () => {
+    const copyScript = async () => {
         if (!installScript) return
-        navigator.clipboard.writeText(installScript.command)
+        const copiedOk = await copyText(installScript.command)
+        if (!copiedOk) {
+            setError(t('agent.copyFailed'))
+            return
+        }
+        setError('')
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
     }

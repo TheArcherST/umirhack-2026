@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
@@ -213,6 +211,7 @@ async def get_install_script(
 @router.get(
     "/agent-install/{platform}/{bootstrap_token}",
     response_class=PlainTextResponse,
+    response_model=None,
     name="get_agent_install_script_payload",
 )
 @inject
