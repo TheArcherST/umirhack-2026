@@ -1,7 +1,14 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from typing import Any
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+
+from hack_backend.core.models import Agent, AgentStatus
+from hack_backend.core.providers import ConfigHack
 
 
 def _template_id_for_kind(templates: list[dict[str, Any]], kind: str) -> str:
@@ -40,6 +47,27 @@ def _complete_success(
             "failure_reason": None,
         },
     )
+
+
+def _set_agent_seen_state(
+    *,
+    agent_id: str,
+    last_seen_at: datetime,
+    status: AgentStatus,
+) -> None:
+    config = ConfigHack()
+    engine = create_engine(
+        config.postgres.get_sqlalchemy_url("psycopg", is_test_database=True)
+    )
+    try:
+        with Session(engine) as session:
+            agent = session.get(Agent, agent_id)
+            assert agent is not None
+            agent.last_seen_at = last_seen_at
+            agent.status = status
+            session.commit()
+    finally:
+        engine.dispose()
 
 
 def test_mock_agent_drives_bootstrap_and_projection_flow(api) -> None:
@@ -232,6 +260,51 @@ def test_mock_agent_drives_bootstrap_and_projection_flow(api) -> None:
     assert graph[0]["source_host_id"] == host["id"]
     assert graph[0]["target_host_id"] == host["id"]
     assert graph[0]["target_label"] == "alpha.internal"
+
+
+def test_heartbeat_restores_agent_online_status_after_stale_marker(api) -> None:
+    owner = api.register_user(prefix="operator")
+    bundle = api.create_project_bundle(
+        user=owner,
+        project_name="Fleet Heartbeat",
+    )
+    created_agent = api.create_agent(
+        user=owner,
+        project_id=bundle.project["id"],
+        environment_id=bundle.environment["id"],
+        name="heartbeat-agent",
+    )
+    bootstrap_token = api.issue_install_token(
+        user=owner,
+        agent_id=created_agent["id"],
+    )
+    agent = api.register_agent(bootstrap_token=bootstrap_token)
+
+    _set_agent_seen_state(
+        agent_id=created_agent["id"],
+        last_seen_at=datetime.now(UTC) - timedelta(minutes=6),
+        status=AgentStatus.OFFLINE,
+    )
+
+    agents_response = api.client.get(
+        "/agents",
+        params={"project_id": bundle.project["id"]},
+        headers=owner.headers,
+    )
+    assert agents_response.status_code == 200, agents_response.text
+    assert agents_response.json()[0]["status"] == "offline"
+
+    api.heartbeat_agent(agent=agent)
+
+    agents_response = api.client.get(
+        "/agents",
+        params={"project_id": bundle.project["id"]},
+        headers=owner.headers,
+    )
+    assert agents_response.status_code == 200, agents_response.text
+    refreshed_agent = agents_response.json()[0]
+    assert refreshed_agent["status"] == "online"
+    assert refreshed_agent["last_seen_at"] is not None
 
 
 def test_custom_command_tasks_and_safe_install_script(api) -> None:

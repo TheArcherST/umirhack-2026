@@ -4,17 +4,16 @@ from typing import Any
 
 from dishka import FromDishka
 from dishka.integrations.fastapi import inject
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from hack_backend.core.models import Agent
 from hack_backend.core.services.agent_runtime_service import (
     AgentRuntimeService,
     LEASE_SECONDS,
 )
 from hack_backend.core.services.uow_ctl import UoWCtl
-from hack_backend.rest_server.dependencies import get_session
 from hack_backend.rest_server.schemas.platform import AgentTaskLeaseDTO
+from hack_backend.rest_server.providers import CurrentAgent
 
 router = APIRouter(prefix="/agent", tags=["agent-api"])
 
@@ -60,17 +59,6 @@ class CompletePayload(BaseModel):
     failure_reason: str | None = None
 
 
-async def get_current_agent(
-    session=Depends(get_session),
-    agent_id: str | None = Header(default=None, alias="X-Agent-Id"),
-    agent_token: str | None = Header(default=None, alias="X-Agent-Token"),
-) -> Agent:
-    if not agent_id or not agent_token:
-        raise HTTPException(status_code=401, detail="Missing agent credentials")
-    service = AgentRuntimeService(session)
-    return await service.authenticate(agent_id=agent_id, agent_token=agent_token)
-
-
 @router.post("/register", response_model=AgentRegisterResponse)
 @inject
 async def register_agent(
@@ -99,7 +87,7 @@ async def heartbeat(
     payload: AgentHeartbeatPayload,
     runtime_service: FromDishka[AgentRuntimeService],
     uow_ctl: FromDishka[UoWCtl],
-    agent: Agent = Depends(get_current_agent),
+    agent: FromDishka[CurrentAgent],
 ) -> dict[str, str]:
     await runtime_service.heartbeat(
         agent=agent,
@@ -116,7 +104,7 @@ async def poll_tasks(
     payload: AgentPollPayload,
     runtime_service: FromDishka[AgentRuntimeService],
     uow_ctl: FromDishka[UoWCtl],
-    agent: Agent = Depends(get_current_agent),
+    agent: FromDishka[CurrentAgent],
 ) -> list[AgentTaskLeaseDTO]:
     results = await runtime_service.poll(agent=agent, limit=payload.limit)
     await uow_ctl.commit()
@@ -130,7 +118,7 @@ async def mark_task_running(
     payload: RunningPayload,
     runtime_service: FromDishka[AgentRuntimeService],
     uow_ctl: FromDishka[UoWCtl],
-    agent: Agent = Depends(get_current_agent),
+    agent: FromDishka[CurrentAgent],
 ) -> dict[str, str]:
     await runtime_service.mark_running(
         agent=agent,
@@ -148,7 +136,7 @@ async def complete_task(
     payload: CompletePayload,
     runtime_service: FromDishka[AgentRuntimeService],
     uow_ctl: FromDishka[UoWCtl],
-    agent: Agent = Depends(get_current_agent),
+    agent: FromDishka[CurrentAgent],
 ) -> dict[str, str]:
     await runtime_service.complete(
         agent=agent,

@@ -2,15 +2,18 @@ from typing import NewType
 
 from dishka import Provider, Scope, from_context, provide
 from fastapi import FastAPI
+from fastapi import HTTPException
 from fastapi.requests import Request
 from starlette.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from hack_backend.core.models import LoginSession, User
+from hack_backend.core.models import Agent, LoginSession, User
+from hack_backend.core.services.agent_runtime_service import AgentRuntimeService
 from hack_backend.rest_server.dependencies import resolve_bearer_login_session
 
 AuthorizedUser = NewType("AuthorizedUser", User)
 CurrentLoginSession = NewType("CurrentLoginSession", LoginSession)
+CurrentAgent = NewType("CurrentAgent", Agent)
 
 
 class ProviderServer(Provider):
@@ -39,3 +42,19 @@ class ProviderServer(Provider):
         current_login_session: CurrentLoginSession,
     ) -> AuthorizedUser:
         return AuthorizedUser(current_login_session.user)
+
+    @provide(scope=Scope.REQUEST)
+    async def get_current_agent(
+        self,
+        request: Request,
+        runtime_service: AgentRuntimeService,
+    ) -> CurrentAgent:
+        agent_id = request.headers.get("X-Agent-Id")
+        agent_token = request.headers.get("X-Agent-Token")
+        if not agent_id or not agent_token:
+            raise HTTPException(status_code=401, detail="Missing agent credentials")
+        agent = await runtime_service.authenticate(
+            agent_id=agent_id,
+            agent_token=agent_token,
+        )
+        return CurrentAgent(agent)

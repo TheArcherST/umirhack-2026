@@ -204,6 +204,30 @@ class ApiDriver:
         assert response.status_code == 200, response.text
         return response.json()
 
+    def heartbeat_agent(
+        self,
+        *,
+        agent: AgentCredentials,
+        agent_version: str = "pytest-agent/1",
+        capabilities_json: dict[str, Any] | None = None,
+    ) -> None:
+        response = self.client.post(
+            "/agent/heartbeat",
+            json={
+                "agent_version": agent_version,
+                "capabilities_json": capabilities_json
+                or {
+                    "task_kinds": [
+                        "host.system_profile",
+                        "host.ip_interfaces",
+                        "network.endpoint_connectivity",
+                    ]
+                },
+            },
+            headers=agent.headers,
+        )
+        assert response.status_code == 200, response.text
+
     def mark_task_running(
         self,
         *,
