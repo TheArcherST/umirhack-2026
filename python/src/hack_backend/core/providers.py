@@ -75,7 +75,9 @@ class ConfigEmail(BaseModel):
     from_address: str = ""
     template_name: str = ""
     password_change_template_name: str = ""
-    app_name: str = "Linkoo"
+    invite_template_name: str = ""
+    invite_validity_hours: int = Field(default=48, ge=1)
+    app_name: str = "Madrigal Diagnostics"
     code_validity_minutes: int = Field(default=5, ge=1)
     code_length: int = Field(default=6, ge=4, le=12)
     resend_cooldown_seconds: int = Field(default=60, ge=1)

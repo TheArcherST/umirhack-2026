@@ -11,25 +11,36 @@ interface HeaderProps {
   backButton?: React.ReactNode
 }
 
-// Simple backend connection health check — tries to ping /api/health
+// Module-level singleton so status persists across Header remounts (page navigation)
+let _backendStatus: boolean | null = null
+const _backendListeners = new Set<(v: boolean) => void>()
+let _backendIntervalId: ReturnType<typeof setInterval> | null = null
+
+async function _checkBackend() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/health`, { signal: AbortSignal.timeout(2000) })
+    _backendStatus = res.ok
+  } catch {
+    _backendStatus = false
+  }
+  _backendListeners.forEach((fn) => fn(_backendStatus!))
+}
+
+function subscribeBackendStatus(fn: (v: boolean) => void): () => void {
+  _backendListeners.add(fn)
+  if (_backendStatus !== null) fn(_backendStatus)
+  if (_backendIntervalId === null) {
+    _checkBackend()
+    _backendIntervalId = setInterval(_checkBackend, 10_000)
+  }
+  return () => {
+    _backendListeners.delete(fn)
+  }
+}
+
 function useBackendStatus() {
-  const [connected, setConnected] = React.useState(false)
-
-  React.useEffect(() => {
-    let cancelled = false
-    const check = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/health`, { signal: AbortSignal.timeout(2000) })
-        if (!cancelled) setConnected(res.ok)
-      } catch {
-        if (!cancelled) setConnected(false)
-      }
-    }
-    check()
-    const id = setInterval(check, 10_000)
-    return () => { cancelled = true; clearInterval(id) }
-  }, [])
-
+  const [connected, setConnected] = React.useState<boolean>(_backendStatus ?? false)
+  React.useEffect(() => subscribeBackendStatus(setConnected), [])
   return connected
 }
 
