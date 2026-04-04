@@ -36,7 +36,8 @@ CI/CD deployment workflow:
 1. Push to `master`
 2. GitHub Actions runs `make test`
 3. If all checks pass, Actions SSHes to the server and runs `./scripts/deploy.sh <tested-sha>`
-4. The server fetches the repository, checks out the exact tested revision, runs `make artifacts` through the compose tool container to refresh Linux and Windows agent artifacts, and then runs `make up`
+4. The server fetches the repository, checks out the exact tested revision, and runs `make up`
+5. Agent artifacts are rebuilt manually with `make artifacts` when needed
 
 Required GitHub Actions secrets:
 - `DEPLOY_HOST`

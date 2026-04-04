@@ -167,7 +167,7 @@ case "$arch" in
 esac
 
 tmp_binary="$(mktemp)"
-download_file "$ARTIFACT_ROOT_URL/linux/$arch/hack-agent" "$tmp_binary"
+download_file "$ARTIFACT_ROOT_URL/$arch/hack-agent" "$tmp_binary"
 install -d "$INSTALL_DIR" "$STATE_DIR"
 install -m 0755 "$tmp_binary" "$BINARY_PATH"
 rm -f "$tmp_binary"
@@ -236,7 +236,7 @@ switch ($archValue) {{
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
 
-$downloadUrl = "$artifactRootUrl/windows/$arch/hack-agent.exe"
+$downloadUrl = "$artifactRootUrl/$arch/hack-agent.exe"
 Invoke-WebRequest -UseBasicParsing -Uri $downloadUrl -OutFile $binaryPath
 
 $runner = @"
@@ -321,7 +321,7 @@ case "$arch" in
 esac
 
 tmp_binary="$(mktemp)"
-download_file "$ARTIFACT_ROOT_URL/macos/$arch/hack-agent" "$tmp_binary"
+download_file "$ARTIFACT_ROOT_URL/$arch/hack-agent" "$tmp_binary"
 install -d "$INSTALL_DIR" "$LIBEXEC_DIR" "$STATE_DIR"
 install -m 0755 "$tmp_binary" "$BINARY_PATH"
 rm -f "$tmp_binary"

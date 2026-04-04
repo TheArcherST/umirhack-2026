@@ -132,6 +132,25 @@ def test_agent_to_dto_accepts_enum_and_string_status(status) -> None:
     assert dto.environments[0].id == "env-1"
 
 
+def test_base_dto_serializes_datetimes_as_explicit_utc() -> None:
+    dto = agent_to_dto(
+        Agent(
+            id="agent-1",
+            project_id="project-1",
+            name="runner",
+            status=AgentStatus.ONLINE,
+            last_seen_at=datetime(2026, 4, 4, 15, 0),
+            created_at=NOW,
+        ),
+        [],
+    )
+
+    payload = dto.model_dump(mode="json")
+
+    assert payload["created_at"] == "2026-04-04T12:00:00Z"
+    assert payload["last_seen_at"] == "2026-04-04T15:00:00Z"
+
+
 @pytest.mark.parametrize("status", [TaskRunStatus.RUNNING, "running"])
 def test_task_run_to_dto_accepts_enum_and_string_status(status) -> None:
     task_run = TaskRun(
