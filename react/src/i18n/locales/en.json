@@ -278,6 +278,8 @@
     "systemInfoDesc": "OS profile and host metadata",
     "networkInterfaces": "Network Interfaces",
     "networkInterfacesDesc": "Addressing and interfaces",
+    "selfUpdate": "Self Update",
+    "selfUpdateDesc": "Reinstall or upgrade the agent to its assigned version",
     "customCommand": "Custom Command",
     "customCommandDesc": "Run an arbitrary shell command",
     "portScan": "Port Scan",

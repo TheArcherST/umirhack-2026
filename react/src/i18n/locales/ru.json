@@ -280,6 +280,8 @@
     "systemInfoDesc": "Профиль ОС и метаданные хоста",
     "networkInterfaces": "Сетевые интерфейсы",
     "networkInterfacesDesc": "Адресация и интерфейсы",
+    "selfUpdate": "Самообновление",
+    "selfUpdateDesc": "Переустановить или обновить агент до назначенной версии",
     "customCommand": "Произвольная команда",
     "customCommandDesc": "Выполнить произвольную shell-команду",
     "portScan": "Сканирование портов",
