@@ -1,5 +1,10 @@
 # Концептуальное описание (ридми будет потом):
 
+## Задеплоенный проект
+
+https://lvalue.linkoo.dev
+
+
 ## Part 1. Observability.
 
 Clause 1.  
