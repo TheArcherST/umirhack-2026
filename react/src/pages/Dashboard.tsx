@@ -101,7 +101,7 @@ function EnvCard({env, agents}: { env: Environment; agents: Agent[] }) {
 export default function Dashboard() {
     const navigate = useNavigate()
     const {t} = useI18n()
-    const {currentProject, createProject} = useProject()
+    const {currentProject, createProject, initialized} = useProject()
     const [logTaskId, setLogTaskId] = useState<string | null>(null)
     const [createOpen, setCreateOpen] = useState(false)
 
@@ -110,7 +110,7 @@ export default function Dashboard() {
         queryKey: ['stats', currentProject?.id],
         queryFn: stubGetStats,
         refetchInterval: 15_000,
-        enabled: !!currentProject,
+        enabled: !!currentProject && initialized,
     })
 
     // Load all agents (across all envs)
@@ -118,7 +118,7 @@ export default function Dashboard() {
         queryKey: ['agents-all', currentProject?.id],
         queryFn: () => stubGetAgents(),
         refetchInterval: 15_000,
-        enabled: !!currentProject,
+        enabled: !!currentProject && initialized,
     })
 
     // Load recent tasks
@@ -126,14 +126,14 @@ export default function Dashboard() {
         queryKey: ['recent-tasks', currentProject?.id],
         queryFn: () => stubGetRecentTasks(8),
         refetchInterval: 10_000,
-        enabled: !!currentProject,
+        enabled: !!currentProject && initialized,
     })
 
     // Load envs
     const {data: envs, isLoading: isLoadingEnvs} = useQuery({
         queryKey: ['environments', currentProject?.id],
         queryFn: () => stubGetEnvironments(currentProject?.id ?? ''),
-        enabled: !!currentProject,
+        enabled: !!currentProject && initialized,
     })
 
     // Group agents by environment

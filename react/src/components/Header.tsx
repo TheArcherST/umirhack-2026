@@ -2,6 +2,7 @@ import { Sun, Moon } from 'lucide-react'
 import { API_BASE_URL } from '@/api/client'
 import { useTheme } from '@/hooks/useTheme'
 import { useI18n } from '@/i18n'
+import { useProject } from '@/hooks/useProject'
 import { cn } from '@/lib/utils'
 import React from 'react'
 
@@ -47,6 +48,7 @@ function useBackendStatus() {
 export function Header({ title, right, backButton }: HeaderProps) {
   const { theme, toggle } = useTheme()
   const { t } = useI18n()
+  const { currentProject } = useProject()
   const connected = useBackendStatus()
 
   return (
@@ -54,8 +56,16 @@ export function Header({ title, right, backButton }: HeaderProps) {
       className="flex items-center justify-between px-5 border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10"
       style={{ height: 'var(--header-height)' }}
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         {backButton}
+        {currentProject && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-foreground px-2 py-0.5 rounded bg-foreground/10">
+              {currentProject.name}
+            </span>
+            <span className="text-muted-foreground/40 text-sm">/</span>
+          </div>
+        )}
         {title && (
           <h1 className="text-sm font-semibold text-foreground">{title}</h1>
         )}

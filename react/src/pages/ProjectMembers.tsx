@@ -31,7 +31,7 @@ import {formatDate} from '@/lib/utils'
 export default function ProjectMembers() {
     const navigate = useNavigate()
     const {t} = useI18n()
-    const {currentProject} = useProject()
+    const {currentProject, initialized} = useProject()
     const [inviteEmail, setInviteEmail] = useState('')
     const [inviting, setInviting] = useState(false)
     const [searching, setSearching] = useState(false)
@@ -43,7 +43,7 @@ export default function ProjectMembers() {
     const {data: members = [], isLoading, refetch} = useQuery({
         queryKey: ['members', currentProject?.id],
         queryFn: () => stubGetProjectMembers(currentProject?.id ?? ''),
-        enabled: !!currentProject,
+        enabled: !!currentProject && initialized,
         refetchInterval: 10_000,
     })
 
