@@ -114,14 +114,15 @@
   },
   "newTask": {
     "title": "New task",
-    "description": "Execute a command on a remote agent",
+    "description": "Run a built-in diagnostic or an arbitrary command on a remote agent",
     "agentLabel": "Agent",
     "agentPlaceholder": "Select agent...",
     "commandLabel": "Command",
     "commandPlaceholder": "df -h",
     "timeoutLabel": "Timeout (seconds)",
     "runTask": "Run task",
-    "createFailed": "Failed to create task"
+    "createFailed": "Failed to create task",
+    "safeModeHint": "This agent was installed in safe mode and will reject arbitrary command tasks."
   },
   "profile": {
     "title": "Profile Settings",
@@ -201,7 +202,10 @@
     "installScriptTitle": "Installation script",
     "environments": "Environments",
     "selectAtLeastOneEnv": "Select at least one environment",
-    "selectAgent": "Select agent"
+    "selectAgent": "Select agent",
+    "safeInstall": "Safe installation",
+    "safeInstallHint": "Safe-installed agents refuse arbitrary custom command tasks and only run supported built-in diagnostics.",
+    "safeInstallEnabled": "Safe mode is enabled for this installation script."
   },
   "member": {
     "inviteMember": "Invite member",

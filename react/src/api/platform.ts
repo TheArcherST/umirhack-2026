@@ -38,6 +38,7 @@ type AgentApi = {
     project_id: string
     name: string
     declared_os: string | null
+    safe_install: boolean
     status: string
     last_seen_at: string | null
     agent_version: string | null
@@ -87,6 +88,7 @@ type TaskRunApi = {
     started_at: string | null
     finished_at: string | null
     failure_reason: string | null
+    command: string
     task_name: string
     task_kind: string
     host_name: string
@@ -158,6 +160,7 @@ function kindToTemplate(kind: string): TaskTemplate {
         'host.system_profile': 'system_info',
         'host.ip_interfaces': 'network_interfaces',
         'network.endpoint_connectivity': 'ping',
+        'diagnostic.command.custom': 'custom_command',
         'diagnostic.command.port_scan': 'port_scan',
         'diagnostic.command.disk_usage': 'disk_usage',
         'diagnostic.command.memory_cpu': 'memory_cpu',
@@ -172,6 +175,7 @@ function templateToKind(template: TaskTemplate): string {
         ping: 'network.endpoint_connectivity',
         system_info: 'host.system_profile',
         network_interfaces: 'host.ip_interfaces',
+        custom_command: 'diagnostic.command.custom',
         port_scan: 'diagnostic.command.port_scan',
         disk_usage: 'diagnostic.command.disk_usage',
         memory_cpu: 'diagnostic.command.memory_cpu',
@@ -192,6 +196,7 @@ function mapAgent(row: AgentApi): Agent {
         last_heartbeat: row.last_seen_at,
         tasks_count: 0,
         environment_ids: row.environments.map((env) => env.id),
+        safe_install: row.safe_install,
         created_at: row.created_at,
         environment_names: row.environments.map((env) => ({ id: env.id, name: env.name })),
     }
@@ -229,7 +234,7 @@ function mapTask(row: TaskRunApi): Task {
         host_id: row.host_id,
         host_name: row.host_name,
         environment_id: row.environment_id,
-        command: row.task_name,
+        command: row.command,
         status: mapTaskStatus(row.status),
         timeout: 60,
         duration: secondsBetween(row.started_at, row.finished_at),
@@ -363,6 +368,7 @@ export async function stubCreateAgent(payload: CreateAgentPayload): Promise<{ ag
         project_id: projectId,
         name: payload.name,
         declared_os: payload.os,
+        safe_install: payload.safe_install ?? false,
         environment_ids: payload.environment_ids ?? [],
     })
     const installScript = await stubGetAgentInstallScript(data.id)
@@ -375,6 +381,7 @@ export async function stubCreateAgent(payload: CreateAgentPayload): Promise<{ ag
 export async function stubUpdateAgent(id: string, payload: UpdateAgentPayload): Promise<Agent> {
     const { data } = await apiClient.put<AgentApi>(`/agents/${id}`, {
         name: payload.name,
+        safe_install: payload.safe_install,
         environment_ids: payload.environment_ids,
     })
     return mapAgent(data)
@@ -582,30 +589,11 @@ export async function stubGetTask(taskId: string): Promise<TaskDetail> {
 }
 
 export async function stubCreateTask(payload: CreateTaskPayload): Promise<Task> {
-    const projectId = await fetchProjectId()
-    const templates = await getTaskTemplatesInternal(projectId)
-    const template =
-        templates.find((item) => item.kind === 'diagnostic.command.system_logs') ??
-        templates.find((item) => item.kind.startsWith('diagnostic.command.')) ??
-        templates[0]
-    if (!template) {
-        throw new Error('No task templates are available')
-    }
-
-    const hosts = await listHostsForAgent(payload.agent_id)
-    const host = hosts[0]
-    if (!host) throw new Error('Selected agent is not attached to any environment')
-
-    const { data } = await apiClient.post<TaskRunApi[]>('/task-runs', {
-        environment_id: host.environment_id,
-        host_ids: [host.id],
-        task_template_id: template.id,
-        payload_overrides: {
-            requested_command: payload.command,
-            timeout_seconds: payload.timeout ?? 30,
-        },
+    return stubCreateTaskV2({
+        agent_id: payload.agent_id,
+        template: 'custom_command',
+        command: payload.command,
     })
-    return mapTask(data[0])
 }
 
 async function listHostsForAgent(agentId: string): Promise<Host[]> {
@@ -626,17 +614,21 @@ export async function stubCreateTaskV2(payload: CreateTaskPayloadV2): Promise<Ta
         templates[0]
     if (!template) throw new Error('No task templates are available')
 
-    const hosts = await stubGetHosts(payload.environment_id)
-    const host = hosts.find((row) => row.agent_id === payload.agent_id)
+    const host = payload.environment_id
+        ? (await stubGetHosts(payload.environment_id)).find((row) => row.agent_id === payload.agent_id)
+        : (await listHostsForAgent(payload.agent_id))[0]
     if (!host) throw new Error('Selected agent is not attached to any environment')
 
     const { data } = await apiClient.post<TaskRunApi[]>('/task-runs', {
-        environment_id: payload.environment_id,
+        environment_id: host.environment_id,
         host_ids: [host.id],
         task_template_id: template.id,
-        payload_overrides: payload.target
-            ? { target_endpoint: payload.target }
-            : undefined,
+        payload_overrides:
+            payload.template === 'custom_command'
+                ? { approved_command: payload.command?.trim() ?? '' }
+                : payload.target
+                    ? { target_endpoint: payload.target }
+                    : undefined,
     })
     return mapTask(data[0])
 }
@@ -653,17 +645,13 @@ export async function stubGetStats(): Promise<Stats> {
 }
 
 export async function stubSearchUsers(query: string): Promise<UserSearchResult[]> {
-    const projectId = await fetchProjectId()
-    const members = await stubGetProjectMembers(projectId)
-    const normalized = query.toLowerCase()
-    return members
-        .filter((member) =>
-            member.email?.toLowerCase().includes(normalized) ||
-            member.name.toLowerCase().includes(normalized),
-        )
-        .map((member) => ({
-            user_id: member.user_id,
-            email: member.email ?? '',
-            name: member.name,
-        }))
+    const normalized = query.trim()
+    if (normalized.length < 2) {
+        return []
+    }
+
+    const { data } = await apiClient.get<UserSearchResult[]>('/users/search', {
+        params: { q: normalized },
+    })
+    return data
 }

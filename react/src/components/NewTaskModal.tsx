@@ -7,6 +7,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -26,6 +27,7 @@ export function NewTaskModal({ open, onClose, onCreated, defaultAgentId }: Props
   const [agentId, setAgentId] = useState(defaultAgentId ?? '')
   const [template, setTemplate] = useState<TaskTemplate>('system_info')
   const [target, setTarget] = useState('')
+  const [command, setCommand] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const { t } = useI18n()
@@ -37,11 +39,13 @@ export function NewTaskModal({ open, onClose, onCreated, defaultAgentId }: Props
   })
 
   const selectedTemplate = TASK_TEMPLATES.find((item) => item.id === template)
+  const selectedAgent = agents.find((agent) => agent.id === agentId)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!agentId) return
     if (selectedTemplate?.requiresTarget && !target.trim()) return
+    if (selectedTemplate?.requiresCommand && !command.trim()) return
     setError('')
     setLoading(true)
     try {
@@ -49,8 +53,10 @@ export function NewTaskModal({ open, onClose, onCreated, defaultAgentId }: Props
         agent_id: agentId,
         template,
         target: selectedTemplate?.requiresTarget ? target.trim() : undefined,
+        command: selectedTemplate?.requiresCommand ? command.trim() : undefined,
       })
       setTarget('')
+      setCommand('')
       onCreated()
     } catch (err: any) {
       setError(err.message ?? t('newTask.createFailed'))
@@ -63,6 +69,7 @@ export function NewTaskModal({ open, onClose, onCreated, defaultAgentId }: Props
     if (!open) {
       onClose()
       setTarget('')
+      setCommand('')
       setError('')
     }
   }
@@ -126,6 +133,23 @@ export function NewTaskModal({ open, onClose, onCreated, defaultAgentId }: Props
               </div>
             )}
 
+            {selectedTemplate?.requiresCommand && (
+              <div className="space-y-1.5">
+                <Label>{t('newTask.commandLabel')}</Label>
+                <Textarea
+                  placeholder={t('newTask.commandPlaceholder')}
+                  value={command}
+                  onChange={(e) => setCommand(e.target.value)}
+                  className="font-mono text-xs min-h-24"
+                  autoFocus
+                />
+              </div>
+            )}
+
+            {selectedTemplate?.requiresCommand && selectedAgent?.safe_install && (
+              <p className="text-xs text-amber-500 font-mono">{t('newTask.safeModeHint')}</p>
+            )}
+
             {error && <p className="text-xs text-red-400 font-mono">{error}</p>}
           </div>
 
@@ -136,7 +160,12 @@ export function NewTaskModal({ open, onClose, onCreated, defaultAgentId }: Props
             <Button
               type="submit"
               size="sm"
-              disabled={loading || !agentId || (selectedTemplate?.requiresTarget && !target.trim())}
+              disabled={
+                loading ||
+                !agentId ||
+                (selectedTemplate?.requiresTarget && !target.trim()) ||
+                (selectedTemplate?.requiresCommand && !command.trim())
+              }
             >
               {loading ? <Loader2 size={13} className="animate-spin" /> : t('newTask.runTask')}
             </Button>

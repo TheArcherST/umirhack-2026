@@ -5,6 +5,7 @@ pub const SUPPORTED_TASK_KINDS: &[&str] = &[
     "host.system_profile",
     "host.ip_interfaces",
     "network.endpoint_connectivity",
+    "diagnostic.command.custom",
     "diagnostic.command.port_scan",
     "diagnostic.command.disk_usage",
     "diagnostic.command.memory_cpu",
@@ -90,8 +91,9 @@ pub struct CompletePayload {
     pub failure_reason: Option<String>,
 }
 
-pub fn capabilities_json() -> Value {
+pub fn capabilities_json(safe_mode: bool) -> Value {
     serde_json::json!({
         "task_kinds": SUPPORTED_TASK_KINDS,
+        "safe_mode": safe_mode,
     })
 }

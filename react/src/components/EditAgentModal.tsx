@@ -24,12 +24,14 @@ export function EditAgentModal({ agent, open, onClose, onUpdated }: Props) {
   const { environments } = useProject()
   const [name, setName] = useState('')
   const [selectedEnvs, setSelectedEnvs] = useState<string[]>([])
+  const [safeInstall, setSafeInstall] = useState(false)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (agent && open) {
       setName(agent.name)
       setSelectedEnvs([...agent.environment_ids])
+      setSafeInstall(agent.safe_install)
     }
   }, [agent, open])
 
@@ -38,7 +40,11 @@ export function EditAgentModal({ agent, open, onClose, onUpdated }: Props) {
     if (!agent || !name.trim() || selectedEnvs.length === 0) return
     setLoading(true)
     try {
-      await stubUpdateAgent(agent.id, { name: name.trim(), environment_ids: selectedEnvs })
+      await stubUpdateAgent(agent.id, {
+        name: name.trim(),
+        safe_install: safeInstall,
+        environment_ids: selectedEnvs,
+      })
       onUpdated()
       handleClose()
     } catch { /* handled by parent */ }
@@ -48,6 +54,7 @@ export function EditAgentModal({ agent, open, onClose, onUpdated }: Props) {
   const handleClose = () => {
     setName('')
     setSelectedEnvs([])
+    setSafeInstall(false)
     onClose()
   }
 
@@ -82,6 +89,19 @@ export function EditAgentModal({ agent, open, onClose, onUpdated }: Props) {
                 placeholder={t('agent.selectEnvPlaceholder')}
               />
             </div>
+
+            <label className="flex items-start gap-3 rounded-md border border-border px-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                checked={safeInstall}
+                onChange={(e) => setSafeInstall(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span className="space-y-1">
+                <span className="block font-medium">{t('agent.safeInstall')}</span>
+                <span className="block text-xs text-muted-foreground">{t('agent.safeInstallHint')}</span>
+              </span>
+            </label>
           </div>
 
           <div className="flex justify-end gap-2 px-6 pb-2">

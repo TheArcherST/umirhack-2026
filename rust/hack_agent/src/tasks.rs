@@ -16,15 +16,20 @@ use crate::models::{AgentTaskLease, CompletePayload};
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const SAFE_MODE_CUSTOM_TASK_ERROR: &str =
+    "Safe-installed agent is not allowed to execute arbitrary command tasks.";
 
-pub async fn execute_task(task: &AgentTaskLease) -> CompletePayload {
-    match execute_task_inner(task).await {
+pub async fn execute_task(task: &AgentTaskLease, safe_mode: bool) -> CompletePayload {
+    match execute_task_inner(task, safe_mode).await {
         Ok(result) => result,
         Err(error) => failure_result(task, error.to_string()),
     }
 }
 
-async fn execute_task_inner(task: &AgentTaskLease) -> Result<CompletePayload> {
+async fn execute_task_inner(
+    task: &AgentTaskLease,
+    safe_mode: bool,
+) -> Result<CompletePayload> {
     let template = &task.task_template;
     let kind = template.kind.as_str();
     let payload = &template.payload_json;
@@ -46,36 +51,25 @@ async fn execute_task_inner(task: &AgentTaskLease) -> Result<CompletePayload> {
             let telemetry = collect_endpoint_connectivity(target).await;
             Ok(success_result(task, kind, telemetry))
         }
+        "diagnostic.command.custom" => {
+            if safe_mode {
+                return Ok(forbidden_custom_command_result(task));
+            }
+            let command = payload
+                .get("approved_command")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|command| !command.is_empty())
+                .ok_or_else(|| anyhow!("missing approved command"))?;
+            Ok(command_result(task, kind, command).await)
+        }
         kind if kind.starts_with("diagnostic.command.") => {
             let requested_command = template
                 .approved_command
                 .as_deref()
                 .or_else(|| payload.get("approved_command").and_then(Value::as_str));
             let command = resolve_command_for_kind(kind, requested_command)?;
-            let result = run_command(command).await;
-            let telemetry_payload = json!({
-                "sample": result.stdout,
-                "command": command,
-            });
-            Ok(CompletePayload {
-                lease_token: task.lease_token.clone(),
-                status: if result.exit_code == 0 {
-                    "succeeded".to_string()
-                } else {
-                    "failed".to_string()
-                },
-                exit_code: Some(result.exit_code),
-                stdout_text: Some(result.stdout),
-                stderr_text: Some(result.stderr.clone()),
-                summary_json: Some(json!({ "command": command })),
-                telemetry_kind: Some(kind.to_string()),
-                telemetry_payload: Some(telemetry_payload),
-                failure_reason: if result.exit_code == 0 {
-                    None
-                } else {
-                    Some("Command exited with error".to_string())
-                },
-            })
+            Ok(command_result(task, kind, command).await)
         }
         _ => Ok(failure_result(
             task,
@@ -121,6 +115,54 @@ fn failure_result(task: &AgentTaskLease, reason: String) -> CompletePayload {
         telemetry_kind: None,
         telemetry_payload: None,
         failure_reason: Some(reason),
+    }
+}
+
+fn forbidden_custom_command_result(task: &AgentTaskLease) -> CompletePayload {
+    CompletePayload {
+        lease_token: task.lease_token.clone(),
+        status: "failed".to_string(),
+        exit_code: Some(126),
+        stdout_text: Some(String::new()),
+        stderr_text: Some(SAFE_MODE_CUSTOM_TASK_ERROR.to_string()),
+        summary_json: Some(json!({
+            "code": "safe_mode_rejected",
+            "error": SAFE_MODE_CUSTOM_TASK_ERROR,
+        })),
+        telemetry_kind: None,
+        telemetry_payload: None,
+        failure_reason: Some(SAFE_MODE_CUSTOM_TASK_ERROR.to_string()),
+    }
+}
+
+async fn command_result(
+    task: &AgentTaskLease,
+    kind: &str,
+    command: &str,
+) -> CompletePayload {
+    let result = run_command(command).await;
+    let telemetry_payload = json!({
+        "sample": result.stdout,
+        "command": command,
+    });
+    CompletePayload {
+        lease_token: task.lease_token.clone(),
+        status: if result.exit_code == 0 {
+            "succeeded".to_string()
+        } else {
+            "failed".to_string()
+        },
+        exit_code: Some(result.exit_code),
+        stdout_text: Some(result.stdout),
+        stderr_text: Some(result.stderr.clone()),
+        summary_json: Some(json!({ "command": command })),
+        telemetry_kind: Some(kind.to_string()),
+        telemetry_payload: Some(telemetry_payload),
+        failure_reason: if result.exit_code == 0 {
+            None
+        } else {
+            Some("Command exited with error".to_string())
+        },
     }
 }
 
@@ -412,7 +454,7 @@ mod tests {
     async fn system_profile_task_returns_structured_success() {
         let task = lease_for_kind("host.system_profile", json!({}), None);
 
-        let result = execute_task(&task).await;
+        let result = execute_task(&task, false).await;
 
         assert_eq!(result.status, "succeeded");
         assert_eq!(result.telemetry_kind.as_deref(), Some("host.system_profile"));
@@ -431,7 +473,7 @@ mod tests {
             None,
         );
 
-        let result = execute_task(&task).await;
+        let result = execute_task(&task, false).await;
 
         assert_eq!(result.status, "failed");
         assert_eq!(result.telemetry_kind, None);
@@ -452,7 +494,7 @@ mod tests {
             Some("rm -rf /"),
         );
 
-        let result = execute_task(&task).await;
+        let result = execute_task(&task, false).await;
 
         assert_eq!(result.status, "failed");
         assert_eq!(result.telemetry_kind, None);
@@ -462,6 +504,25 @@ mod tests {
                 .as_deref()
                 .expect("failure should be described")
                 .contains("not approved")
+        );
+    }
+
+    #[tokio::test]
+    async fn safe_mode_rejects_custom_command_tasks() {
+        let task = lease_for_kind(
+            "diagnostic.command.custom",
+            json!({"approved_command": "uname -a"}),
+            None,
+        );
+
+        let result = execute_task(&task, true).await;
+
+        assert_eq!(result.status, "failed");
+        assert_eq!(result.exit_code, Some(126));
+        assert_eq!(result.telemetry_kind, None);
+        assert_eq!(
+            result.failure_reason.as_deref(),
+            Some(super::SAFE_MODE_CUSTOM_TASK_ERROR)
         );
     }
 }

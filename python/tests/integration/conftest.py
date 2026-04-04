@@ -121,6 +121,7 @@ class ApiDriver:
         environment_id: str,
         name: str,
         declared_os: str = "linux",
+        safe_install: bool = False,
     ) -> dict[str, Any]:
         response = self.client.post(
             "/agents",
@@ -128,11 +129,25 @@ class ApiDriver:
                 "project_id": project_id,
                 "name": name,
                 "declared_os": declared_os,
+                "safe_install": safe_install,
                 "environment_ids": [environment_id],
             },
             headers=user.headers,
         )
         assert response.status_code == 201, response.text
+        return response.json()
+
+    def get_install_script(
+        self,
+        *,
+        user: RegisteredUser,
+        agent_id: str,
+    ) -> dict[str, Any]:
+        response = self.client.get(
+            f"/agents/{agent_id}/install-script",
+            headers=user.headers,
+        )
+        assert response.status_code == 200, response.text
         return response.json()
 
     def issue_install_token(
@@ -141,12 +156,10 @@ class ApiDriver:
         user: RegisteredUser,
         agent_id: str,
     ) -> str:
-        response = self.client.get(
-            f"/agents/{agent_id}/install-script",
-            headers=user.headers,
-        )
-        assert response.status_code == 200, response.text
-        script_url = response.json()["script_url"]
+        script_url = self.get_install_script(
+            user=user,
+            agent_id=agent_id,
+        )["script_url"]
         return urlparse(script_url).path.rstrip("/").split("/")[-1]
 
     def register_agent(

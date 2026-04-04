@@ -115,14 +115,14 @@ fn build_register_payload(config: &Config) -> Result<AgentRegisterPayload> {
         bootstrap_token,
         agent_version: config.agent_version.clone(),
         declared_os: declared_os().to_string(),
-        capabilities_json: capabilities_json(),
+        capabilities_json: capabilities_json(config.safe_mode),
     })
 }
 
 fn build_heartbeat_payload(config: &Config) -> AgentHeartbeatPayload {
     AgentHeartbeatPayload {
         agent_version: config.agent_version.clone(),
-        capabilities_json: capabilities_json(),
+        capabilities_json: capabilities_json(config.safe_mode),
     }
 }
 
@@ -140,6 +140,7 @@ mod tests {
             state_path: PathBuf::from("/tmp/hack-agent-test-state.json"),
             poll_interval_seconds: 5,
             agent_version: "rust-test-agent/1".to_string(),
+            safe_mode: false,
         }
     }
 
@@ -169,6 +170,7 @@ mod tests {
         assert_eq!(payload.bootstrap_token, "bootstrap-123");
         assert_eq!(payload.agent_version, "rust-test-agent/1");
         assert_eq!(payload.declared_os, super::declared_os());
+        assert_eq!(payload.capabilities_json["safe_mode"], false);
         assert!(
             payload
                 .capabilities_json["task_kinds"]
@@ -192,6 +194,7 @@ mod tests {
         let headers = super::auth_headers(&state).expect("headers should build");
 
         assert_eq!(payload.agent_version, "rust-test-agent/1");
+        assert_eq!(payload.capabilities_json["safe_mode"], false);
         assert!(
             payload
                 .capabilities_json["task_kinds"]

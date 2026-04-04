@@ -4,13 +4,15 @@ from pathlib import Path
 
 from dishka import FromDishka
 from dishka.integrations.fastapi import inject
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, PlainTextResponse
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from hack_backend.core.providers import ConfigHack
-from hack_backend.core.models import Agent, User
+from hack_backend.core.models import Agent, AgentBootstrapToken, User
+from hack_backend.core.security import hash_secret
 from hack_backend.core.services.platform_service import PlatformService
 from hack_backend.core.services.uow_ctl import UoWCtl
 from hack_backend.rest_server.agent_install import (
@@ -21,7 +23,7 @@ from hack_backend.rest_server.agent_install import (
     render_install_script,
     script_kind_for_platform,
 )
-from hack_backend.rest_server.dependencies import require_project_member
+from hack_backend.rest_server.dependencies import get_session, require_project_member
 from hack_backend.rest_server.providers import AuthorizedUser
 from hack_backend.rest_server.schemas.platform import AgentDTO, InstallScriptDTO, TaskRunDTO
 from hack_backend.rest_server.serializers import agent_to_dto, task_run_to_dto
@@ -33,11 +35,13 @@ class CreateAgentPayload(BaseModel):
     project_id: str
     name: str
     declared_os: str | None = None
+    safe_install: bool = False
     environment_ids: list[str]
 
 
 class UpdateAgentPayload(BaseModel):
     name: str | None = None
+    safe_install: bool | None = None
     environment_ids: list[str] | None = None
 
 
@@ -88,6 +92,7 @@ async def create_agent(
         project_id=payload.project_id,
         name=payload.name,
         declared_os=payload.declared_os,
+        safe_install=payload.safe_install,
         environment_ids=payload.environment_ids,
     )
     await uow_ctl.commit()
@@ -114,6 +119,7 @@ async def update_agent(
     agent, environments = await platform_service.update_agent(
         agent=agent,
         name=payload.name,
+        safe_install=payload.safe_install,
         environment_ids=payload.environment_ids,
     )
     await uow_ctl.commit()
@@ -176,6 +182,7 @@ async def get_install_script(
     return InstallScriptDTO(
         command=command,
         agent_id=resolved_agent_id,
+        safe_install=agent.safe_install,
         platform=platform,
         script_kind=script_kind_for_platform(platform),
         script_url=script_url,
@@ -191,11 +198,23 @@ async def get_agent_install_script_payload(
     platform: str,
     bootstrap_token: str,
     request: Request,
+    session: AsyncSession = Depends(get_session),
 ) -> PlainTextResponse:
     try:
         normalized_platform = parse_install_platform(platform)
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
+    token_hash = hash_secret(bootstrap_token)
+    agent = await session.scalar(
+        select(Agent)
+        .join(AgentBootstrapToken, AgentBootstrapToken.agent_id == Agent.id)
+        .where(
+            AgentBootstrapToken.token_hash == token_hash,
+            AgentBootstrapToken.revoked_at.is_(None),
+        )
+    )
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Install script token not found")
     api_url = str(request.base_url).rstrip("/")
     artifact_root_url = str(
         request.url_for(
@@ -211,6 +230,7 @@ async def get_agent_install_script_payload(
         api_url=api_url,
         bootstrap_token=bootstrap_token,
         artifact_root_url=artifact_root_url,
+        safe_install=agent.safe_install,
     )
     return PlainTextResponse(content, media_type="text/plain; charset=utf-8")
 

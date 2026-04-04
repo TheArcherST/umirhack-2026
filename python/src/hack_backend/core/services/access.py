@@ -3,7 +3,7 @@ from uuid import UUID
 
 from argon2 import PasswordHasher
 from argon2 import exceptions as argon2_exceptions
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hack_backend.core.models import LoginSession, User
@@ -157,6 +157,34 @@ class AccessService:
         stmt = select(User).where(User.username == username)
         user = await self.orm_session.scalar(stmt)
         return user
+
+    async def search_users(
+        self,
+        *,
+        query: str,
+        exclude_user_id: int | None = None,
+        limit: int = 10,
+    ) -> list[User]:
+        normalized_query = query.strip()
+        if len(normalized_query) < 2:
+            return []
+
+        pattern = f"%{normalized_query.lower()}%"
+        stmt = (
+            select(User)
+            .where(
+                or_(
+                    func.lower(User.username).like(pattern),
+                    func.lower(func.coalesce(User.email, "")).like(pattern),
+                )
+            )
+            .order_by(User.username.asc())
+            .limit(limit)
+        )
+        if exclude_user_id is not None:
+            stmt = stmt.where(User.id != exclude_user_id)
+
+        return list(await self.orm_session.scalars(stmt))
 
     async def _dummy_authentication(
         self,

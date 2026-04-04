@@ -1,5 +1,10 @@
 import React, {createContext, useContext, useState, useEffect, useCallback} from 'react'
-import {stubGetProjects, stubCreateProject, stubGetEnvironments} from '@/api/stubs'
+import {
+    stubCreateProject,
+    stubGetEnvironments,
+    stubGetProjects,
+    stubInviteMember,
+} from '@/api/stubs'
 import type {Project, Environment} from '@/api/types'
 
 interface ProjectContextValue {
@@ -94,10 +99,16 @@ export function ProjectProvider({children}: { children: React.ReactNode }) {
         else localStorage.removeItem('currentEnvId')
     }, [])
 
-    const createProject = useCallback(async (name: string, _members: string[]) => {
+    const createProject = useCallback(async (name: string, members: string[]) => {
         setLoading(true)
         try {
             const project = await stubCreateProject({name})
+            for (const email of members) {
+                await stubInviteMember({
+                    project_id: project.id,
+                    email,
+                })
+            }
             setProjects((prev) => [...prev, project])
             selectProject(project.id)
             await refreshEnvironments(project.id)

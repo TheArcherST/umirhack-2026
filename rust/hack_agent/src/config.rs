@@ -12,6 +12,7 @@ pub struct Config {
     pub state_path: PathBuf,
     pub poll_interval_seconds: u64,
     pub agent_version: String,
+    pub safe_mode: bool,
 }
 
 impl Config {
@@ -31,8 +32,16 @@ impl Config {
                 .unwrap_or(DEFAULT_POLL_SECONDS),
             agent_version: env::var("HACK_AGENT_VERSION")
                 .unwrap_or_else(|_| DEFAULT_AGENT_VERSION.to_string()),
+            safe_mode: env_flag("HACK_AGENT_SAFE_MODE"),
         }
     }
+}
+
+fn env_flag(name: &str) -> bool {
+    matches!(
+        env::var(name).ok().as_deref(),
+        Some("1" | "true" | "TRUE" | "yes" | "YES" | "on" | "ON")
+    )
 }
 
 fn default_state_path() -> PathBuf {

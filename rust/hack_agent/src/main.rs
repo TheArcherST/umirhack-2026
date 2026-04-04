@@ -25,7 +25,7 @@ async fn run() -> anyhow::Result<()> {
     let (state, poll_interval) = ensure_registered(&api, &config).await?;
 
     loop {
-        if let Err(error) = tick(&api, &state).await {
+        if let Err(error) = tick(&api, &state, &config).await {
             eprintln!("agent tick failed: {error:#}");
         }
 
@@ -50,7 +50,7 @@ async fn ensure_registered(
     Ok((state, response.poll_interval_seconds.max(1)))
 }
 
-async fn tick(api: &AgentApi, state: &AgentState) -> anyhow::Result<()> {
+async fn tick(api: &AgentApi, state: &AgentState, config: &Config) -> anyhow::Result<()> {
     api.heartbeat(state).await.context("heartbeat failed")?;
     let tasks = api.poll(state, POLL_LIMIT).await.context("poll failed")?;
 
@@ -58,7 +58,7 @@ async fn tick(api: &AgentApi, state: &AgentState) -> anyhow::Result<()> {
         api.mark_running(state, &task.id, &task.lease_token)
             .await
             .with_context(|| format!("failed to mark task {} running", task.id))?;
-        let result = execute_task(&task).await;
+        let result = execute_task(&task, config.safe_mode).await;
         api.complete(state, &task.id, &result)
             .await
             .with_context(|| format!("failed to complete task {}", task.id))?;

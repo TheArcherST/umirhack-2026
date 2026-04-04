@@ -59,6 +59,13 @@ BUILTIN_TEMPLATES: tuple[dict[str, Any], ...] = (
         "approved_command": None,
     },
     {
+        "kind": "diagnostic.command.custom",
+        "name": "Custom Command",
+        "payload_json": {"template_code": "custom_command"},
+        "metric_policy_json": {},
+        "approved_command": None,
+    },
+    {
         "kind": "diagnostic.command.port_scan",
         "name": "Port Scan",
         "payload_json": {"template_code": "port_scan"},
@@ -162,15 +169,17 @@ async def ensure_project_templates(
     session: AsyncSession,
     project_id: str,
 ) -> list[TaskTemplate]:
-    existing = await session.scalars(
+    existing = list(
+        await session.scalars(
         select(TaskTemplate).where(TaskTemplate.project_id == project_id)
+        )
     )
-    templates = list(existing)
-    if templates:
-        return templates
+    existing_kinds = {template.kind for template in existing}
 
     created: list[TaskTemplate] = []
     for template_data in BUILTIN_TEMPLATES:
+        if template_data["kind"] in existing_kinds:
+            continue
         template = TaskTemplate(
             project_id=project_id,
             kind=template_data["kind"],
@@ -184,7 +193,7 @@ async def ensure_project_templates(
         created.append(template)
 
     await session.flush()
-    return created
+    return existing + created
 
 
 async def create_project_defaults(

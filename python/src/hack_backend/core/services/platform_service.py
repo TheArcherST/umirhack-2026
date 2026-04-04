@@ -441,6 +441,7 @@ class PlatformService:
         project_id: str,
         name: str,
         declared_os: str | None,
+        safe_install: bool,
         environment_ids: list[str],
     ) -> tuple[Agent, list[Environment]]:
         environments = await self._resolve_project_environments(
@@ -451,6 +452,7 @@ class PlatformService:
             project_id=project_id,
             name=name,
             declared_os=declared_os,
+            safe_install=safe_install,
         )
         self.session.add(agent)
         await self.session.flush()
@@ -470,10 +472,13 @@ class PlatformService:
         *,
         agent: Agent,
         name: str | None,
+        safe_install: bool | None,
         environment_ids: list[str] | None,
     ) -> tuple[Agent, list[Environment]]:
         if name:
             agent.name = name
+        if safe_install is not None:
+            agent.safe_install = safe_install
         if environment_ids is not None:
             environments = await self._resolve_project_environments(
                 project_id=agent.project_id,
@@ -631,10 +636,24 @@ class PlatformService:
         task_template_id: str,
         payload_overrides: dict | None,
     ) -> list[TaskRun]:
-        environment, _ = await self._resolve_environment_task_template(
+        environment, task_template = await self._resolve_environment_task_template(
             environment_id=environment_id,
             task_template_id=task_template_id,
         )
+        validated_payload_overrides = dict(payload_overrides or {})
+        if task_template.kind == "diagnostic.command.custom":
+            command = validated_payload_overrides.get("approved_command")
+            if not isinstance(command, str) or not command.strip():
+                raise HTTPException(
+                    status_code=400,
+                    detail="Custom command tasks require a non-empty approved_command",
+                )
+            validated_payload_overrides["approved_command"] = command.strip()
+        elif "approved_command" in validated_payload_overrides:
+            raise HTTPException(
+                status_code=400,
+                detail="approved_command override is only allowed for custom command tasks",
+            )
         resolved_host_ids = list(dict.fromkeys(host_ids))
         hosts = list(
             await self.session.scalars(
@@ -654,7 +673,7 @@ class PlatformService:
                 host_id=host.id,
                 agent_id=host.agent_id,
                 task_template_id=task_template_id,
-                payload_override_json=payload_overrides or {},
+                payload_override_json=validated_payload_overrides,
             )
             self.session.add(task_run)
             task_runs.append(task_run)

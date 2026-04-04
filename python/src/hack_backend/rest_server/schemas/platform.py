@@ -44,6 +44,7 @@ class AgentDTO(BaseDTO):
     project_id: str
     name: str
     declared_os: str | None = None
+    safe_install: bool = False
     status: str
     last_seen_at: datetime | None = None
     agent_version: str | None = None
@@ -94,6 +95,7 @@ class TaskRunDTO(BaseDTO):
     started_at: datetime | None = None
     finished_at: datetime | None = None
     failure_reason: str | None = None
+    command: str
     task_name: str
     task_kind: str
     host_name: str
@@ -170,6 +172,7 @@ class ScheduleRuleDTO(BaseDTO):
 class InstallScriptDTO(BaseDTO):
     command: str
     agent_id: str
+    safe_install: bool = False
     platform: str
     script_kind: str
     script_url: str

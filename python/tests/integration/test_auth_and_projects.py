@@ -107,6 +107,7 @@ def test_project_creation_bootstraps_main_environment_and_templates(api) -> None
         "host.system_profile",
         "host.ip_interfaces",
         "network.endpoint_connectivity",
+        "diagnostic.command.custom",
         "diagnostic.command.port_scan",
         "diagnostic.command.disk_usage",
         "diagnostic.command.memory_cpu",
@@ -190,6 +191,33 @@ def test_project_member_role_update_returns_updated_member(api) -> None:
     assert promoted_payload["user_id"] == invited_payload["user_id"]
     assert promoted_payload["role"] == "admin"
     assert promoted_payload["status"] == "accepted"
+
+
+def test_user_search_finds_registered_user_by_email(api) -> None:
+    owner = api.register_user(prefix="owner")
+    invited_email = "lookup-user@example.com"
+
+    register = api.client.post(
+        "/register",
+        json={
+            "username": "lookup-user",
+            "password": "lookup-password",
+            "email": invited_email,
+        },
+        headers={"User-Agent": "pytest-integration"},
+    )
+    assert register.status_code == 201, register.text
+
+    search = api.client.get(
+        "/users/search",
+        params={"q": "lookup-user@example.com"},
+        headers=owner.headers,
+    )
+    assert search.status_code == 200, search.text
+    results = search.json()
+    assert len(results) == 1
+    assert results[0]["email"] == invited_email
+    assert results[0]["name"] == "lookup-user"
 
 
 def test_invited_user_can_register_with_invited_email(api) -> None:

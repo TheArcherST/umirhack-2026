@@ -34,6 +34,7 @@ from hack_backend.rest_server.schemas.platform import (
     TaskTemplateDTO,
     TelemetryRecordDTO,
 )
+from hack_backend.core.platform_ops import merged_payload
 
 
 def _string_value(value: Any) -> str:
@@ -87,6 +88,7 @@ def agent_to_dto(agent: Agent, environments: list[Environment]) -> AgentDTO:
         project_id=agent.project_id,
         name=agent.name,
         declared_os=agent.declared_os,
+        safe_install=bool(agent.safe_install),
         status=_string_value(agent.status),
         last_seen_at=agent.last_seen_at,
         agent_version=agent.agent_version,
@@ -133,6 +135,13 @@ def host_detail_to_dto(host: Host) -> HostDetailDTO:
 
 
 def task_run_to_dto(task_run: TaskRun) -> TaskRunDTO:
+    resolved_payload = merged_payload(task_run.task_template, task_run)
+    command = (
+        resolved_payload.get("approved_command")
+        or resolved_payload.get("target_endpoint")
+        or task_run.task_template.approved_command
+        or task_run.task_template.name
+    )
     return TaskRunDTO(
         id=task_run.id,
         environment_id=task_run.environment_id,
@@ -145,6 +154,7 @@ def task_run_to_dto(task_run: TaskRun) -> TaskRunDTO:
         started_at=task_run.started_at,
         finished_at=task_run.finished_at,
         failure_reason=task_run.failure_reason,
+        command=str(command),
         task_name=task_run.task_template.name,
         task_kind=task_run.task_template.kind,
         host_name=task_run.host.name,

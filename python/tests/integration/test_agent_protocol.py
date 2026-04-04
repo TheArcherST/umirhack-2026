@@ -231,3 +231,61 @@ def test_mock_agent_drives_bootstrap_and_projection_flow(api) -> None:
     assert graph[0]["source_host_id"] == host["id"]
     assert graph[0]["target_host_id"] == host["id"]
     assert graph[0]["target_label"] == "alpha.internal"
+
+
+def test_custom_command_tasks_and_safe_install_script(api) -> None:
+    owner = api.register_user(prefix="operator")
+    bundle = api.create_project_bundle(
+        user=owner,
+        project_name="Fleet Custom",
+    )
+    custom_template_id = _template_id_for_kind(
+        bundle.templates,
+        "diagnostic.command.custom",
+    )
+    created_agent = api.create_agent(
+        user=owner,
+        project_id=bundle.project["id"],
+        environment_id=bundle.environment["id"],
+        name="custom-agent",
+        safe_install=True,
+    )
+    install_script = api.get_install_script(
+        user=owner,
+        agent_id=created_agent["id"],
+    )
+    assert install_script["safe_install"] is True
+
+    script_response = api.client.get(install_script["script_url"])
+    assert script_response.status_code == 200, script_response.text
+    assert "HACK_AGENT_SAFE_MODE=1" in script_response.text
+
+    bootstrap_token = install_script["script_url"].rstrip("/").split("/")[-1].split("?")[0]
+    agent = api.register_agent(bootstrap_token=bootstrap_token)
+
+    hosts_response = api.client.get(
+        f"/environments/{bundle.environment['id']}/hosts",
+        headers=owner.headers,
+    )
+    assert hosts_response.status_code == 200, hosts_response.text
+    host_id = hosts_response.json()[0]["id"]
+
+    create_task_runs = api.client.post(
+        "/task-runs",
+        json={
+            "environment_id": bundle.environment["id"],
+            "host_ids": [host_id],
+            "task_template_id": custom_template_id,
+            "payload_overrides": {"approved_command": "echo custom-task"},
+        },
+        headers=owner.headers,
+    )
+    assert create_task_runs.status_code == 201, create_task_runs.text
+
+    custom_leases = api.poll_agent(agent=agent)
+    custom_lease = next(
+        lease
+        for lease in custom_leases
+        if lease["task_template"]["kind"] == "diagnostic.command.custom"
+    )
+    assert custom_lease["task_template"]["payload_json"]["approved_command"] == "echo custom-task"

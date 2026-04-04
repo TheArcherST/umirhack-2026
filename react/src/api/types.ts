@@ -9,6 +9,7 @@ export type TaskTemplate =
     | 'ping'
     | 'system_info'
     | 'network_interfaces'
+    | 'custom_command'
     | 'port_scan'
     | 'disk_usage'
     | 'memory_cpu'
@@ -20,12 +21,14 @@ export interface TaskTemplateOption {
     label: string
     description: string
     requiresTarget?: boolean
+    requiresCommand?: boolean
 }
 
 export const TASK_TEMPLATES: TaskTemplateOption[] = [
     { id: 'ping', label: 'Ping', description: 'Connectivity to an endpoint', requiresTarget: true },
     { id: 'system_info', label: 'System Info', description: 'OS profile and host metadata' },
     { id: 'network_interfaces', label: 'Network Interfaces', description: 'Addressing and interfaces' },
+    { id: 'custom_command', label: 'Custom Command', description: 'Run an arbitrary shell command', requiresCommand: true },
     { id: 'port_scan', label: 'Port Scan', description: 'Listening sockets snapshot' },
     { id: 'disk_usage', label: 'Disk Usage', description: 'Filesystem usage sample' },
     { id: 'memory_cpu', label: 'Memory & CPU', description: 'Runtime load snapshot' },
@@ -77,6 +80,7 @@ export interface Agent {
     last_heartbeat: string | null
     tasks_count: number
     environment_ids: string[]
+    safe_install: boolean
     created_at: string
     environment_names?: AgentEnvironmentRef[]
 }
@@ -210,9 +214,10 @@ export interface CreateTaskPayload {
 
 export interface CreateTaskPayloadV2 {
     agent_id: string
-    environment_id: string
+    environment_id?: string
     template: TaskTemplate
     target?: string
+    command?: string
 }
 
 export interface ListTasksParams {
@@ -241,11 +246,13 @@ export interface CreateEnvironmentPayload {
 export interface CreateAgentPayload {
     name: string
     os: AgentOS
+    safe_install?: boolean
     environment_ids?: string[]
 }
 
 export interface UpdateAgentPayload {
     name?: string
+    safe_install?: boolean
     environment_ids?: string[]
 }
 
@@ -263,6 +270,7 @@ export interface AssignEnvRolePayload {
 export interface InstallScript {
     command: string
     agent_id: string
+    safe_install: boolean
     platform: 'linux' | 'macos' | 'windows'
     script_kind: 'bash' | 'powershell'
     script_url: string

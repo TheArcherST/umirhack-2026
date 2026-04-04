@@ -34,6 +34,7 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
     const [name, setName] = useState('')
     const [os, setOs] = useState<AgentOS>('linux')
     const [selectedEnvs, setSelectedEnvs] = useState<string[]>([])
+    const [safeInstall, setSafeInstall] = useState(false)
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
 
@@ -63,7 +64,12 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
         setError('')
         setLoading(true)
         try {
-            const result = await stubCreateAgent({name: name.trim(), os, environment_ids: selectedEnvs})
+            const result = await stubCreateAgent({
+                name: name.trim(),
+                os,
+                safe_install: safeInstall,
+                environment_ids: selectedEnvs,
+            })
             setInstallScript(result.installScript)
             setStep('script')
             onCreated()
@@ -85,6 +91,7 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
         setName('')
         setOs('linux')
         setSelectedEnvs([])
+        setSafeInstall(false)
         setError('')
         setStep('form')
         setInstallScript(null)
@@ -151,6 +158,21 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
                                 />
                             </div>
 
+                            <label className="flex items-start gap-3 rounded-md border border-border px-3 py-2 text-sm">
+                                <input
+                                    type="checkbox"
+                                    checked={safeInstall}
+                                    onChange={(e) => setSafeInstall(e.target.checked)}
+                                    className="mt-0.5"
+                                />
+                                <span className="space-y-1">
+                                    <span className="block font-medium">{t('agent.safeInstall')}</span>
+                                    <span className="block text-xs text-muted-foreground">
+                                        {t('agent.safeInstallHint')}
+                                    </span>
+                                </span>
+                            </label>
+
                             {error && <p className="text-xs text-red-400 font-mono">{error}</p>}
                         </div>
 
@@ -173,6 +195,11 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
                         <p className="text-[11px] text-muted-foreground font-mono">
                             {installHint}
                         </p>
+                        {installScript?.safe_install && (
+                            <p className="text-[11px] text-amber-500 font-mono">
+                                {t('agent.safeInstallEnabled')}
+                            </p>
+                        )}
                         <div className="relative rounded-md border border-border bg-muted/30 overflow-hidden">
                             <div className="absolute top-2 right-2 z-10">
                                 <button

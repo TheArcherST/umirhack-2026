@@ -76,23 +76,27 @@ def render_install_script(
     api_url: str,
     bootstrap_token: str,
     artifact_root_url: str,
+    safe_install: bool,
 ) -> str:
     if platform == "windows":
         return _render_windows_install_script(
             api_url=api_url,
             bootstrap_token=bootstrap_token,
             artifact_root_url=artifact_root_url,
+            safe_install=safe_install,
         )
     if platform == "macos":
         return _render_macos_install_script(
             api_url=api_url,
             bootstrap_token=bootstrap_token,
             artifact_root_url=artifact_root_url,
+            safe_install=safe_install,
         )
     return _render_linux_install_script(
         api_url=api_url,
         bootstrap_token=bootstrap_token,
         artifact_root_url=artifact_root_url,
+        safe_install=safe_install,
     )
 
 
@@ -101,6 +105,7 @@ def _render_linux_install_script(
     api_url: str,
     bootstrap_token: str,
     artifact_root_url: str,
+    safe_install: bool,
 ) -> str:
     return f"""#!/usr/bin/env bash
 set -euo pipefail
@@ -172,6 +177,7 @@ HACK_AGENT_API_URL=$API_URL
 HACK_AGENT_BOOTSTRAP_TOKEN=$BOOTSTRAP_TOKEN
 HACK_AGENT_STATE_PATH=$STATE_PATH
 HACK_AGENT_VERSION=rust-agent/1
+HACK_AGENT_SAFE_MODE={"1" if safe_install else "0"}
 EOF
 
 cat > "$SERVICE_FILE" <<EOF
@@ -202,6 +208,7 @@ def _render_windows_install_script(
     api_url: str,
     bootstrap_token: str,
     artifact_root_url: str,
+    safe_install: bool,
 ) -> str:
     return f"""$ErrorActionPreference = "Stop"
 
@@ -237,6 +244,7 @@ $env:HACK_AGENT_API_URL = '$apiUrl'
 $env:HACK_AGENT_BOOTSTRAP_TOKEN = '$bootstrapToken'
 $env:HACK_AGENT_STATE_PATH = '$stateDir\\state.json'
 $env:HACK_AGENT_VERSION = 'rust-agent/1'
+$env:HACK_AGENT_SAFE_MODE = '{'1' if safe_install else '0'}'
 & '$binaryPath'
 "@
 $runner | Set-Content -Path $runnerPath -Encoding ASCII
@@ -256,6 +264,7 @@ def _render_macos_install_script(
     api_url: str,
     bootstrap_token: str,
     artifact_root_url: str,
+    safe_install: bool,
 ) -> str:
     return f"""#!/usr/bin/env bash
 set -euo pipefail
@@ -323,6 +332,7 @@ export HACK_AGENT_API_URL={_shell_quote(api_url)}
 export HACK_AGENT_BOOTSTRAP_TOKEN={_shell_quote(bootstrap_token)}
 export HACK_AGENT_STATE_PATH={_shell_quote("/Library/Application Support/UmirhackAgent/state.json")}
 export HACK_AGENT_VERSION='rust-agent/1'
+export HACK_AGENT_SAFE_MODE={_shell_quote("1" if safe_install else "0")}
 exec {_shell_quote("/usr/local/bin/hack-agent")}
 EOF
 chmod 0755 "$RUNNER_PATH"

@@ -15,6 +15,7 @@ from hack_backend.core.services.access import (
 )
 from hack_backend.core.services.email_verification import EmailVerificationService
 from hack_backend.core.services.uow_ctl import UoWCtl
+from hack_backend.rest_server.providers import AuthorizedUser
 
 router = APIRouter(tags=["access"])
 
@@ -45,6 +46,12 @@ class RegisterResponse(BaseModel):
     message: str
     email_verification_required: bool = False
     auth: AuthorizationCredentials | None = None
+
+
+class UserSearchResultDTO(BaseModel):
+    user_id: str
+    email: str
+    name: str
 
 
 def auth_response_for_user_token(
@@ -154,3 +161,24 @@ async def login(
         email=login_session.user.email,
         token=login_session.token,
     )
+
+
+@router.get("/users/search", response_model=list[UserSearchResultDTO])
+@inject
+async def search_users(
+    q: str,
+    current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
+) -> list[UserSearchResultDTO]:
+    users = await access_service.search_users(
+        query=q,
+        exclude_user_id=current_user.id,
+    )
+    return [
+        UserSearchResultDTO(
+            user_id=str(user.id),
+            email=user.email or "",
+            name=user.username,
+        )
+        for user in users
+    ]
