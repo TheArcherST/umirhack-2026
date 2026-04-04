@@ -11,6 +11,7 @@ import { TaskLogModal } from '@/components/TaskLogModal'
 import { CreateTaskModal } from '@/components/CreateTaskModal'
 import type { Task, TaskStatus } from '@/api/types'
 import { useI18n } from '@/i18n'
+import { EnvironmentHeader } from '@/components/EnvironmentHeader'
 
 type StatusFilter = '' | TaskStatus
 
@@ -75,23 +76,16 @@ export default function EnvironmentTasks() {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="flex items-center justify-between px-5 border-b border-border bg-card/50 backdrop-blur-sm" style={{ height: 'var(--header-height)' }}>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => navigate(`/environments/${envId}`)}
-            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors mr-1"
-          >
-            <ChevronLeft size={15} />
-          </button>
-          <h1 className="text-sm font-semibold text-foreground">
-            {currentEnv?.name ?? 'Environment'} — {t('env.tasks')}
-          </h1>
-        </div>
-        <Button size="sm" variant="outline" onClick={() => setCreateTaskOpen(true)} className="gap-1.5 h-7 text-xs">
-          <Plus size={12} />
-          {t('env.createTask')}
-        </Button>
-      </header>
+      <EnvironmentHeader
+        envId={envId!}
+        title={t('env.tasks')}
+        right={
+          <Button size="sm" variant="outline" onClick={() => setCreateTaskOpen(true)} className="gap-1.5 h-7 text-xs">
+            <Plus size={12} />
+            {t('env.createTask')}
+          </Button>
+        }
+      />
 
       <div className="flex-1 overflow-y-auto">
         <div className="p-5 space-y-4">

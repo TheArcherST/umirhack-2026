@@ -1,19 +1,20 @@
+import React from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Sun, Moon } from 'lucide-react'
 import { API_BASE_URL } from '@/api/client'
 import { useTheme } from '@/hooks/useTheme'
 import { useI18n } from '@/i18n'
 import { useProject } from '@/hooks/useProject'
 import { cn } from '@/lib/utils'
-import React from 'react'
 import { Breadcrumb, type BreadcrumbSegment } from '@/components/Breadcrumb'
 
-interface HeaderProps {
-  title?: string
+interface EnvironmentHeaderProps {
+  envId: string
+  title: string
   right?: React.ReactNode
   backButton?: React.ReactNode
 }
 
-// Module-level singleton so status persists across Header remounts (page navigation)
 let _backendStatus: boolean | null = null
 const _backendListeners = new Set<(v: boolean) => void>()
 let _backendIntervalId: ReturnType<typeof setInterval> | null = null
@@ -46,15 +47,19 @@ function useBackendStatus() {
   return connected
 }
 
-export function Header({ title, right, backButton }: HeaderProps) {
+export function EnvironmentHeader({ envId, title, right, backButton }: EnvironmentHeaderProps) {
   const { theme, toggle } = useTheme()
   const { t } = useI18n()
-  const { currentProject } = useProject()
+  const { currentProject, environments } = useProject()
+  const currentEnv = environments.find((e) => e.id === envId)
   const connected = useBackendStatus()
 
   const segments: BreadcrumbSegment[] = []
   if (currentProject) {
     segments.push({ label: currentProject.name })
+  }
+  if (currentEnv) {
+    segments.push({ label: currentEnv.name })
   }
   if (title) {
     segments.push({ label: title, active: true })

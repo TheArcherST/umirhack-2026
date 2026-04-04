@@ -12,7 +12,7 @@
     "noResults": "Ничего не найдено",
     "all": "Все",
     "online": "Онлайн",
-    "stale": "Нет heartbeat",
+    "stale": "Устарел",
     "offline": "Оффлайн",
     "success": "успешно",
     "failed": "ошибка",
