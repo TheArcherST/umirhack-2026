@@ -66,6 +66,7 @@ class ConfigRedis(BaseModel):
 class ConfigServer(BaseModel):
     root_path: str = ""
     agent_artifacts_dir: str = "/opt/hack-agent-artifacts"
+    agent_public_origin: str | None = None
 
 
 class ConfigEmail(BaseModel):

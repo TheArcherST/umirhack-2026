@@ -1,16 +1,30 @@
 import React, {useState} from 'react'
 import {useQuery} from '@tanstack/react-query'
 import {useNavigate} from 'react-router-dom'
-import {UserPlus, Trash2, ChevronRight, CheckCircle2, Clock, Mail} from 'lucide-react'
+import {
+    UserPlus,
+    Trash2,
+    ChevronRight,
+    CheckCircle2,
+    Clock,
+    Loader2,
+    Plus,
+    Search,
+} from 'lucide-react'
 import {Header} from '@/components/Header'
 import {Badge} from '@/components/ui/badge'
 import {Button} from '@/components/ui/button'
 import {Input} from '@/components/ui/input'
 import {Label} from '@/components/ui/label'
-import {stubGetProjectMembers, stubInviteMember, stubRemoveMember} from '@/api/stubs'
+import {
+    stubGetProjectMembers,
+    stubInviteMember,
+    stubRemoveMember,
+    stubSearchUsers,
+} from '@/api/stubs'
+import type {UserSearchResult} from '@/api/types'
 import {useI18n} from '@/i18n'
 import {useProject} from '@/hooks/useProject'
-import {cn} from '@/lib/utils'
 import {formatDate} from '@/lib/utils'
 
 export default function ProjectMembers() {
@@ -19,8 +33,11 @@ export default function ProjectMembers() {
     const {currentProject} = useProject()
     const [inviteEmail, setInviteEmail] = useState('')
     const [inviting, setInviting] = useState(false)
+    const [searching, setSearching] = useState(false)
+    const [searchResults, setSearchResults] = useState<UserSearchResult[]>([])
     const [error, setError] = useState('')
     const [removingId, setRemovingId] = useState<string | null>(null)
+    const searchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const {data: members = [], isLoading, refetch} = useQuery({
         queryKey: ['members', currentProject?.id],
@@ -28,6 +45,51 @@ export default function ProjectMembers() {
         enabled: !!currentProject,
         refetchInterval: 10_000,
     })
+
+    React.useEffect(() => {
+        return () => {
+            if (searchTimerRef.current) {
+                clearTimeout(searchTimerRef.current)
+            }
+        }
+    }, [])
+
+    const handleInviteEmailChange = (value: string) => {
+        setInviteEmail(value)
+        setError('')
+
+        if (searchTimerRef.current) {
+            clearTimeout(searchTimerRef.current)
+        }
+
+        const normalized = value.trim()
+        if (normalized.length < 2) {
+            setSearchResults([])
+            setSearching(false)
+            return
+        }
+
+        searchTimerRef.current = setTimeout(async () => {
+            setSearching(true)
+            try {
+                const existingMemberIds = new Set(members.map((member) => member.user_id))
+                const results = await stubSearchUsers(normalized)
+                setSearchResults(
+                    results.filter((result) => !existingMemberIds.has(result.user_id)),
+                )
+            } catch {
+                setSearchResults([])
+            } finally {
+                setSearching(false)
+            }
+        }, 300)
+    }
+
+    const handleSelectUser = (user: UserSearchResult) => {
+        setInviteEmail(user.email)
+        setSearchResults([])
+        setError('')
+    }
 
     const handleInvite = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -37,6 +99,7 @@ export default function ProjectMembers() {
         try {
             await stubInviteMember({project_id: currentProject?.id ?? '', email: inviteEmail.trim()})
             setInviteEmail('')
+            setSearchResults([])
             refetch()
         } catch (err: any) {
             setError(err.message ?? 'Failed to invite')
@@ -81,12 +144,46 @@ export default function ProjectMembers() {
                         <form onSubmit={handleInvite} className="flex items-end gap-3">
                             <div className="flex-1 space-y-1.5">
                                 <Label>{t('member.memberEmail')}</Label>
-                                <Input
-                                    type="email"
-                                    value={inviteEmail}
-                                    onChange={(e) => setInviteEmail(e.target.value)}
-                                    placeholder={t('member.memberEmailPlaceholder')}
-                                />
+                                <div className="relative">
+                                    <Search
+                                        size={13}
+                                        className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                                    />
+                                    <Input
+                                        type="email"
+                                        value={inviteEmail}
+                                        onChange={(e) => handleInviteEmailChange(e.target.value)}
+                                        placeholder={t('member.memberEmailPlaceholder')}
+                                        className="pl-8"
+                                    />
+                                    {searching && (
+                                        <Loader2
+                                            size={13}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground"
+                                        />
+                                    )}
+                                </div>
+                                {searchResults.length > 0 && (
+                                    <div className="rounded-md border border-border bg-muted/20 max-h-40 overflow-y-auto">
+                                        {searchResults.map((user) => (
+                                            <button
+                                                key={user.user_id}
+                                                type="button"
+                                                onClick={() => handleSelectUser(user)}
+                                                className="flex items-center gap-2.5 w-full px-3 py-2 text-left hover:bg-accent/50 transition-colors first:rounded-t-md last:rounded-b-md"
+                                            >
+                                                <div className="w-6 h-6 rounded-full bg-foreground/15 flex items-center justify-center text-xs font-semibold font-mono shrink-0">
+                                                    {user.name[0]?.toUpperCase()}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-xs font-medium truncate">{user.name}</p>
+                                                    <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                                                </div>
+                                                <Plus size={13} className="text-muted-foreground shrink-0"/>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                             <Button type="submit" size="sm" disabled={inviting || !inviteEmail.trim()}
                                     className="shrink-0">

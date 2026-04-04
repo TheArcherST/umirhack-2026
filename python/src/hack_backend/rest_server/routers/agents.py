@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 from dishka import FromDishka
 from dishka.integrations.fastapi import inject
@@ -29,6 +30,22 @@ from hack_backend.rest_server.schemas.platform import AgentDTO, InstallScriptDTO
 from hack_backend.rest_server.serializers import agent_to_dto, task_run_to_dto
 
 router = APIRouter(tags=["agents"])
+
+
+def _public_agent_url(url: str, *, config: ConfigHack) -> str:
+    public_origin = (config.server.agent_public_origin or "").strip().rstrip("/")
+    if not public_origin:
+        return url
+
+    current = urlsplit(url)
+    override = urlsplit(
+        public_origin if "://" in public_origin else f"//{public_origin}"
+    )
+    scheme = override.scheme or current.scheme
+    netloc = override.netloc or override.path
+    if not netloc:
+        return url
+    return urlunsplit((scheme, netloc, current.path, current.query, current.fragment))
 
 
 class CreateAgentPayload(BaseModel):
@@ -151,6 +168,7 @@ async def delete_agent(
 async def get_install_script(
     agent_id: str,
     request: Request,
+    config: FromDishka[ConfigHack],
     current_user: FromDishka[AuthorizedUser],
     platform_service: FromDishka[PlatformService],
     uow_ctl: FromDishka[UoWCtl],
@@ -170,12 +188,15 @@ async def get_install_script(
     resolved_agent_id, raw_token = await platform_service.issue_install_script(
         agent=agent,
     )
-    script_url = str(
-        request.url_for(
-            "get_agent_install_script_payload",
-            platform=platform,
-            bootstrap_token=raw_token,
-        )
+    script_url = _public_agent_url(
+        str(
+            request.url_for(
+                "get_agent_install_script_payload",
+                platform=platform,
+                bootstrap_token=raw_token,
+            )
+        ),
+        config=config,
     )
     command = install_command_for_script(platform=platform, script_url=script_url)
     await uow_ctl.commit()
@@ -194,10 +215,12 @@ async def get_install_script(
     response_class=PlainTextResponse,
     name="get_agent_install_script_payload",
 )
+@inject
 async def get_agent_install_script_payload(
     platform: str,
     bootstrap_token: str,
     request: Request,
+    config: FromDishka[ConfigHack],
     session: AsyncSession = Depends(get_session),
 ) -> PlainTextResponse:
     try:
@@ -215,14 +238,20 @@ async def get_agent_install_script_payload(
     )
     if agent is None:
         raise HTTPException(status_code=404, detail="Install script token not found")
-    api_url = str(request.base_url).rstrip("/")
-    artifact_root_url = str(
-        request.url_for(
-            "download_agent_artifact",
-            platform=normalized_platform,
-            arch="ARCH_PLACEHOLDER",
-            filename="FILE_PLACEHOLDER",
-        )
+    api_url = _public_agent_url(
+        str(request.base_url).rstrip("/"),
+        config=config,
+    )
+    artifact_root_url = _public_agent_url(
+        str(
+            request.url_for(
+                "download_agent_artifact",
+                platform=normalized_platform,
+                arch="ARCH_PLACEHOLDER",
+                filename="FILE_PLACEHOLDER",
+            )
+        ),
+        config=config,
     )
     artifact_root_url = artifact_root_url.removesuffix("/ARCH_PLACEHOLDER/FILE_PLACEHOLDER")
     content = render_install_script(
