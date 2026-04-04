@@ -1018,6 +1018,7 @@ export async function stubGetScheduleRules(envId: string): Promise<ScheduleRule[
 export async function stubPatchScheduleRule(
     id: string,
     patch: {
+        template?: TaskTemplate
         is_enabled?: boolean
         cron_expr?: string
         host_ids?: string[]
@@ -1025,7 +1026,25 @@ export async function stubPatchScheduleRule(
         target_endpoint?: string | null
     },
 ): Promise<ScheduleRule> {
-    const { data } = await apiClient.patch<ScheduleRule>(`/schedule-rules/${id}`, patch)
+    const body: Record<string, unknown> = {
+        is_enabled: patch.is_enabled,
+        cron_expr: patch.cron_expr,
+        host_ids: patch.host_ids,
+        approved_command: patch.approved_command,
+        target_endpoint: patch.target_endpoint,
+    }
+    if (patch.template) {
+        const projectId = await fetchProjectId()
+        const templates = await getTaskTemplatesInternal(projectId)
+        const targetKind = templateToKind(patch.template)
+        const template =
+            templates.find((item) => item.kind === targetKind) ??
+            templates.find((item) => item.kind === 'diagnostic.command') ??
+            templates[0]
+        if (!template) throw new Error('No task templates are available')
+        body.task_template_id = template.id
+    }
+    const { data } = await apiClient.patch<ScheduleRule>(`/schedule-rules/${id}`, body)
     return data
 }
 

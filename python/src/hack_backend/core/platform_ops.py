@@ -710,7 +710,9 @@ def _cron_field_matches(expr: str, current: int, minimum: int, maximum: int) -> 
 
 
 def next_cron_run(expr: str, after: datetime) -> datetime:
-    probe = after.replace(second=0, microsecond=0) + timedelta(minutes=1)
+    probe = ensure_utc(after).replace(second=0, microsecond=0) + timedelta(
+        minutes=1
+    )
     for _ in range(60 * 24 * 366):
         if cron_matches(expr, probe):
             return probe
@@ -728,9 +730,13 @@ async def expand_schedule_rules(session: AsyncSession) -> int:
     created_runs = 0
 
     for rule in rules:
-        if rule.next_run_at is None:
-            rule.next_run_at = next_cron_run(rule.cron_expr, now - timedelta(minutes=1))
-        if rule.next_run_at > now:
+        current_next_run = (
+            ensure_utc(rule.next_run_at)
+            if rule.next_run_at is not None
+            else next_cron_run(rule.cron_expr, now - timedelta(minutes=1))
+        )
+        rule.next_run_at = current_next_run
+        if current_next_run > now:
             continue
 
         hosts = await resolve_schedule_hosts(
@@ -739,6 +745,8 @@ async def expand_schedule_rules(session: AsyncSession) -> int:
             target_selector=rule.target_selector_json or {},
         )
         for host in hosts:
+            payload_override_json = dict(rule.target_selector_json or {})
+            payload_override_json.pop("host_ids", None)
             session.add(
                 TaskRun(
                     environment_id=rule.environment_id,
@@ -746,12 +754,13 @@ async def expand_schedule_rules(session: AsyncSession) -> int:
                     agent_id=host.agent_id,
                     task_template_id=rule.task_template_id,
                     schedule_rule_id=rule.id,
+                    payload_override_json=payload_override_json,
                     status=TaskRunStatus.QUEUED,
                 )
             )
             created_runs += 1
 
-        rule.next_run_at = next_cron_run(rule.cron_expr, rule.next_run_at)
+        rule.next_run_at = next_cron_run(rule.cron_expr, current_next_run)
 
     if created_runs:
         await session.flush()
