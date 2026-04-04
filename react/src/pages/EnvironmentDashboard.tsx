@@ -115,7 +115,7 @@ export default function EnvironmentDashboard() {
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Connectivity Graph
+                {t('dashboard.connectivity_graph')}
               </h2>
               {isLoadingGraph ? (
                 <div className="flex items-center gap-3 text-[11px] text-muted-foreground">

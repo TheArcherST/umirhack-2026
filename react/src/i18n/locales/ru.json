@@ -81,7 +81,8 @@
     "failedTasks": "Ошибок",
     "recentTasks": "Последние задачи",
     "time": "Время",
-    "noTasks": "Задач пока нет"
+    "noTasks": "Задач пока нет",
+    "connectivity_graph": "Граф окружения"
   },
   "agents": {
     "title": "Агенты",

@@ -80,7 +80,8 @@
     "failedTasks": "Failed",
     "recentTasks": "Recent tasks",
     "time": "Time",
-    "noTasks": "No tasks yet"
+    "noTasks": "No tasks yet",
+    "connectivity_graph": "Connectivity Graph"
   },
   "agents": {
     "title": "Agents",

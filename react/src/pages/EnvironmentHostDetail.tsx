@@ -166,10 +166,10 @@ export default function EnvironmentHostDetail() {
             </div>
 
             {/* Right: Services + Ports */}
-            <div className="space-y-5">
+            <div className="flex flex-col gap-5 h-full">
               {/* Services */}
-              <div className="rounded-lg border border-border bg-card">
-                <div className="flex items-center gap-2 px-4 py-3 border-b border-border/50">
+              <div className="rounded-lg border border-border bg-card flex flex-col flex-1 min-h-0">
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-border/50 shrink-0">
                   <Cpu size={13} className="text-muted-foreground" />
                   <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider">
                     {t('env.services')}
@@ -179,7 +179,7 @@ export default function EnvironmentHostDetail() {
                   )}
                 </div>
                 {loadingServices ? (
-                  <div className="px-4 py-3 space-y-2">
+                  <div className="px-4 py-3 space-y-2 overflow-y-auto">
                     {Array.from({length: 3}).map((_, i) => (
                       <div key={i} className="flex items-center justify-between py-2.5 border-b border-border/50 last:border-0">
                         <div className="flex items-center gap-2">
@@ -196,7 +196,7 @@ export default function EnvironmentHostDetail() {
                 ) : services.length === 0 ? (
                   <div className="px-4 py-6 text-xs text-muted-foreground">{t('common.noResults')}</div>
                 ) : (
-                  <div className="px-4 py-2">
+                  <div className="px-4 py-2 overflow-y-auto">
                     {services.map((svc) => (
                       <div key={svc.name} className="flex items-center justify-between py-2.5 border-b border-border/50 last:border-0">
                         <div className="flex items-center gap-2">
@@ -227,7 +227,7 @@ export default function EnvironmentHostDetail() {
               </div>
 
               {/* Ports */}
-              <div className="rounded-lg border border-border bg-card">
+              <div className="rounded-lg border border-border bg-card shrink-0">
                 <div className="flex items-center gap-2 px-4 py-3 border-b border-border/50">
                   <Network size={13} className="text-muted-foreground" />
                   <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider">
