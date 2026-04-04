@@ -4,6 +4,7 @@ import {ArrowLeft, Trash2, Loader2, CheckCircle2} from 'lucide-react'
 import {Header} from '@/components/Header'
 import {Badge} from '@/components/ui/badge'
 import {Button} from '@/components/ui/button'
+import {Skeleton} from '@/components/ui/skeleton'
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
@@ -26,6 +27,7 @@ export default function MemberDetail() {
     const {currentProject, environments} = useProject()
 
     const [member, setMember] = React.useState<any>(null)
+    const [loadingMember, setLoadingMember] = useState(true)
     const [projectRole, setProjectRole] = useState<'admin' | 'member'>('member')
     const [envRoles, setEnvRoles] = useState<Record<string, string>>({})
     const [saving, setSaving] = useState<string | null>(null)
@@ -33,6 +35,7 @@ export default function MemberDetail() {
 
     React.useEffect(() => {
         if (!memberId || !currentProject) return
+        setLoadingMember(true)
         stubGetProjectMembers(currentProject.id).then((members) => {
             const m = members.find((x) => x.user_id === memberId)
             if (m) {
@@ -40,6 +43,8 @@ export default function MemberDetail() {
                 // Project role: admin or member
                 setProjectRole((m.role === 'owner' || m.role === 'admin') ? 'admin' : 'member')
             }
+        }).finally(() => {
+            setLoadingMember(false)
         })
     }, [memberId, currentProject])
 
@@ -94,7 +99,43 @@ export default function MemberDetail() {
         }
     }
 
-    if (!member) return null
+    if (loadingMember || !member) {
+        return (
+            <div className="flex-1 flex flex-col overflow-hidden">
+                <header className="flex items-center px-5 border-b border-border bg-card/50 backdrop-blur-sm" style={{height: 'var(--header-height)'}}>
+                    <div className="flex items-center gap-3">
+                        <Skeleton className="w-5 h-5" />
+                        <Skeleton className="h-5 w-32" />
+                    </div>
+                </header>
+                <div className="flex-1 overflow-auto p-6">
+                    <div className="max-w-lg space-y-8">
+                        <div className="flex items-center gap-4">
+                            <Skeleton className="w-12 h-12 rounded-full" />
+                            <div className="space-y-2">
+                                <Skeleton className="h-4 w-32" />
+                                <Skeleton className="h-3 w-40" />
+                                <Skeleton className="h-5 w-16 rounded" />
+                            </div>
+                        </div>
+                        <div className="space-y-3">
+                            <Skeleton className="h-3 w-24" />
+                            <Skeleton className="h-9 w-48" />
+                        </div>
+                        <div className="space-y-3">
+                            <Skeleton className="h-3 w-24" />
+                            {Array.from({length: 3}).map((_, i) => (
+                                <div key={i} className="flex items-center gap-3">
+                                    <Skeleton className="h-3 w-24" />
+                                    <Skeleton className="h-9 w-40" />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )
+    }
 
     const roleLabels: Record<string, string> = {
         owner: t('member.roleOwner'),

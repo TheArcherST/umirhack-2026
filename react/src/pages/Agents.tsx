@@ -97,20 +97,19 @@ export default function Agents() {
                                     </td>
                                     <td className="px-4 py-3">
                                         <div className="flex items-center gap-1.5">
-                        <span
-                            className={cn(
-                                'w-1.5 h-1.5 rounded-full',
-                                agentStatusTone(agent.status),
-                            )}
-                        />
                                             <span
-                                                className={cn('text-xs font-mono', agentStatusTextTone(agent.status))}>
-                          {t(agentStatusLabelKey(agent.status))}
-                        </span>
+                                                className={cn(
+                                                    'w-1.5 h-1.5 rounded-full',
+                                                    agentStatusTone(agent.status),
+                                                )}
+                                            />
+                                            <span className={cn('text-xs font-mono', agentStatusTextTone(agent.status))}>
+                                                {t(agentStatusLabelKey(agent.status))}
+                                            </span>
                                         </div>
                                     </td>
                                     <td className="px-4 py-3 hidden md:table-cell font-mono text-xs text-muted-foreground">
-                                        {timeAgo(agent.last_heartbeat)}
+                                        {agent.last_heartbeat ? timeAgo(agent.last_heartbeat) : t('common.never')}
                                     </td>
                                     <td className="px-4 py-3 hidden lg:table-cell font-mono text-xs text-muted-foreground">
                                         {agent.tasks_count}

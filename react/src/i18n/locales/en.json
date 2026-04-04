@@ -63,6 +63,7 @@
     "dashboard": "Dashboard",
     "agents": "Agents",
     "members": "Members",
+    "environment": "Environment",
     "environments": "Environments",
     "profileSettings": "Profile settings",
     "signOut": "Sign out",
@@ -86,7 +87,8 @@
     "ipHost": "IP / Host",
     "lastHeartbeat": "Last heartbeat",
     "noAgents": "No agents found",
-    "autoCopyNotSupported": "Automatic copying is not supported. Please copy manually:"
+    "autoCopyNotSupported": "Automatic copying is not supported. Please copy manually:",
+    "never": "Never"
   },
   "agentTasks": {
     "title": "Agent tasks",
@@ -174,7 +176,8 @@
     "emptyStepAgentDesc": "Connect agents after the project and environment structure exists.",
     "agentsInEnv": "{count} agents",
     "totalConnectivity": "Total connectivity",
-    "acrossAllEnvs": "across all environments"
+    "acrossAllEnvs": "across all environments",
+    "loadingGraph": "Loading connectivity graph..."
   },
   "agent": {
     "addAgent": "Add Agent",

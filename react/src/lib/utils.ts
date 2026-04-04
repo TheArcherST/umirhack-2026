@@ -25,15 +25,20 @@ export function formatDuration(seconds: number | null): string {
     return `${mins}m ${secs}s`
 }
 
-export function timeAgo(dateStr: string): string {
+export function timeAgo(dateStr: string, locale = 'en'): string {
     const now = new Date()
     const date = new Date(dateStr)
     const diff = Math.floor((now.getTime() - date.getTime()) / 1000)
 
-    if (diff < 60) return `${diff}s ago`
-    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
-    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-    return `${Math.floor(diff / 86400)}d ago`
+    let value: number
+    let unit: Intl.RelativeTimeFormatUnit
+
+    if (diff < 60) { value = -diff; unit = 'second' }
+    else if (diff < 3600) { value = -Math.floor(diff / 60); unit = 'minute' }
+    else if (diff < 86400) { value = -Math.floor(diff / 3600); unit = 'hour' }
+    else { value = -Math.floor(diff / 86400); unit = 'day' }
+
+    return new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(value, unit)
 }
 
 export async function copyText(text: string): Promise<boolean> {

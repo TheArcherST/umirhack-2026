@@ -14,6 +14,7 @@ import {
 import {Header} from '@/components/Header'
 import {Badge} from '@/components/ui/badge'
 import {Button} from '@/components/ui/button'
+import {Skeleton} from '@/components/ui/skeleton'
 import {Input} from '@/components/ui/input'
 import {Label} from '@/components/ui/label'
 import {
@@ -207,12 +208,19 @@ export default function ProjectMembers() {
                             </tr>
                             </thead>
                             <tbody>
-                            {isLoading && (
-                                <tr>
-                                    <td colSpan={5}
-                                        className="px-4 py-8 text-center text-xs text-muted-foreground">{t('common.loading')}</td>
+                            {isLoading && Array.from({length: 5}).map((_, i) => (
+                                <tr key={i} className="border-b border-border/50 last:border-0">
+                                    <td colSpan={5} className="px-4 py-3">
+                                        <div className="flex items-center gap-3">
+                                            <Skeleton className="w-7 h-7 rounded-full" />
+                                            <div className="flex-1 space-y-1">
+                                                <Skeleton className="h-3 w-24" />
+                                                <Skeleton className="h-3 w-32" />
+                                            </div>
+                                        </div>
+                                    </td>
                                 </tr>
-                            )}
+                            ))}
                             {!isLoading && members.map((member) => {
                                 // Project role: admin or member
                                 const isProjectAdmin = member.role === 'owner' || member.role === 'admin'

@@ -13,6 +13,7 @@ import {
 import {Header} from '@/components/Header'
 import {Badge} from '@/components/ui/badge'
 import {Button} from '@/components/ui/button'
+import {Skeleton} from '@/components/ui/skeleton'
 import {stubGetStats, stubGetRecentTasks, stubGetEnvironments, stubGetAgents} from '@/api/stubs'
 import {formatDate, formatDuration, timeAgo} from '@/lib/utils'
 import type {Task, Environment, Agent} from '@/api/types'
@@ -34,12 +35,24 @@ function StatusBadge({status}: { status: Task['status'] }) {
     return map[status] ?? null
 }
 
-function StatCard({icon: Icon, label, value, sub}: {
+function StatCard({icon: Icon, label, value, sub, loading}: {
     icon: React.ElementType;
     label: string;
     value: number | string;
-    sub?: string
+    sub?: string;
+    loading?: boolean
 }) {
+    if (loading) {
+        return (
+            <div className="rounded-lg border border-border bg-card p-4 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                    <Skeleton className="h-3 w-20" />
+                    <Skeleton className="h-3 w-3 rounded" />
+                </div>
+                <Skeleton className="h-8 w-16" />
+            </div>
+        )
+    }
     return (
         <div className="rounded-lg border border-border bg-card p-4 flex flex-col gap-3">
             <div className="flex items-center justify-between">
@@ -93,7 +106,7 @@ export default function Dashboard() {
     const [createOpen, setCreateOpen] = useState(false)
 
     // Load stats
-    const {data: stats} = useQuery({
+    const {data: stats, isLoading: isLoadingStats} = useQuery({
         queryKey: ['stats', currentProject?.id],
         queryFn: stubGetStats,
         refetchInterval: 15_000,
@@ -101,7 +114,7 @@ export default function Dashboard() {
     })
 
     // Load all agents (across all envs)
-    const {data: allAgents = []} = useQuery({
+    const {data: allAgents = [], isLoading: isLoadingAgents} = useQuery({
         queryKey: ['agents-all', currentProject?.id],
         queryFn: () => stubGetAgents(),
         refetchInterval: 15_000,
@@ -109,7 +122,7 @@ export default function Dashboard() {
     })
 
     // Load recent tasks
-    const {data: recentTasks = []} = useQuery({
+    const {data: recentTasks = [], isLoading: isLoadingTasks} = useQuery({
         queryKey: ['recent-tasks', currentProject?.id],
         queryFn: () => stubGetRecentTasks(8),
         refetchInterval: 10_000,
@@ -117,7 +130,7 @@ export default function Dashboard() {
     })
 
     // Load envs
-    const {data: envs} = useQuery({
+    const {data: envs, isLoading: isLoadingEnvs} = useQuery({
         queryKey: ['environments', currentProject?.id],
         queryFn: () => stubGetEnvironments(currentProject?.id ?? ''),
         enabled: !!currentProject,
@@ -207,21 +220,54 @@ export default function Dashboard() {
                 <div className="p-5 space-y-6">
                     {/* Stats grid — across all envs */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                        <StatCard icon={Server} label={t('dashboard.totalAgents')} value={stats?.total_agents ?? '—'}/>
+                        <StatCard
+                            icon={Server}
+                            label={t('dashboard.totalAgents')}
+                            value={stats?.total_agents ?? '—'}
+                            loading={isLoadingStats}
+                        />
                         <StatCard
                             icon={Activity}
                             label={t('dashboard.onlineNow')}
                             value={stats?.online_agents ?? '—'}
-                            sub={stats ? t('dashboard.offlineCount', {count: stats.total_agents - stats.online_agents}) : undefined}
+                            sub={stats && !isLoadingStats ? t('dashboard.offlineCount', {count: stats.total_agents - stats.online_agents}) : undefined}
+                            loading={isLoadingStats}
                         />
-                        <StatCard icon={CheckCircle2} label={t('dashboard.successful')}
-                                  value={stats?.successful_tasks ?? '—'} sub={t('dashboard.allTime')}/>
-                        <StatCard icon={XCircle} label={t('dashboard.failedTasks')} value={stats?.failed_tasks ?? '—'}
-                                  sub={t('dashboard.allTime')}/>
+                        <StatCard
+                            icon={CheckCircle2}
+                            label={t('dashboard.successful')}
+                            value={stats?.successful_tasks ?? '—'}
+                            sub={isLoadingStats ? undefined : t('dashboard.allTime')}
+                            loading={isLoadingStats}
+                        />
+                        <StatCard
+                            icon={XCircle}
+                            label={t('dashboard.failedTasks')}
+                            value={stats?.failed_tasks ?? '—'}
+                            sub={isLoadingStats ? undefined : t('dashboard.allTime')}
+                            loading={isLoadingStats}
+                        />
                     </div>
 
                     {/* Environments overview */}
-                    {envs && envs.length > 0 && (
+                    {isLoadingEnvs ? (
+                        <div>
+                            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                                {t('project.allEnvironments')}
+                            </h2>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {Array.from({length: 3}).map((_, i) => (
+                                    <div key={i} className="rounded-lg border border-border bg-card p-4 space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <Skeleton className="h-4 w-24" />
+                                            <Skeleton className="h-3 w-3" />
+                                        </div>
+                                        <Skeleton className="h-3 w-32" />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : envs && envs.length > 0 ? (
                         <div>
                             <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
                                 {t('project.allEnvironments')}
@@ -232,7 +278,7 @@ export default function Dashboard() {
                                 ))}
                             </div>
                         </div>
-                    )}
+                    ) : null}
 
                     {/* Recent tasks — across all envs */}
                     <div>
@@ -290,13 +336,23 @@ export default function Dashboard() {
                                         </td>
                                     </tr>
                                 ))}
-                                {recentTasks.length === 0 && (
+                                {recentTasks.length === 0 && !isLoadingTasks && (
                                     <tr>
                                         <td colSpan={6} className="px-4 py-8 text-center text-xs text-muted-foreground">
                                             {t('dashboard.noTasks')}
                                         </td>
                                     </tr>
                                 )}
+                                {isLoadingTasks && Array.from({length: 5}).map((_, i) => (
+                                    <tr key={i} className="border-b border-border/50 last:border-0">
+                                        <td colSpan={6} className="px-4 py-3">
+                                            <div className="flex items-center gap-3">
+                                                <Skeleton className="h-4 flex-1" />
+                                                <Skeleton className="h-5 w-16 rounded" />
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
                                 </tbody>
                             </table>
                         </div>
