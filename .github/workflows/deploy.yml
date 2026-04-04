@@ -64,7 +64,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build fresh agent artifacts through cross-build containers
+      - name: Build fresh agent artifacts through the toolchain container
         run: make artifacts args="--clean --container-only"
 
       - name: Verify published agent artifacts

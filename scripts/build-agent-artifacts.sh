@@ -6,7 +6,6 @@ ARTIFACT_DIR="$ROOT_DIR/artifacts/rust/hack-agent"
 WORKSPACE_DIR="$ROOT_DIR/rust"
 mkdir -p "$ROOT_DIR/artifacts/.tmp"
 TMP_ARTIFACT_DIR="$(mktemp -d "$ROOT_DIR/artifacts/.tmp/hack-agent-artifacts.XXXXXX")"
-TMP_ARTIFACT_REL_DIR="${TMP_ARTIFACT_DIR#"$ROOT_DIR"/}"
 CLEAN_OUTPUT=0
 CONTAINER_ONLY=0
 
@@ -19,7 +18,7 @@ usage() {
 usage: ./scripts/build-agent-artifacts.sh [--clean] [--container-only]
 
   --clean           Replace the published artifact directory with the freshly built set.
-  --container-only  Build only targets supported by Docker cross-build containers.
+  --container-only  Build only the Linux and Windows targets supported by the tool container.
 EOF
 }
 
@@ -59,31 +58,42 @@ prepare_output_dir() {
   mkdir -p "$TMP_ARTIFACT_DIR/$output_dir"
 }
 
-pull_image() {
-  local image="$1"
+ensure_rust_target() {
+  local target="$1"
 
-  docker pull "$image" >/dev/null
+  rustup target add "$target" >/dev/null
 }
 
-build_target() {
-  local image="$1"
-  local target="$2"
-  local output_dir="$3"
-  local binary_name="$4"
-  local output_name="$5"
+build_linux_target() {
+  local target="$1"
+  local output_dir="$2"
+  local output_name="$3"
 
   prepare_output_dir "$output_dir"
-  pull_image "$image"
+  ensure_rust_target "$target"
+  (
+    cd "$WORKSPACE_DIR"
+    cargo zigbuild --release -p hack_agent --target "$target"
+  )
+  cp \
+    "$WORKSPACE_DIR/target/$target/release/hack_agent" \
+    "$TMP_ARTIFACT_DIR/$output_dir/$output_name"
+}
 
-  docker run --rm \
-    -u "$(id -u):$(id -g)" \
-    -v "$ROOT_DIR:/workspace" \
-    -w /workspace/rust \
-    "$image" \
-    bash -lc "
-      cargo build --release -p hack_agent --target $target &&
-      cp target/$target/release/$binary_name /workspace/$TMP_ARTIFACT_REL_DIR/$output_dir/$output_name
-    "
+build_windows_target() {
+  local target="$1"
+  local output_dir="$2"
+  local output_name="$3"
+
+  prepare_output_dir "$output_dir"
+  ensure_rust_target "$target"
+  (
+    cd "$WORKSPACE_DIR"
+    cargo build --release -p hack_agent --target "$target"
+  )
+  cp \
+    "$WORKSPACE_DIR/target/$target/release/hack_agent.exe" \
+    "$TMP_ARTIFACT_DIR/$output_dir/$output_name"
 }
 
 build_native_target() {
@@ -119,27 +129,23 @@ publish_artifacts() {
   cp -R "$TMP_ARTIFACT_DIR"/. "$ARTIFACT_DIR"/
 }
 
-need_cmd docker
+need_cmd cargo
+need_cmd rustup
+need_cmd cargo-zigbuild
 
-build_target \
-  "ghcr.io/cross-rs/x86_64-unknown-linux-musl:main" \
+build_linux_target \
   "x86_64-unknown-linux-musl" \
   "linux/amd64" \
-  "hack_agent" \
   "hack-agent"
 
-build_target \
-  "ghcr.io/cross-rs/aarch64-unknown-linux-musl:main" \
+build_linux_target \
   "aarch64-unknown-linux-musl" \
   "linux/arm64" \
-  "hack_agent" \
   "hack-agent"
 
-build_target \
-  "ghcr.io/cross-rs/x86_64-pc-windows-gnu:main" \
+build_windows_target \
   "x86_64-pc-windows-gnu" \
   "windows/amd64" \
-  "hack_agent.exe" \
   "hack-agent.exe"
 
 if [[ "$CONTAINER_ONLY" -eq 1 ]]; then
