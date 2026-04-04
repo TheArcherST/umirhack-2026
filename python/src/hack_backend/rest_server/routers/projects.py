@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from datetime import UTC, datetime, timedelta
 
 from dishka import FromDishka
@@ -130,7 +128,11 @@ async def invite_project_member(
     return project_member_to_dto(membership, user)
 
 
-@router.get("/projects/invite/accept")
+@router.get(
+    "/projects/invite/accept",
+    response_class=RedirectResponse,
+    response_model=None,
+)
 @inject
 async def accept_project_invite(
     token: str,
@@ -151,7 +153,11 @@ async def accept_project_invite(
     return RedirectResponse(url=f"{redirect_to}?invite_accepted=1", status_code=302)
 
 
-@router.get("/projects/invite/decline")
+@router.get(
+    "/projects/invite/decline",
+    response_class=RedirectResponse,
+    response_model=None,
+)
 @inject
 async def decline_project_invite(
     token: str,
