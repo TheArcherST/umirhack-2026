@@ -6,7 +6,11 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.exc import IntegrityError
 
-from hack_backend.core.services.access import AccessService, ErrorUnauthorized
+from hack_backend.core.services.access import (
+    AccessService,
+    ErrorUnauthorized,
+    ServiceAccessError,
+)
 from hack_backend.core.services.email_verification import (
     EmailAlreadyVerified,
     EmailVerificationService,
@@ -57,6 +61,12 @@ async def register(
             password=payload.password,
             email=payload.email,
         )
+    except ServiceAccessError as e:
+        await uow_ctl.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="User with this email already exists",
+        ) from e
     except IntegrityError as e:
         await uow_ctl.rollback()
         raise HTTPException(
