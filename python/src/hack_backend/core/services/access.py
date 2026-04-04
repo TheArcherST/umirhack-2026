@@ -30,11 +30,13 @@ class AccessService:
         self,
         username: str,
         password: str,
+        email: str | None = None,
     ) -> User:
         password_hash = self.ph.hash(password)
         user = User(
             username=username,
             password_hash=password_hash,
+            email=email,
         )
         self.orm_session.add(user)
         await self.orm_session.flush()

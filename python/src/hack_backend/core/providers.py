@@ -68,6 +68,14 @@ class ConfigServer(BaseModel):
     root_path: str = ""
 
 
+class ConfigEmail(BaseModel):
+    resend_api_key: str = ""
+    from_address: str = ""
+    template_name: str = ""
+    app_name: str = "Linkoo"
+    code_validity_minutes: int = 5
+
+
 class ConfigHack(BaseSettings):
     model_config = SettingsConfigDict(
         env_nested_delimiter="__",
@@ -78,6 +86,7 @@ class ConfigHack(BaseSettings):
     postgres: ConfigPostgres
     redis: ConfigRedis
     server: ConfigServer = ConfigServer()
+    email: ConfigEmail = ConfigEmail()
 
 
 class ProviderConfig(Provider):
@@ -98,6 +107,13 @@ class ProviderConfig(Provider):
         config: ConfigHack,
     ) -> ConfigRedis:
         return config.redis
+
+    @provide(scope=Scope.APP)
+    def get_config_email(
+        self,
+        config: ConfigHack,
+    ) -> ConfigEmail:
+        return config.email
 
 
 class ProviderDatabase(Provider):
