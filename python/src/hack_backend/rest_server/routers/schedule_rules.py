@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dishka import FromDishka
 from dishka.integrations.fastapi import inject
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from hack_backend.core.services.access import AccessService
@@ -113,7 +113,7 @@ async def delete_schedule_rule(
     current_user: FromDishka[AuthorizedUser],
     platform_service: FromDishka[PlatformService],
     uow_ctl: FromDishka[UoWCtl],
-) -> Response:
+) -> None:
     rule = await platform_service.get_schedule_rule(schedule_rule_id)
     if rule is None:
         raise HTTPException(status_code=404, detail="Schedule rule not found")
@@ -124,4 +124,3 @@ async def delete_schedule_rule(
     )
     await platform_service.delete_schedule_rule(schedule_rule_id)
     await uow_ctl.commit()
-    return Response(status_code=204)
