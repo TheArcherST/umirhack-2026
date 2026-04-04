@@ -83,7 +83,8 @@
     "title": "Агенты",
     "ipHost": "IP / Хост",
     "lastHeartbeat": "Последний heartbeat",
-    "noAgents": "Агентов не найдено"
+    "noAgents": "Агентов не найдено",
+    "autoCopyNotSupported": "Автокопирование не поддерживается. Скопируйте вручную:"
   },
   "agentTasks": {
     "title": "Задачи агента",

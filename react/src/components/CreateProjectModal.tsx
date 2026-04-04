@@ -148,30 +148,28 @@ export function CreateProjectModal({ open, onClose, onCreate }: Props) {
                 {searching && (
                   <Loader2 size={13} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-muted-foreground" />
                 )}
+                {searchResults.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 z-50 mt-1 rounded-md border border-border bg-card shadow-md max-h-40 overflow-y-auto">
+                    {searchResults.map((user) => (
+                      <button
+                        key={user.user_id}
+                        type="button"
+                        onClick={() => addMember(user)}
+                        className="flex items-center gap-2.5 w-full px-3 py-2 text-left hover:bg-accent/50 transition-colors first:rounded-t-md last:rounded-b-md"
+                      >
+                        <div className="w-6 h-6 rounded-full bg-foreground/15 flex items-center justify-center text-xs font-semibold font-mono shrink-0">
+                          {user.name[0]?.toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium truncate">{user.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                        </div>
+                        <Plus size={13} className="text-muted-foreground shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-
-              {/* Search results */}
-              {searchResults.length > 0 && (
-                <div className="rounded-md border border-border bg-muted/20 max-h-40 overflow-y-auto">
-                  {searchResults.map((user) => (
-                    <button
-                      key={user.user_id}
-                      type="button"
-                      onClick={() => addMember(user)}
-                      className="flex items-center gap-2.5 w-full px-3 py-2 text-left hover:bg-accent/50 transition-colors first:rounded-t-md last:rounded-b-md"
-                    >
-                      <div className="w-6 h-6 rounded-full bg-foreground/15 flex items-center justify-center text-xs font-semibold font-mono shrink-0">
-                        {user.name[0]?.toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium truncate">{user.name}</p>
-                        <p className="text-xs text-muted-foreground truncate">{user.email}</p>
-                      </div>
-                      <Plus size={13} className="text-muted-foreground shrink-0" />
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
 

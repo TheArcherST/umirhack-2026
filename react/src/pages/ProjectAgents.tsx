@@ -1,9 +1,10 @@
 import React, {useState} from 'react'
 import {useQuery} from '@tanstack/react-query'
-import {Plus, Link as LinkIcon, Pencil, Trash2, CheckCircle2} from 'lucide-react'
+import {Plus, Link as LinkIcon, Pencil, Trash2, CheckCircle2, X} from 'lucide-react'
 import {Header} from '@/components/Header'
 import {Badge} from '@/components/ui/badge'
 import {Button} from '@/components/ui/button'
+import {Popover, PopoverContent, PopoverTrigger} from '@/components/ui/popover'
 import {stubGetAgentInstallScript, stubGetAgents, stubGetEnvironments} from '@/api/stubs'
 import {timeAgo} from '@/lib/utils'
 import type {AgentStatus, Agent} from '@/api/types'
@@ -22,6 +23,7 @@ export default function ProjectAgents() {
     const [editAgent, setEditAgent] = useState<Agent | null>(null)
     const [deleteAgent, setDeleteAgent] = useState<Agent | null>(null)
     const [copiedId, setCopiedId] = useState<string | null>(null)
+    const [fallbackData, setFallbackData] = useState<{agentId: string; command: string} | null>(null)
     const [actionError, setActionError] = useState('')
     const {t} = useI18n()
     const {environments} = useProject()
@@ -60,13 +62,11 @@ export default function ProjectAgents() {
 
         try {
             const copied = await copyText(command)
-            if (!copied) {
-                throw new Error('Copy command failed')
-            }
+            if (!copied) throw new Error('Copy failed')
             setCopiedId(agent.id)
             setTimeout(() => setCopiedId(null), 1500)
-        } catch (error: any) {
-            setActionError(error?.message ?? 'Failed to copy install command')
+        } catch {
+            setFallbackData({agentId: agent.id, command})
         }
     }
 
@@ -175,17 +175,39 @@ export default function ProjectAgents() {
                                     </td>
                                     <td className="px-4 py-3">
                                         <div className="flex items-center gap-0.5">
-                                            <button
-                                                onClick={() => copyInstallLink(agent)}
-                                                className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                                                title={t('agent.copyScript')}
+                                            <Popover
+                                                open={fallbackData?.agentId === agent.id}
+                                                onOpenChange={(open) => !open && setFallbackData(null)}
                                             >
-                                                {copiedId === agent.id ? (
-                                                    <CheckCircle2 size={13} className="text-green-400"/>
-                                                ) : (
-                                                    <LinkIcon size={13}/>
-                                                )}
-                                            </button>
+                                                <PopoverTrigger asChild>
+                                                    <button
+                                                        onClick={() => copyInstallLink(agent)}
+                                                        className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                                                        title={t('agent.copyScript')}
+                                                    >
+                                                        {copiedId === agent.id ? (
+                                                            <CheckCircle2 size={13} className="text-green-400"/>
+                                                        ) : (
+                                                            <LinkIcon size={13}/>
+                                                        )}
+                                                    </button>
+                                                </PopoverTrigger>
+                                                <PopoverContent align="end" className="w-80 p-3 space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <p className="text-xs font-medium">{t('agent.copyScript')}</p>
+                                                        <button
+                                                            onClick={() => setFallbackData(null)}
+                                                            className="p-0.5 rounded text-muted-foreground hover:text-foreground"
+                                                        >
+                                                            <X size={12}/>
+                                                        </button>
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground">{t('agents.autoCopyNotSupported')}</p>
+                                                    <pre className="text-[11px] font-mono bg-muted/50 rounded p-2 break-all whitespace-pre-wrap select-all">
+                                                        {fallbackData?.command}
+                                                    </pre>
+                                                </PopoverContent>
+                                            </Popover>
                                             <button
                                                 onClick={() => setEditAgent(enrichAgent(agent))}
                                                 className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
