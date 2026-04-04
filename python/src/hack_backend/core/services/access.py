@@ -91,6 +91,7 @@ class AccessService:
             user_agent=user_agent,
             token=secrets.token_hex(nbytes=32),
             user_id=user.id,
+            user=user,
         )
         self.orm_session.add(login_session)
         await self.orm_session.flush()

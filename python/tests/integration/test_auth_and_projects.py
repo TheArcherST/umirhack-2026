@@ -15,6 +15,18 @@ def test_login_rejects_wrong_password(api) -> None:
     assert response.json()["detail"] == "Invalid username or password"
 
 
+def test_login_returns_session_for_valid_credentials(api) -> None:
+    user = api.register_user(prefix="login-ok")
+
+    response = api.login(username=user.username, password=user.password)
+
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["token"]
+    assert payload["user"]["id"] == user.id
+    assert payload["user"]["name"] == user.username
+
+
 def test_project_creation_bootstraps_main_environment_and_templates(api) -> None:
     owner = api.register_user(prefix="owner")
 
