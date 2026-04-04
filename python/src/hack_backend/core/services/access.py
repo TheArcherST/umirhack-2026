@@ -32,6 +32,13 @@ class AccessService:
         password: str,
         email: str | None = None,
     ) -> User:
+        if email is not None:
+            existing_user = await self.orm_session.scalar(
+                select(User).where(User.email == email)
+            )
+            if existing_user is not None:
+                raise ServiceAccessError("User with this email already exists")
+
         password_hash = self.ph.hash(password)
         user = User(
             username=username,
