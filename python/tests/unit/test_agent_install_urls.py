@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from hack_backend.core.providers import ConfigHack, ConfigPostgres, ConfigRedis, ConfigServer
-from hack_backend.rest_server.agent_install import artifact_relative_path
+from hack_backend.rest_server.agent_install import artifact_relative_path, render_install_script
 from hack_backend.rest_server.routers.agents import _public_agent_url
 
 
@@ -64,3 +64,48 @@ def test_artifact_relative_path_includes_version_directory() -> None:
         ).as_posix()
         == "0.1.0/linux/amd64/hack-agent"
     )
+
+
+def test_linux_install_script_prompts_before_replacing_existing_agent() -> None:
+    script = render_install_script(
+        platform="linux",
+        api_url="https://api.example.com",
+        bootstrap_token="token-1",
+        artifact_root_url="https://downloads.example.com/linux",
+        agent_version="1.2.3",
+        safe_install=False,
+    )
+
+    assert "confirm_replace_if_needed" in script
+    assert "This installer will replace it." in script
+    assert "UMIRHACK_AGENT_REPLACE=1" in script
+
+
+def test_macos_install_script_prompts_before_replacing_existing_agent() -> None:
+    script = render_install_script(
+        platform="macos",
+        api_url="https://api.example.com",
+        bootstrap_token="token-1",
+        artifact_root_url="https://downloads.example.com/macos",
+        agent_version="1.2.3",
+        safe_install=False,
+    )
+
+    assert "confirm_replace_if_needed" in script
+    assert "This installer will replace it." in script
+    assert "UMIRHACK_AGENT_REPLACE=1" in script
+
+
+def test_windows_install_script_prompts_before_replacing_existing_agent() -> None:
+    script = render_install_script(
+        platform="windows",
+        api_url="https://api.example.com",
+        bootstrap_token="token-1",
+        artifact_root_url="https://downloads.example.com/windows",
+        agent_version="1.2.3",
+        safe_install=False,
+    )
+
+    assert "Confirm-ReplaceIfNeeded" in script
+    assert "This installer will replace it." in script
+    assert "UMIRHACK_AGENT_REPLACE" in script

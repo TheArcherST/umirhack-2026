@@ -155,6 +155,35 @@ download_file() {{
   exit 1
 }}
 
+confirm_replace_if_needed() {{
+  if [[ ! -f "$BINARY_PATH" && ! -f "$SERVICE_FILE" && ! -f "$ENV_FILE" ]]; then
+    return
+  fi
+
+  if [[ "${{UMIRHACK_AGENT_REPLACE:-0}}" == "1" ]]; then
+    echo "Existing Umirhack agent installation detected. Replacing because UMIRHACK_AGENT_REPLACE=1."
+    return
+  fi
+
+  echo "Existing Umirhack agent installation detected. This installer will replace it."
+  if [[ ! -r /dev/tty ]]; then
+    echo "Set UMIRHACK_AGENT_REPLACE=1 to replace the existing installation non-interactively." >&2
+    exit 1
+  fi
+
+  printf "Continue and replace the existing agent? [y/N] " > /dev/tty
+  local reply
+  read -r reply < /dev/tty
+  case "$reply" in
+    y|Y|yes|YES)
+      ;;
+    *)
+      echo "Installation cancelled."
+      exit 1
+      ;;
+  esac
+}}
+
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "Run this installer with root privileges." >&2
   exit 1
@@ -177,6 +206,8 @@ case "$arch" in
     exit 1
     ;;
 esac
+
+confirm_replace_if_needed
 
 tmp_binary="$(mktemp)"
 download_file "$ARTIFACT_ROOT_URL/$arch/hack-agent" "$tmp_binary"
@@ -238,6 +269,31 @@ $runnerPath = Join-Path $installDir "run-agent.ps1"
 $versionPath = Join-Path $stateDir "version.txt"
 $taskName = "UmirhackAgent"
 
+function Confirm-ReplaceIfNeeded {{
+    $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    if (-not (Test-Path $binaryPath) -and -not (Test-Path $runnerPath) -and -not (Test-Path $versionPath) -and -not $existingTask) {{
+        return
+    }}
+
+    if ($env:UMIRHACK_AGENT_REPLACE -eq "1") {{
+        Write-Host "Existing Umirhack agent installation detected. Replacing because UMIRHACK_AGENT_REPLACE=1."
+        return
+    }}
+
+    $caption = "Replace existing agent"
+    $message = "Existing Umirhack agent installation detected. This installer will replace it."
+    $yes = New-Object System.Management.Automation.Host.ChoiceDescription "&Yes", "Replace the existing agent installation."
+    $no = New-Object System.Management.Automation.Host.ChoiceDescription "&No", "Cancel the installation."
+    try {{
+        $choice = $Host.UI.PromptForChoice($caption, $message, [System.Management.Automation.Host.ChoiceDescription[]]($yes, $no), 1)
+    }} catch {{
+        throw "Existing Umirhack agent installation detected. Set `$env:UMIRHACK_AGENT_REPLACE = '1' to replace it non-interactively."
+    }}
+    if ($choice -ne 0) {{
+        throw "Installation cancelled."
+    }}
+}}
+
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {{
     throw "Run this installer from an elevated PowerShell session."
@@ -249,6 +305,8 @@ switch ($archValue) {{
     "x86" {{ $arch = "amd64" }}
     default {{ throw "Unsupported CPU architecture: $archValue" }}
 }}
+
+Confirm-ReplaceIfNeeded
 
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
@@ -318,6 +376,35 @@ download_file() {{
   curl -fsSL "$url" -o "$output"
 }}
 
+confirm_replace_if_needed() {{
+  if [[ ! -f "$BINARY_PATH" && ! -f "$RUNNER_PATH" && ! -f "$PLIST_FILE" ]]; then
+    return
+  fi
+
+  if [[ "${{UMIRHACK_AGENT_REPLACE:-0}}" == "1" ]]; then
+    echo "Existing Umirhack agent installation detected. Replacing because UMIRHACK_AGENT_REPLACE=1."
+    return
+  fi
+
+  echo "Existing Umirhack agent installation detected. This installer will replace it."
+  if [[ ! -r /dev/tty ]]; then
+    echo "Set UMIRHACK_AGENT_REPLACE=1 to replace the existing installation non-interactively." >&2
+    exit 1
+  fi
+
+  printf "Continue and replace the existing agent? [y/N] " > /dev/tty
+  local reply
+  read -r reply < /dev/tty
+  case "$reply" in
+    y|Y|yes|YES)
+      ;;
+    *)
+      echo "Installation cancelled."
+      exit 1
+      ;;
+  esac
+}}
+
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "Run this installer with root privileges." >&2
   exit 1
@@ -341,6 +428,8 @@ case "$arch" in
     exit 1
     ;;
 esac
+
+confirm_replace_if_needed
 
 tmp_binary="$(mktemp)"
 download_file "$ARTIFACT_ROOT_URL/$arch/hack-agent" "$tmp_binary"
