@@ -43,6 +43,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
   worker:
     build: ./python
@@ -87,6 +89,8 @@ services:
       HACK_TEST_BASE_URL: http://rest-server-test
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       rest-server-test:
         condition: service_healthy
