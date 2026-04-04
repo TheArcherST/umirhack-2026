@@ -49,6 +49,47 @@ def test_unverified_email_login_is_blocked(api) -> None:
     assert login.json()["detail"] == "Email is not verified"
 
 
+def test_register_retry_reuses_existing_unverified_email(api) -> None:
+    first = api.client.post(
+        "/register",
+        json={
+            "username": "first-username",
+            "password": "first-password",
+            "email": "retry@example.com",
+        },
+        headers={"User-Agent": "pytest-integration"},
+    )
+    assert first.status_code == 201, first.text
+
+    second = api.client.post(
+        "/register",
+        json={
+            "username": "second-username",
+            "password": "second-password",
+            "email": "retry@example.com",
+        },
+        headers={"User-Agent": "pytest-integration"},
+    )
+    assert second.status_code == 201, second.text
+    payload = second.json()
+    assert payload["email_verification_required"] is True
+    assert payload["auth"] is None
+
+    old_login = api.login(username="first-username", password="first-password")
+    assert old_login.status_code == 401
+
+    new_login = api.login(username="second-username", password="second-password")
+    assert new_login.status_code == 403
+    assert new_login.json()["detail"] == "Email is not verified"
+
+    resend = api.client.post(
+        "/auth/email/resend",
+        json={"username": "second-username"},
+        headers={"User-Agent": "pytest-integration"},
+    )
+    assert resend.status_code == 200, resend.text
+
+
 def test_project_creation_bootstraps_main_environment_and_templates(api) -> None:
     owner = api.register_user(prefix="owner")
 
@@ -149,6 +190,57 @@ def test_project_member_role_update_returns_updated_member(api) -> None:
     assert promoted_payload["user_id"] == invited_payload["user_id"]
     assert promoted_payload["role"] == "admin"
     assert promoted_payload["status"] == "accepted"
+
+
+def test_invited_user_can_register_with_invited_email(api) -> None:
+    owner = api.register_user(prefix="owner")
+    bundle = api.create_project_bundle(
+        user=owner,
+        project_name="Operations",
+    )
+
+    invited = api.client.post(
+        f"/projects/{bundle.project['id']}/members/invite",
+        json={"email": "invitee-register@example.com"},
+        headers=owner.headers,
+    )
+    assert invited.status_code == 201, invited.text
+    invited_payload = invited.json()
+
+    register = api.client.post(
+        "/register",
+        json={
+            "username": "invitee-real-name",
+            "password": "invitee-password",
+            "email": "invitee-register@example.com",
+        },
+        headers={"User-Agent": "pytest-integration"},
+    )
+    assert register.status_code == 201, register.text
+    register_payload = register.json()
+    assert register_payload["email_verification_required"] is True
+    assert register_payload["auth"] is None
+
+    members = api.client.get(
+        f"/projects/{bundle.project['id']}/members",
+        headers=owner.headers,
+    )
+    assert members.status_code == 200, members.text
+    invitee_member = next(
+        member
+        for member in members.json()
+        if member["user_id"] == invited_payload["user_id"]
+    )
+    assert invitee_member["email"] == "invitee-register@example.com"
+    assert invitee_member["name"] == "invitee-real-name"
+    assert invitee_member["status"] == "pending"
+
+    login = api.login(
+        username="invitee-real-name",
+        password="invitee-password",
+    )
+    assert login.status_code == 403
+    assert login.json()["detail"] == "Email is not verified"
 
 
 def test_project_admin_is_operator_in_existing_and_new_environments(api) -> None:

@@ -8,9 +8,10 @@ from sqlalchemy.exc import IntegrityError
 
 from hack_backend.core.services.access import (
     AccessService,
+    ErrorEmailAlreadyExists,
     ErrorEmailNotVerified,
+    ErrorUsernameAlreadyExists,
     ErrorUnauthorized,
-    ServiceAccessError,
 )
 from hack_backend.core.services.email_verification import EmailVerificationService
 from hack_backend.core.services.uow_ctl import UoWCtl
@@ -79,12 +80,15 @@ async def register(
             password=payload.password,
             email=payload.email,
         )
-    except ServiceAccessError as exc:
+    except ErrorEmailAlreadyExists as exc:
         await uow_ctl.rollback()
         raise HTTPException(
             status_code=409,
             detail="User with this email already exists",
         ) from exc
+    except ErrorUsernameAlreadyExists as exc:
+        await uow_ctl.rollback()
+        raise HTTPException(status_code=409, detail="Username already exists") from exc
     except IntegrityError as exc:
         await uow_ctl.rollback()
         raise HTTPException(status_code=409, detail="Username already exists") from exc

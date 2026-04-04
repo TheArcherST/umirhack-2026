@@ -21,6 +21,14 @@ class ErrorEmailNotVerified(ServiceAccessError):
     pass
 
 
+class ErrorEmailAlreadyExists(ServiceAccessError):
+    pass
+
+
+class ErrorUsernameAlreadyExists(ServiceAccessError):
+    pass
+
+
 class AccessService:
     def __init__(
         self,
@@ -41,7 +49,31 @@ class AccessService:
                 select(User).where(User.email == email)
             )
             if existing_user is not None:
-                raise ServiceAccessError("User with this email already exists")
+                if existing_user.email_verified:
+                    raise ErrorEmailAlreadyExists(
+                        "User with this email already exists"
+                    )
+
+                conflicting_username = await self.orm_session.scalar(
+                    select(User).where(
+                        User.username == username,
+                        User.id != existing_user.id,
+                    )
+                )
+                if conflicting_username is not None:
+                    raise ErrorUsernameAlreadyExists("Username already exists")
+
+                existing_user.username = username
+                existing_user.password_hash = self.ph.hash(password)
+                existing_user.email_verified = False
+                existing_user.otp_secret = None
+                existing_user.email_verification_code_hash = None
+                existing_user.email_verification_sent_at = None
+                existing_user.email_verification_expires_at = None
+                existing_user.email_verification_resend_available_at = None
+                existing_user.email_verification_attempt_count = 0
+                await self.orm_session.flush()
+                return existing_user
 
         password_hash = self.ph.hash(password)
         user = User(
