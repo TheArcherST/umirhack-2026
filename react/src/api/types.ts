@@ -83,6 +83,7 @@ export interface Agent {
     tasks_count: number
     environment_ids: string[]
     safe_install: boolean
+    max_concurrent_tasks: number
     agent_version: string | null
     reported_agent_version: string | null
     created_at: string
@@ -282,6 +283,7 @@ export interface CreateAgentPayload {
     name: string
     os: AgentOS
     safe_install?: boolean
+    max_concurrent_tasks?: number
     agent_version?: string
     environment_ids?: string[]
 }
@@ -289,6 +291,7 @@ export interface CreateAgentPayload {
 export interface UpdateAgentPayload {
     name?: string
     safe_install?: boolean
+    max_concurrent_tasks?: number
     agent_version?: string
     environment_ids?: string[]
 }

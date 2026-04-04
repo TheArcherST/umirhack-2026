@@ -89,6 +89,7 @@ def agent_to_dto(agent: Agent, environments: list[Environment]) -> AgentDTO:
         name=agent.name,
         declared_os=agent.declared_os,
         safe_install=bool(agent.safe_install),
+        max_concurrent_tasks=int(agent.max_concurrent_tasks or 4),
         status=_string_value(agent.status),
         last_seen_at=agent.last_seen_at,
         agent_version=agent.agent_version,

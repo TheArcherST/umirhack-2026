@@ -131,6 +131,7 @@ def test_agent_to_dto_accepts_enum_and_string_status(status) -> None:
     )
 
     assert dto.status == "online"
+    assert dto.max_concurrent_tasks == 4
     assert dto.agent_version == "1.2.3"
     assert dto.reported_agent_version == "1.2.2"
     assert dto.environments[0].id == "env-1"

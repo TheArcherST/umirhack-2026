@@ -7,7 +7,13 @@ from typing import Any
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from hack_backend.core.models import Agent, AgentStatus
+from hack_backend.core.models import (
+    Agent,
+    AgentStatus,
+    InviteStatus,
+    ProjectMember,
+    ProjectMemberRole,
+)
 from hack_backend.core.providers import ConfigHack
 
 
@@ -65,6 +71,38 @@ def _set_agent_seen_state(
             assert agent is not None
             agent.last_seen_at = last_seen_at
             agent.status = status
+            session.commit()
+    finally:
+        engine.dispose()
+
+
+def _grant_project_membership(
+    *,
+    project_id: str,
+    user_id: int,
+    role: ProjectMemberRole = ProjectMemberRole.MEMBER,
+) -> None:
+    config = ConfigHack()
+    engine = create_engine(
+        config.postgres.get_sqlalchemy_url("psycopg", is_test_database=True)
+    )
+    try:
+        with Session(engine) as session:
+            membership = session.get(
+                ProjectMember,
+                {"project_id": project_id, "user_id": user_id},
+            )
+            if membership is None:
+                membership = ProjectMember(
+                    project_id=project_id,
+                    user_id=user_id,
+                    role=role,
+                    invite_status=InviteStatus.ACCEPTED,
+                )
+                session.add(membership)
+            else:
+                membership.role = role
+                membership.invite_status = InviteStatus.ACCEPTED
             session.commit()
     finally:
         engine.dispose()
@@ -621,6 +659,39 @@ def test_self_update_tracks_from_and_to_versions(api) -> None:
         bootstrap_token=bootstrap_token,
         agent_version="0.1.0",
     )
+    for lease in api.poll_agent(agent=agent):
+        kind = lease["task_template"]["kind"]
+        telemetry_payload = (
+            {
+                "hostname": "update-agent.internal",
+                "os_name": "linux",
+                "platform_version": "ubuntu-24.04",
+                "kernel": "6.8.0",
+                "cpu_model": "Xeon Platinum",
+                "cpu_cores": 8,
+                "memory_total_mb": 16384,
+            }
+            if kind == "host.system_profile"
+            else {
+                "interfaces": [
+                    {
+                        "name": "eth0",
+                        "mac": "00:11:22:33:44:55",
+                        "ipv4": ["10.20.30.40"],
+                        "ipv6": ["fd00::40"],
+                    }
+                ]
+            }
+            if kind == "host.ip_interfaces"
+            else {"services": []}
+        )
+        _complete_success(
+            api,
+            agent=agent,
+            lease=lease,
+            telemetry_kind=kind,
+            telemetry_payload=telemetry_payload,
+        )
 
     hosts_response = api.client.get(
         f"/environments/{bundle.environment['id']}/hosts",
@@ -672,6 +743,37 @@ def test_self_update_tracks_from_and_to_versions(api) -> None:
     next_update_task = next_update_task_runs.json()[0]
     assert next_update_task["command"] == "self-update 0.1.0 -> 0.1.1"
 
+    same_version_lease = next(
+        lease
+        for lease in api.poll_agent(agent=agent)
+        if lease["id"] == same_version_task["id"]
+    )
+    api.mark_task_running(
+        agent=agent,
+        task_run_id=same_version_lease["id"],
+        lease_token=same_version_lease["lease_token"],
+    )
+    api.complete_task(
+        agent=agent,
+        task_run_id=same_version_lease["id"],
+        payload={
+            "lease_token": same_version_lease["lease_token"],
+            "status": "succeeded",
+            "exit_code": 0,
+            "stdout_text": "",
+            "stderr_text": "",
+            "summary_json": {
+                "action": "self_update",
+                "from_version": "0.1.0",
+                "to_version": "0.1.0",
+                "version": "0.1.0",
+            },
+            "telemetry_kind": None,
+            "telemetry_payload": None,
+            "failure_reason": None,
+        },
+    )
+
     update_lease = next(
         lease
         for lease in api.poll_agent(agent=agent)
@@ -717,3 +819,152 @@ def test_self_update_tracks_from_and_to_versions(api) -> None:
     refreshed_agent = agents_response.json()[0]
     assert refreshed_agent["agent_version"] == "0.1.1"
     assert refreshed_agent["reported_agent_version"] == "0.1.1"
+
+
+def test_agent_poll_respects_max_concurrent_tasks(api) -> None:
+    owner = api.register_user(prefix="owner")
+    bundle = api.create_project_bundle(
+        user=owner,
+        project_name="Concurrency",
+    )
+    created_agent = api.create_agent(
+        user=owner,
+        project_id=bundle.project["id"],
+        environment_id=bundle.environment["id"],
+        name="parallel-agent",
+        max_concurrent_tasks=2,
+    )
+    assert created_agent["max_concurrent_tasks"] == 2
+
+    bootstrap_token = api.issue_install_token(
+        user=owner,
+        agent_id=created_agent["id"],
+    )
+    agent = api.register_agent(bootstrap_token=bootstrap_token)
+
+    for lease in api.poll_agent(agent=agent):
+        kind = lease["task_template"]["kind"]
+        telemetry_kind = kind
+        telemetry_payload = (
+            {
+                "hostname": "parallel.internal",
+                "os_name": "linux",
+                "platform_version": "ubuntu-24.04",
+                "kernel": "6.8.0",
+                "cpu_model": "Xeon Platinum",
+                "cpu_cores": 8,
+                "memory_total_mb": 16384,
+            }
+            if kind == "host.system_profile"
+            else {
+                "interfaces": [
+                    {
+                        "name": "eth0",
+                        "mac": "00:11:22:33:44:55",
+                        "ipv4": ["10.20.30.40"],
+                        "ipv6": ["fd00::40"],
+                    }
+                ]
+            }
+            if kind == "host.ip_interfaces"
+            else {"services": []}
+        )
+        _complete_success(
+            api,
+            agent=agent,
+            lease=lease,
+            telemetry_kind=telemetry_kind,
+            telemetry_payload=telemetry_payload,
+        )
+
+    hosts_response = api.client.get(
+        f"/environments/{bundle.environment['id']}/hosts",
+        headers=owner.headers,
+    )
+    assert hosts_response.status_code == 200, hosts_response.text
+    host_id = hosts_response.json()[0]["id"]
+
+    connectivity_template_id = _template_id_for_kind(
+        bundle.templates,
+        "network.endpoint_connectivity",
+    )
+    create_task_runs = api.client.post(
+        "/task-runs",
+        json={
+            "environment_id": bundle.environment["id"],
+            "host_ids": [host_id],
+            "task_template_id": connectivity_template_id,
+            "payload_overrides": {"target_endpoint": "parallel.internal"},
+        },
+        headers=owner.headers,
+    )
+    assert create_task_runs.status_code == 201, create_task_runs.text
+
+    for _ in range(3):
+        create_more_task_runs = api.client.post(
+            "/task-runs",
+            json={
+                "environment_id": bundle.environment["id"],
+                "host_ids": [host_id],
+                "task_template_id": connectivity_template_id,
+                "payload_overrides": {"target_endpoint": "parallel.internal"},
+            },
+            headers=owner.headers,
+        )
+        assert create_more_task_runs.status_code == 201, create_more_task_runs.text
+
+    first_batch = api.poll_agent(agent=agent, limit=10)
+    assert len(first_batch) == 2
+
+    for lease in first_batch:
+        api.mark_task_running(
+            agent=agent,
+            task_run_id=lease["id"],
+            lease_token=lease["lease_token"],
+        )
+
+    assert api.poll_agent(agent=agent, limit=10) == []
+
+    _complete_success(
+        api,
+        agent=agent,
+        lease=first_batch[0],
+        telemetry_kind="network.endpoint_connectivity",
+        telemetry_payload={
+            "target_endpoint": "parallel.internal",
+            "success": True,
+            "latency_ms": 12.5,
+        },
+        summary_json={"target_endpoint": "parallel.internal"},
+    )
+
+    next_batch = api.poll_agent(agent=agent, limit=10)
+    assert len(next_batch) == 1
+
+
+def test_non_admin_cannot_update_agent_concurrency_limit(api) -> None:
+    owner = api.register_user(prefix="owner")
+    member = api.register_user(prefix="member")
+    bundle = api.create_project_bundle(
+        user=owner,
+        project_name="Permissions",
+    )
+    _grant_project_membership(
+        project_id=bundle.project["id"],
+        user_id=int(member.id),
+    )
+
+    created_agent = api.create_agent(
+        user=owner,
+        project_id=bundle.project["id"],
+        environment_id=bundle.environment["id"],
+        name="guarded-agent",
+    )
+
+    update_response = api.client.put(
+        f"/agents/{created_agent['id']}",
+        json={"max_concurrent_tasks": 8},
+        headers=member.headers,
+    )
+    assert update_response.status_code == 403, update_response.text
+    assert update_response.json()["detail"] == "Project admin access required"

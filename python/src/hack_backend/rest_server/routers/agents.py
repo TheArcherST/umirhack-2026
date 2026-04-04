@@ -5,7 +5,7 @@ from dishka import FromDishka
 from dishka.integrations.fastapi import inject
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, PlainTextResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from hack_backend.core.providers import ConfigHack
@@ -50,6 +50,7 @@ class CreateAgentPayload(BaseModel):
     name: str
     declared_os: str | None = None
     safe_install: bool = False
+    max_concurrent_tasks: int = Field(default=4, ge=1, le=128)
     agent_version: str | None = None
     environment_ids: list[str]
 
@@ -57,6 +58,7 @@ class CreateAgentPayload(BaseModel):
 class UpdateAgentPayload(BaseModel):
     name: str | None = None
     safe_install: bool | None = None
+    max_concurrent_tasks: int | None = Field(default=None, ge=1, le=128)
     agent_version: str | None = None
     environment_ids: list[str] | None = None
 
@@ -100,7 +102,7 @@ async def create_agent(
     platform_service: FromDishka[PlatformService],
     uow_ctl: FromDishka[UoWCtl],
 ) -> AgentDTO:
-    await access_service.require_project_member(
+    await access_service.require_project_admin(
         payload.project_id,
         user_id=current_user.id,
     )
@@ -109,6 +111,7 @@ async def create_agent(
         name=payload.name,
         declared_os=payload.declared_os,
         safe_install=payload.safe_install,
+        max_concurrent_tasks=payload.max_concurrent_tasks,
         agent_version=payload.agent_version,
         environment_ids=payload.environment_ids,
     )
@@ -129,7 +132,7 @@ async def update_agent(
     agent = await platform_service.session.get(Agent, agent_id)
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
-    await access_service.require_project_member(
+    await access_service.require_project_admin(
         agent.project_id,
         user_id=current_user.id,
     )
@@ -137,6 +140,7 @@ async def update_agent(
         agent=agent,
         name=payload.name,
         safe_install=payload.safe_install,
+        max_concurrent_tasks=payload.max_concurrent_tasks,
         agent_version=payload.agent_version,
         environment_ids=payload.environment_ids,
     )
@@ -156,7 +160,7 @@ async def delete_agent(
     agent = await platform_service.session.get(Agent, agent_id)
     if agent is None:
         return
-    await access_service.require_project_member(
+    await access_service.require_project_admin(
         agent.project_id,
         user_id=current_user.id,
     )
@@ -178,7 +182,7 @@ async def get_install_script(
     agent = await platform_service.session.get(Agent, agent_id)
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
-    await access_service.require_project_member(
+    await access_service.require_project_admin(
         agent.project_id,
         user_id=current_user.id,
     )

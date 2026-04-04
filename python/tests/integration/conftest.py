@@ -122,6 +122,7 @@ class ApiDriver:
         name: str,
         declared_os: str = "linux",
         safe_install: bool = False,
+        max_concurrent_tasks: int = 4,
         agent_version: str | None = None,
     ) -> dict[str, Any]:
         response = self.client.post(
@@ -131,6 +132,7 @@ class ApiDriver:
                 "name": name,
                 "declared_os": declared_os,
                 "safe_install": safe_install,
+                "max_concurrent_tasks": max_concurrent_tasks,
                 "agent_version": agent_version,
                 "environment_ids": [environment_id],
             },

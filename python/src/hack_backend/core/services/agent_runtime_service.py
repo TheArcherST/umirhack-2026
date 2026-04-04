@@ -5,7 +5,7 @@ from datetime import timedelta
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import lazyload, selectinload
 
@@ -15,6 +15,7 @@ from hack_backend.core.models import (
     Host,
     TaskRun,
     TaskRunStatus,
+    TaskTemplate,
 )
 from hack_backend.core.platform_ops import (
     ensure_utc,
@@ -34,6 +35,7 @@ from hack_backend.rest_server.schemas.platform import (
 )
 
 LEASE_SECONDS = 60
+SELF_UPDATE_TASK_KIND = "agent.self_update"
 
 
 @dataclass(slots=True)
@@ -108,23 +110,25 @@ class AgentRuntimeService:
 
     async def poll(self, *, agent: Agent, limit: int) -> list[AgentTaskLeaseDTO]:
         await refresh_agent_state(self.session)
-        lease_until = utcnow() + timedelta(seconds=LEASE_SECONDS)
-        task_runs = list(
-            await self.session.scalars(
-                select(TaskRun)
-                .options(
-                    lazyload("*"),
-                    selectinload(TaskRun.task_template),
-                    selectinload(TaskRun.host),
-                )
-                .where(
-                    TaskRun.agent_id == agent.id,
-                    TaskRun.status == TaskRunStatus.QUEUED,
-                )
-                .order_by(TaskRun.queued_at.asc())
-                .with_for_update(skip_locked=True)
-                .limit(limit)
+        await self.session.execute(
+            select(Agent.id).where(Agent.id == agent.id).with_for_update()
+        )
+        inflight_count = await self.session.scalar(
+            select(func.count(TaskRun.id)).where(
+                TaskRun.agent_id == agent.id,
+                TaskRun.status.in_([TaskRunStatus.LEASED, TaskRunStatus.RUNNING]),
             )
+        )
+        available_slots = max(0, agent.max_concurrent_tasks - int(inflight_count or 0))
+        if available_slots == 0:
+            return []
+
+        effective_limit = max(1, min(limit, available_slots))
+        lease_until = utcnow() + timedelta(seconds=LEASE_SECONDS)
+        task_runs = await self._leaseable_task_runs(
+            agent_id=agent.id,
+            effective_limit=effective_limit,
+            inflight_count=int(inflight_count or 0),
         )
 
         leases: list[AgentTaskLeaseDTO] = []
@@ -158,6 +162,46 @@ class AgentRuntimeService:
                 )
             )
         return leases
+
+    async def _leaseable_task_runs(
+        self,
+        *,
+        agent_id: str,
+        effective_limit: int,
+        inflight_count: int,
+    ) -> list[TaskRun]:
+        base_query = (
+            select(TaskRun)
+            .options(
+                lazyload("*"),
+                selectinload(TaskRun.task_template),
+                selectinload(TaskRun.host),
+            )
+            .where(
+                TaskRun.agent_id == agent_id,
+                TaskRun.status == TaskRunStatus.QUEUED,
+            )
+            .order_by(TaskRun.queued_at.asc())
+            .with_for_update(skip_locked=True)
+        )
+
+        non_self_update = list(
+            await self.session.scalars(
+                base_query.where(
+                    TaskRun.task_template.has(TaskTemplate.kind != SELF_UPDATE_TASK_KIND)
+                ).limit(effective_limit)
+            )
+        )
+        if non_self_update or inflight_count > 0:
+            return non_self_update
+
+        return list(
+            await self.session.scalars(
+                base_query.where(
+                    TaskRun.task_template.has(TaskTemplate.kind == SELF_UPDATE_TASK_KIND)
+                ).limit(1)
+            )
+        )
 
     async def mark_running(
         self,

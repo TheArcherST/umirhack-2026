@@ -35,6 +35,7 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
     const [os, setOs] = useState<AgentOS>('linux')
     const [selectedEnvs, setSelectedEnvs] = useState<string[]>([])
     const [safeInstall, setSafeInstall] = useState(false)
+    const [maxConcurrentTasks, setMaxConcurrentTasks] = useState('4')
     const [agentVersion, setAgentVersion] = useState('')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
@@ -65,10 +66,12 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
         setError('')
         setLoading(true)
         try {
+            const parsedLimit = Number.parseInt(maxConcurrentTasks, 10)
             const result = await stubCreateAgent({
                 name: name.trim(),
                 os,
                 safe_install: safeInstall,
+                max_concurrent_tasks: Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 4,
                 agent_version: agentVersion.trim() || undefined,
                 environment_ids: selectedEnvs,
             })
@@ -99,6 +102,7 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
         setOs('linux')
         setSelectedEnvs([])
         setSafeInstall(false)
+        setMaxConcurrentTasks('4')
         setAgentVersion('')
         setError('')
         setStep('form')
@@ -164,6 +168,20 @@ export function AddAgentModal({open, onClose, onCreated}: Props) {
                                     onChange={setSelectedEnvs}
                                     placeholder={t('agent.selectEnvPlaceholder')}
                                 />
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label>{t('agent.maxConcurrentTasks')}</Label>
+                                <Input
+                                    type="number"
+                                    min={1}
+                                    max={128}
+                                    value={maxConcurrentTasks}
+                                    onChange={(e) => setMaxConcurrentTasks(e.target.value)}
+                                />
+                                <p className="text-[11px] text-muted-foreground">
+                                    {t('agent.maxConcurrentTasksHint')}
+                                </p>
                             </div>
 
                             <div className="space-y-1.5">

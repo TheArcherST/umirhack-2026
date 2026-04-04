@@ -41,6 +41,7 @@ type AgentApi = {
     name: string
     declared_os: string | null
     safe_install: boolean
+    max_concurrent_tasks: number
     status: string
     last_seen_at: string | null
     agent_version: string | null
@@ -378,6 +379,7 @@ function mapAgent(row: AgentApi): Agent {
         tasks_count: 0,
         environment_ids: row.environments.map((env) => env.id),
         safe_install: row.safe_install,
+        max_concurrent_tasks: row.max_concurrent_tasks,
         agent_version: row.agent_version,
         reported_agent_version: row.reported_agent_version,
         created_at: row.created_at,
@@ -552,6 +554,7 @@ export async function stubCreateAgent(payload: CreateAgentPayload): Promise<{ ag
         name: payload.name,
         declared_os: payload.os,
         safe_install: payload.safe_install ?? false,
+        max_concurrent_tasks: payload.max_concurrent_tasks ?? 4,
         agent_version: payload.agent_version,
         environment_ids: payload.environment_ids ?? [],
     })
@@ -566,6 +569,7 @@ export async function stubUpdateAgent(id: string, payload: UpdateAgentPayload): 
     const { data } = await apiClient.put<AgentApi>(`/agents/${id}`, {
         name: payload.name,
         safe_install: payload.safe_install,
+        max_concurrent_tasks: payload.max_concurrent_tasks,
         agent_version: payload.agent_version,
         environment_ids: payload.environment_ids,
     })

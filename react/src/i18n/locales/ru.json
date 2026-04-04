@@ -209,6 +209,8 @@
     "installVersion": "Целевая версия",
     "reportedVersion": "Версия с хоста",
     "version": "Версия",
+    "maxConcurrentTasks": "Максимум параллельных задач",
+    "maxConcurrentTasksHint": "Жесткий лимит выполнения на агента, enforced на backend. Self-update всегда запускается отдельно.",
     "versionPlaceholder": "Оставьте пустым для текущего релиза",
     "versionHint": "SemVer. Пустое значение использует текущую release-версию backend.",
     "environments": "Окружения",

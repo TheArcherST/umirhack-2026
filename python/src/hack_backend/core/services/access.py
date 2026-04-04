@@ -15,6 +15,7 @@ from hack_backend.core.models import (
     LoginSession,
     Project,
     ProjectMember,
+    ProjectMemberRole,
     User,
 )
 from hack_backend.core.security import hash_secret, new_secret, verify_secret
@@ -192,6 +193,28 @@ class AccessService:
         )
         if membership is None:
             raise HTTPException(status_code=403, detail="Project access denied")
+        return project
+
+    async def require_project_admin(
+        self,
+        project_id: str,
+        *,
+        user_id: int,
+    ) -> Project:
+        project = await self.require_project_member(project_id, user_id=user_id)
+        if project.owner_id == user_id:
+            return project
+
+        membership = await self.orm_session.get(
+            ProjectMember,
+            {"project_id": project_id, "user_id": user_id},
+        )
+        if (
+            membership is None
+            or membership.role != ProjectMemberRole.ADMIN
+            or membership.invite_status != InviteStatus.ACCEPTED
+        ):
+            raise HTTPException(status_code=403, detail="Project admin access required")
         return project
 
     async def require_environment_member(

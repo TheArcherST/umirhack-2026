@@ -209,6 +209,8 @@
     "installVersion": "Target version",
     "reportedVersion": "Reported version",
     "version": "Version",
+    "maxConcurrentTasks": "Max concurrent tasks",
+    "maxConcurrentTasksHint": "Hard per-agent execution limit enforced by the backend. Self-update always runs alone.",
     "versionPlaceholder": "Leave empty for current release",
     "versionHint": "SemVer. Empty value uses the backend current release version.",
     "environments": "Environments",

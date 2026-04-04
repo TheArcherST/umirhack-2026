@@ -6,15 +6,17 @@ mod tasks;
 
 use anyhow::Context;
 use std::future::Future;
+use tokio::task::JoinSet;
 use tokio::sync::watch;
 use tokio::time::{Duration, sleep};
 
 use crate::api::AgentApi;
 use crate::config::Config;
+use crate::models::AgentTaskLease;
 use crate::state::{AgentState, load_state, save_state};
-use crate::tasks::{execute_task, launch_post_action};
+use crate::tasks::{PostTaskAction, execute_task, launch_post_action};
 
-const POLL_LIMIT: usize = 4;
+const POLL_REQUEST_LIMIT: usize = 128;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -54,53 +56,112 @@ async fn ensure_registered(
 
 async fn tick(api: &AgentApi, state: &AgentState, config: &Config) -> anyhow::Result<()> {
     api.heartbeat(state).await.context("heartbeat failed")?;
-    let tasks = api.poll(state, POLL_LIMIT).await.context("poll failed")?;
+    let mut running = JoinSet::new();
+    let mut poll_error: Option<anyhow::Error> = None;
 
-    for task in tasks {
-        api.mark_running(state, &task.id, &task.lease_token)
-            .await
-            .with_context(|| format!("failed to mark task {} running", task.id))?;
-        let task_id = task.id.clone();
-        let (stop_tx, heartbeat_handle) = spawn_heartbeat_loop(
-            Duration::from_secs(config.poll_interval_seconds.max(1)),
+    loop {
+        if poll_error.is_none() && running.len() < POLL_REQUEST_LIMIT {
+            match api
+                .poll(state, POLL_REQUEST_LIMIT.saturating_sub(running.len()))
+                .await
+                .context("poll failed")
             {
-                let api = api.clone();
-                let state = state.clone();
-                let task_id = task_id.clone();
-                move || {
-                    let api = api.clone();
-                    let state = state.clone();
-                    let task_id = task_id.clone();
-                    async move {
-                        if let Err(error) = api.heartbeat(&state).await {
-                            eprintln!(
-                                "background heartbeat failed while running task {}: {error:#}",
-                                task_id
-                            );
-                        }
+                Ok(tasks) => {
+                    for task in tasks {
+                        running.spawn(run_task(
+                            api.clone(),
+                            state.clone(),
+                            config.clone(),
+                            task,
+                        ));
                     }
                 }
-            },
-        );
-        let outcome = execute_task(&task, config).await;
-        let _ = stop_tx.send(true);
-        if let Err(error) = heartbeat_handle.await {
-            eprintln!(
-                "background heartbeat loop failed for task {}: {error:#}",
-                task_id
-            );
+                Err(error) => {
+                    if running.is_empty() {
+                        return Err(error);
+                    }
+                    poll_error = Some(error);
+                }
+            }
         }
-        api.complete(state, &task.id, &outcome.result)
+
+        if running.is_empty() {
+            break;
+        }
+
+        let finished = running
+            .join_next()
             .await
-            .with_context(|| format!("failed to complete task {}", task.id))?;
-        if let Some(post_action) = outcome.post_action {
-            launch_post_action(post_action)
-                .with_context(|| format!("failed to apply post action for task {}", task.id))?;
+            .context("task executor set terminated unexpectedly")?
+            .context("task executor join failed")??;
+        if let Some(post_action) = finished.post_action {
+            running.abort_all();
+            while running.join_next().await.is_some() {}
+            launch_post_action(post_action).with_context(|| {
+                format!("failed to apply post action for task {}", finished.task_id)
+            })?;
             std::process::exit(0);
         }
     }
 
+    if let Some(error) = poll_error {
+        return Err(error);
+    }
+
     Ok(())
+}
+
+struct FinishedTask {
+    task_id: String,
+    post_action: Option<PostTaskAction>,
+}
+
+async fn run_task(
+    api: AgentApi,
+    state: AgentState,
+    config: Config,
+    task: AgentTaskLease,
+) -> anyhow::Result<FinishedTask> {
+    api.mark_running(&state, &task.id, &task.lease_token)
+        .await
+        .with_context(|| format!("failed to mark task {} running", task.id))?;
+    let task_id = task.id.clone();
+    let (stop_tx, heartbeat_handle) = spawn_heartbeat_loop(
+        Duration::from_secs(config.poll_interval_seconds.max(1)),
+        {
+            let api = api.clone();
+            let state = state.clone();
+            let task_id = task_id.clone();
+            move || {
+                let api = api.clone();
+                let state = state.clone();
+                let task_id = task_id.clone();
+                async move {
+                    if let Err(error) = api.heartbeat(&state).await {
+                        eprintln!(
+                            "background heartbeat failed while running task {}: {error:#}",
+                            task_id
+                        );
+                    }
+                }
+            }
+        },
+    );
+    let outcome = execute_task(&task, &config).await;
+    let _ = stop_tx.send(true);
+    if let Err(error) = heartbeat_handle.await {
+        eprintln!(
+            "background heartbeat loop failed for task {}: {error:#}",
+            task_id
+        );
+    }
+    api.complete(&state, &task.id, &outcome.result)
+        .await
+        .with_context(|| format!("failed to complete task {}", task.id))?;
+    Ok(FinishedTask {
+        task_id,
+        post_action: outcome.post_action,
+    })
 }
 
 fn spawn_heartbeat_loop<H, Fut>(

@@ -445,6 +445,7 @@ class PlatformService:
         name: str,
         declared_os: str | None,
         safe_install: bool,
+        max_concurrent_tasks: int,
         environment_ids: list[str],
         agent_version: str | None,
     ) -> tuple[Agent, list[Environment]]:
@@ -457,6 +458,7 @@ class PlatformService:
             name=name,
             declared_os=declared_os,
             safe_install=safe_install,
+            max_concurrent_tasks=max_concurrent_tasks,
             agent_version=self.agent_versioning_service.resolve_agent_target_version(
                 agent_version
             ),
@@ -480,6 +482,7 @@ class PlatformService:
         agent: Agent,
         name: str | None,
         safe_install: bool | None,
+        max_concurrent_tasks: int | None,
         environment_ids: list[str] | None,
         agent_version: str | None,
     ) -> tuple[Agent, list[Environment]]:
@@ -487,6 +490,8 @@ class PlatformService:
             agent.name = name
         if safe_install is not None:
             agent.safe_install = safe_install
+        if max_concurrent_tasks is not None:
+            agent.max_concurrent_tasks = max_concurrent_tasks
         if agent_version is not None:
             agent.agent_version = self.agent_versioning_service.resolve_agent_target_version(
                 agent_version

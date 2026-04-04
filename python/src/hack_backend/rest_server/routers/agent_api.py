@@ -40,7 +40,7 @@ class AgentHeartbeatPayload(BaseModel):
 
 
 class AgentPollPayload(BaseModel):
-    limit: int = 4
+    limit: int = Field(default=32, ge=1, le=128)
 
 
 class RunningPayload(BaseModel):
