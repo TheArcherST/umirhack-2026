@@ -85,7 +85,7 @@ services:
     entrypoint:
       - sh
       - -lc
-      - /workspace/scripts/build-agent-artifacts.sh $${ARTIFACTS_ARGS:---container-only}
+      - bash /workspace/scripts/build-agent-artifacts.sh $${ARTIFACTS_ARGS:---container-only}
     restart: no
     working_dir: /workspace
     volumes:
