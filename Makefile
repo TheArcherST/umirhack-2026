@@ -34,4 +34,4 @@ logs:
 down:
 	docker compose down
 sync-artifacts:
-	cd artifacts/rust/hack-agent && rsync -a . v:~/umirhack-2026/artifacts/rust/hack-agent
+	cd artifacts/rust/hack-agent && rsync --progress -va . v:~/umirhack-2026/artifacts/rust/hack-agent
