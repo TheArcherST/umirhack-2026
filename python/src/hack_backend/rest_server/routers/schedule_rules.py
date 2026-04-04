@@ -26,6 +26,7 @@ class CreateScheduleRulePayload(BaseModel):
 
 
 class PatchScheduleRulePayload(BaseModel):
+    task_template_id: str | None = None
     is_enabled: bool | None = None
     cron_expr: str | None = None
     host_ids: list[str] | None = None
@@ -120,6 +121,7 @@ async def patch_schedule_rule(
             target_selector_json.pop("target_endpoint", None)
     rule = await platform_service.patch_schedule_rule(
         schedule_rule_id,
+        task_template_id=payload.task_template_id,
         is_enabled=payload.is_enabled,
         cron_expr=payload.cron_expr,
         target_selector_json=target_selector_json,

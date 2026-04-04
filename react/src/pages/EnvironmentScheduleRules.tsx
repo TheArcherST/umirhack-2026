@@ -24,8 +24,11 @@ import { CreateCronRuleModal } from '@/components/CreateCronRuleModal'
 import { EndpointTargetInput } from '@/components/EndpointTargetInput'
 import { formatDate } from '@/lib/utils'
 import { useI18n } from '@/i18n'
-import type { ScheduleRule } from '@/api/types'
+import type { ScheduleRule, TaskTemplate } from '@/api/types'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 
 const CRON_PRESETS = [
   { label: '*/5 * * * *', hint: 'Every 5 min' },
@@ -46,6 +49,7 @@ function EditCronModal({
 }) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
+  const [template, setTemplate] = useState<TaskTemplate>(kindToTemplate(rule.task_kind))
   const [cronExpr, setCronExpr] = useState(rule.cron_expr)
   const [isEnabled, setIsEnabled] = useState(rule.is_enabled)
   const [target, setTarget] = useState(String(rule.target_selector_json.target_endpoint ?? ''))
@@ -55,7 +59,7 @@ function EditCronModal({
       ? rule.target_selector_json.host_ids.filter((value): value is string => typeof value === 'string')
       : [],
   )
-  const selectedTemplate = TASK_TEMPLATES.find((tt) => tt.id === kindToTemplate(rule.task_kind))
+  const selectedTemplate = TASK_TEMPLATES.find((tt) => tt.id === template)
   const { data: hosts = [] } = useQuery({
     queryKey: ['hosts-env', rule.environment_id],
     queryFn: () => stubGetHosts(rule.environment_id),
@@ -64,6 +68,7 @@ function EditCronModal({
   const mutation = useMutation({
     mutationFn: () =>
       stubPatchScheduleRule(rule.id, {
+        template: template !== kindToTemplate(rule.task_kind) ? template : undefined,
         cron_expr: cronExpr.trim() !== rule.cron_expr ? cronExpr.trim() : undefined,
         is_enabled: isEnabled !== rule.is_enabled ? isEnabled : undefined,
         host_ids: selectedHostIds,
@@ -83,6 +88,14 @@ function EditCronModal({
     )
   }
 
+  const handleTemplateChange = (value: string) => {
+    const nextTemplate = value as TaskTemplate
+    const nextOption = TASK_TEMPLATES.find((item) => item.id === nextTemplate)
+    setTemplate(nextTemplate)
+    if (!nextOption?.requiresTarget) setTarget('')
+    if (!nextOption?.requiresCommand) setCommand('')
+  }
+
   return (
     <Dialog open onOpenChange={(v) => { if (!v) onClose() }}>
       <DialogContent>
@@ -90,8 +103,24 @@ function EditCronModal({
           <DialogTitle>{t('cron.editCron')}</DialogTitle>
         </DialogHeader>
         <div className="px-6 pb-2 space-y-4">
+          <div className="space-y-1.5">
+            <Label>{t('cron.taskTemplate')}</Label>
+            <Select value={template} onValueChange={handleTemplateChange}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TASK_TEMPLATES.map((tt) => (
+                  <SelectItem key={tt.id} value={tt.id}>
+                    <span className="font-medium text-xs">{t(tt.labelKey)}</span>
+                    <span className="ml-2 text-muted-foreground text-xs">{t(tt.descriptionKey)}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">{t('cron.task')}</p>
+            <p className="text-xs text-muted-foreground">{t('cron.templatePreview')}</p>
             <p className="text-xs font-medium">
               {selectedTemplate ? t(selectedTemplate.labelKey) : rule.task_name}
             </p>
@@ -184,7 +213,12 @@ function EditCronModal({
           <Button
             size="sm"
             onClick={() => mutation.mutate()}
-            disabled={mutation.isPending || !cronExpr.trim()}
+            disabled={
+              mutation.isPending
+              || !cronExpr.trim()
+              || Boolean(selectedTemplate?.requiresTarget && !target.trim())
+              || Boolean(selectedTemplate?.requiresCommand && !command.trim())
+            }
           >
             {t('common.save')}
           </Button>

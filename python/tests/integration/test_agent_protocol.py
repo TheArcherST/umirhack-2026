@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import Session
 
 from hack_backend.core.models import (
@@ -14,7 +16,9 @@ from hack_backend.core.models import (
     InviteStatus,
     ProjectMember,
     ProjectMemberRole,
+    ScheduleRule,
 )
+from hack_backend.core.platform_ops import expand_schedule_rules
 from hack_backend.core.providers import ConfigHack
 from hack_backend.core.security import hash_secret
 
@@ -124,6 +128,39 @@ def _expire_bootstrap_token(raw_token: str) -> None:
             session.commit()
     finally:
         engine.dispose()
+
+
+def _set_schedule_rule_due(schedule_rule_id: str) -> None:
+    config = ConfigHack()
+    engine = create_engine(
+        config.postgres.get_sqlalchemy_url("psycopg", is_test_database=True)
+    )
+    try:
+        with Session(engine) as session:
+            rule = session.get(ScheduleRule, schedule_rule_id)
+            assert rule is not None
+            rule.next_run_at = datetime.now(tz=UTC) - timedelta(minutes=1)
+            session.commit()
+    finally:
+        engine.dispose()
+
+
+def _expand_due_schedule_rules() -> int:
+    config = ConfigHack()
+    engine = create_async_engine(
+        config.postgres.get_sqlalchemy_url("psycopg", is_test_database=True)
+    )
+
+    async def _run() -> int:
+        try:
+            async with AsyncSession(engine, expire_on_commit=False) as session:
+                created = await expand_schedule_rules(session)
+                await session.commit()
+                return created
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(_run())
 
 
 def _provision_host_with_connectivity_activity(
@@ -1056,6 +1093,10 @@ def test_schedule_rule_can_be_updated_and_deleted(api) -> None:
         bundle.templates,
         "network.endpoint_connectivity",
     )
+    custom_command_template_id = _template_id_for_kind(
+        bundle.templates,
+        "diagnostic.command.custom",
+    )
     create_rule = api.client.post(
         "/schedule-rules",
         json={
@@ -1070,22 +1111,51 @@ def test_schedule_rule_can_be_updated_and_deleted(api) -> None:
     assert create_rule.status_code == 201, create_rule.text
     rule = create_rule.json()
 
+    _set_schedule_rule_due(rule["id"])
+    assert _expand_due_schedule_rules() == 1
+
+    initial_task_runs = api.client.get(
+        f"/environments/{bundle.environment['id']}/task-runs",
+        headers=owner.headers,
+    )
+    assert initial_task_runs.status_code == 200, initial_task_runs.text
+    assert any(
+        task_run["task_kind"] == "network.endpoint_connectivity"
+        and task_run["command"] == "alpha.internal"
+        for task_run in initial_task_runs.json()
+    )
+
     patch_rule = api.client.patch(
         f"/schedule-rules/{rule['id']}",
         json={
+            "task_template_id": custom_command_template_id,
             "cron_expr": "0 * * * *",
-            "is_enabled": False,
-            "target_endpoint": "beta.internal",
-            "host_ids": [],
+            "approved_command": "echo scheduled",
+            "target_endpoint": None,
         },
         headers=owner.headers,
     )
     assert patch_rule.status_code == 200, patch_rule.text
     patched = patch_rule.json()
     assert patched["cron_expr"] == "0 * * * *"
-    assert patched["is_enabled"] is False
-    assert patched["target_selector_json"]["target_endpoint"] == "beta.internal"
-    assert "host_ids" not in patched["target_selector_json"]
+    assert patched["task_template_id"] == custom_command_template_id
+    assert patched["task_kind"] == "diagnostic.command.custom"
+    assert patched["target_selector_json"]["approved_command"] == "echo scheduled"
+    assert "target_endpoint" not in patched["target_selector_json"]
+
+    _set_schedule_rule_due(rule["id"])
+    assert _expand_due_schedule_rules() == 1
+
+    updated_task_runs = api.client.get(
+        f"/environments/{bundle.environment['id']}/task-runs",
+        headers=owner.headers,
+    )
+    assert updated_task_runs.status_code == 200, updated_task_runs.text
+    assert any(
+        task_run["task_kind"] == "diagnostic.command.custom"
+        and task_run["command"] == "echo scheduled"
+        for task_run in updated_task_runs.json()
+    )
 
     delete_rule = api.client.delete(
         f"/schedule-rules/{rule['id']}",

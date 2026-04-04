@@ -315,6 +315,7 @@
     "disabled": "Отключён",
     "noRules": "Кронов ещё нет",
     "taskTemplate": "Шаблон задачи",
+    "templatePreview": "Выбранный шаблон",
     "selectTemplate": "Выберите шаблон...",
     "selectTemplateRequired": "Выберите шаблон задачи",
     "cronRequired": "Введите cron-выражение",

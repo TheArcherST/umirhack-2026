@@ -174,6 +174,61 @@ class PlatformService:
             )
         return environment, task_template
 
+    async def _normalize_schedule_target_selector(
+        self,
+        *,
+        environment_id: str,
+        task_template: TaskTemplate,
+        target_selector_json: dict | None,
+    ) -> dict:
+        selector = dict(target_selector_json or {})
+        normalized: dict = {}
+
+        host_ids = selector.get("host_ids")
+        if host_ids:
+            resolved_host_ids = list(dict.fromkeys(str(host_id) for host_id in host_ids))
+            hosts = list(
+                await self.session.scalars(
+                    select(Host.id).where(
+                        Host.environment_id == environment_id,
+                        Host.id.in_(resolved_host_ids),
+                    )
+                )
+            )
+            if len(hosts) != len(resolved_host_ids):
+                raise HTTPException(status_code=400, detail="Some hosts are invalid")
+            normalized["host_ids"] = resolved_host_ids
+
+        if task_template.kind == "diagnostic.command.custom":
+            approved_command = selector.get("approved_command")
+            if not isinstance(approved_command, str) or not approved_command.strip():
+                raise HTTPException(
+                    status_code=400,
+                    detail="Custom command schedules require a non-empty approved_command",
+                )
+            normalized["approved_command"] = approved_command.strip()
+        elif selector.get("approved_command"):
+            raise HTTPException(
+                status_code=400,
+                detail="approved_command override is only allowed for custom command schedules",
+            )
+
+        if task_template.kind == "network.endpoint_connectivity":
+            target_endpoint = selector.get("target_endpoint")
+            if not isinstance(target_endpoint, str) or not target_endpoint.strip():
+                raise HTTPException(
+                    status_code=400,
+                    detail="Endpoint connectivity schedules require a non-empty target_endpoint",
+                )
+            normalized["target_endpoint"] = target_endpoint.strip()
+        elif selector.get("target_endpoint"):
+            raise HTTPException(
+                status_code=400,
+                detail="target_endpoint override is only allowed for endpoint connectivity schedules",
+            )
+
+        return normalized
+
     async def list_projects_for_user(self, user: User) -> list[Project]:
         return list(
             await self.session.scalars(
@@ -633,11 +688,16 @@ class PlatformService:
             environment_id=environment_id,
             task_template_id=task_template_id,
         )
+        normalized_target_selector = await self._normalize_schedule_target_selector(
+            environment_id=environment_id,
+            task_template=task_template,
+            target_selector_json=target_selector_json,
+        )
         rule = ScheduleRule(
             environment_id=environment_id,
             task_template_id=task_template.id,
             cron_expr=cron_expr,
-            target_selector_json=target_selector_json or {},
+            target_selector_json=normalized_target_selector,
             is_enabled=is_enabled,
             next_run_at=next_cron_run(cron_expr, utcnow()),
         )
@@ -659,6 +719,7 @@ class PlatformService:
         self,
         schedule_rule_id: str,
         *,
+        task_template_id: str | None = None,
         is_enabled: bool | None = None,
         cron_expr: str | None = None,
         target_selector_json: dict | None = None,
@@ -667,14 +728,30 @@ class PlatformService:
         from hack_backend.core.models import ScheduleRule
         from hack_backend.core.platform_ops import next_cron_run, utcnow
 
-        rule = await self.session.get(ScheduleRule, schedule_rule_id)
+        rule = await self.get_schedule_rule(schedule_rule_id)
+        if rule is None:
+            raise HTTPException(status_code=404, detail="Schedule rule not found")
+        task_template = rule.task_template
+        if task_template_id is not None:
+            _, task_template = await self._resolve_environment_task_template(
+                environment_id=rule.environment_id,
+                task_template_id=task_template_id,
+            )
+            rule.task_template_id = task_template.id
+            rule.task_template = task_template
         if is_enabled is not None:
             rule.is_enabled = is_enabled
         if cron_expr is not None:
             rule.cron_expr = cron_expr
             rule.next_run_at = next_cron_run(cron_expr, utcnow())
-        if replace_target_selector:
-            rule.target_selector_json = target_selector_json or {}
+        if replace_target_selector or task_template_id is not None:
+            rule.target_selector_json = await self._normalize_schedule_target_selector(
+                environment_id=rule.environment_id,
+                task_template=task_template,
+                target_selector_json=target_selector_json
+                if target_selector_json is not None
+                else rule.target_selector_json,
+            )
         await self.session.flush()
         return await self.get_schedule_rule(schedule_rule_id)
 

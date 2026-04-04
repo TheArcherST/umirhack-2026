@@ -313,6 +313,7 @@
     "disabled": "Disabled",
     "noRules": "No cron jobs yet",
     "taskTemplate": "Task template",
+    "templatePreview": "Selected template",
     "selectTemplate": "Select template...",
     "selectTemplateRequired": "Select a task template",
     "cronRequired": "Enter a cron expression",
