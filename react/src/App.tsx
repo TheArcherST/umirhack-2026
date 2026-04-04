@@ -33,32 +33,39 @@ const queryClient = new QueryClient({
 
 function ProtectedRoutes() {
     const {isAuthenticated} = useAuth()
+
+    if (!isAuthenticated) return <Navigate to="/login" replace/>
+
+    return (
+        <ProjectProvider>
+            <ProtectedContent />
+        </ProjectProvider>
+    )
+}
+
+function ProtectedContent() {
     const isPageReady = useIsPageReady()
 
     const content = (
-        <ProjectProvider>
-            <Routes>
-                <Route element={<Layout/>}>
-                    <Route index element={<Navigate to="/dashboard" replace/>}/>
-                    <Route path="dashboard" element={<Dashboard/>}/>
-                    <Route path="agents" element={<ProjectAgents/>}/>
-                    <Route path="agents/:agentId/tasks" element={<AgentTasks/>}/>
-                    <Route path="members" element={<ProjectMembers/>}/>
-                    <Route path="members/:memberId" element={<MemberDetail/>}/>
-                    <Route path="settings/profile" element={<ProfileSettings/>}/>
-                </Route>
-                <Route element={<EnvironmentLayout/>}>
-                    <Route path="environments/:envId" element={<EnvironmentDashboard/>}/>
-                    <Route path="environments/:envId/hosts" element={<EnvironmentHosts/>}/>
-                    <Route path="environments/:envId/hosts/:hostId" element={<EnvironmentHostDetail/>}/>
-                    <Route path="environments/:envId/tasks" element={<EnvironmentTasks/>}/>
-                    <Route path="environments/:envId/schedule" element={<EnvironmentScheduleRules/>}/>
-                </Route>
-            </Routes>
-        </ProjectProvider>
+        <Routes>
+            <Route element={<Layout/>}>
+                <Route index element={<Navigate to="/dashboard" replace/>}/>
+                <Route path="dashboard" element={<Dashboard/>}/>
+                <Route path="agents" element={<ProjectAgents/>}/>
+                <Route path="agents/:agentId/tasks" element={<AgentTasks/>}/>
+                <Route path="members" element={<ProjectMembers/>}/>
+                <Route path="members/:memberId" element={<MemberDetail/>}/>
+                <Route path="settings/profile" element={<ProfileSettings/>}/>
+            </Route>
+            <Route element={<EnvironmentLayout/>}>
+                <Route path="environments/:envId" element={<EnvironmentDashboard/>}/>
+                <Route path="environments/:envId/hosts" element={<EnvironmentHosts/>}/>
+                <Route path="environments/:envId/hosts/:hostId" element={<EnvironmentHostDetail/>}/>
+                <Route path="environments/:envId/tasks" element={<EnvironmentTasks/>}/>
+                <Route path="environments/:envId/schedule" element={<EnvironmentScheduleRules/>}/>
+            </Route>
+        </Routes>
     )
-
-    if (!isAuthenticated && isPageReady) return <Navigate to="/login" replace/>
 
     return (
         <AuthBlurLoader isLoading={!isPageReady}>

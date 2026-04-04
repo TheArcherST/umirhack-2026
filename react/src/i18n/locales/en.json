@@ -276,7 +276,9 @@
     "interfaces": "Interfaces",
     "ipAddress": "IP Address",
     "uptime": "Uptime",
-    "schedule": "Crons"
+    "schedule": "Crons",
+    "reachable": "reachable",
+    "unreachable": "unreachable"
   },
   "taskTemplates": {
     "ping": "Ping",

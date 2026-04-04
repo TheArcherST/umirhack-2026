@@ -694,7 +694,7 @@ export async function stubGetEnvironmentEndpointSuggestions(
     )
 
     const hostById = new Map(hosts.map((host) => [host.id, host]))
-    const hostPorts = new Map(portsByHost)
+    const hostPorts = new Map<string, PortInfo[]>(portsByHost as [string, PortInfo[]][])
     const suggestions = new Map<string, EndpointSuggestion>()
 
     for (const host of hosts) {

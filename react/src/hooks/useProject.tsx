@@ -1,4 +1,4 @@
-import React, {createContext, useContext, useState, useEffect, useCallback} from 'react'
+import React, {createContext, useContext, useState, useEffect, useCallback, useRef} from 'react'
 import {
     stubCreateProject,
     stubGetEnvironments,
@@ -17,6 +17,8 @@ interface ProjectContextValue {
     createProject: (name: string, members: string[]) => Promise<void>
     refreshEnvironments: (projectId?: string) => Promise<void>
     loading: boolean
+    /** True once initial project + env data have been loaded */
+    initialized: boolean
 }
 
 const ProjectContext = createContext<ProjectContextValue | null>(null)
@@ -31,9 +33,51 @@ export function ProjectProvider({children}: { children: React.ReactNode }) {
         return localStorage.getItem('currentEnvId')
     })
     const [loading, setLoading] = useState(false)
+    const [initialized, setInitialized] = useState(false)
 
     const currentProject = projects.find((p) => p.id === currentProjectId) ?? null
     const currentEnv = environments.find((e) => e.id === currentEnvId) ?? null
+
+    const initialLoadDone = useRef(false)
+
+    // Single sequential load: projects → pick current → environments
+    useEffect(() => {
+        if (initialLoadDone.current) return
+        let cancelled = false
+
+        ;(async () => {
+            let loadedProjects: Project[] = []
+            try {
+                loadedProjects = await stubGetProjects()
+            } catch { /* ignore */ }
+
+            if (cancelled) return
+
+            if (loadedProjects.length > 0) {
+                setProjects(loadedProjects)
+
+                let resolvedId = currentProjectId
+                if (!resolvedId || !loadedProjects.some((p) => p.id === resolvedId)) {
+                    resolvedId = loadedProjects[0].id
+                    setCurrentProjectId(resolvedId)
+                    localStorage.setItem('currentProjectId', resolvedId)
+                }
+
+                // Load environments for the resolved project
+                try {
+                    const envs = await stubGetEnvironments(resolvedId)
+                    if (!cancelled) setEnvironments(envs)
+                } catch { /* ignore */ }
+            }
+
+            if (!cancelled) initialLoadDone.current = true
+            if (!cancelled) setInitialized(true)
+        })()
+
+        return () => {
+            cancelled = true
+        }
+    }, [])
 
     const refreshEnvironments = useCallback(async (projectId?: string) => {
         const resolvedProjectId = projectId ?? currentProjectId
@@ -45,52 +89,15 @@ export function ProjectProvider({children}: { children: React.ReactNode }) {
         setEnvironments(data)
     }, [currentProjectId])
 
-    // Load projects on mount
-    useEffect(() => {
-        let cancelled = false
-        const load = async () => {
-            try {
-                const data = await stubGetProjects()
-                if (!cancelled) {
-                    setProjects(data)
-                    if (
-                        data.length > 0 &&
-                        (!currentProjectId || !data.some((project) => project.id === currentProjectId))
-                    ) {
-                        setCurrentProjectId(data[0].id)
-                        localStorage.setItem('currentProjectId', data[0].id)
-                    }
-                }
-            } catch { /* ignore */
-            }
-        }
-        load()
-        return () => {
-            cancelled = true
-        }
-    }, [])
-
-    // Load environments when project changes
-    useEffect(() => {
-        if (!currentProjectId) return
-        let cancelled = false
-        const load = async () => {
-            try {
-                const data = await stubGetEnvironments(currentProjectId)
-                if (!cancelled) setEnvironments(data)
-            } catch { /* ignore */
-            }
-        }
-        load()
-        return () => {
-            cancelled = true
-        }
-    }, [currentProjectId])
-
-    const selectProject = useCallback((id: string) => {
+    const selectProject = useCallback(async (id: string) => {
         setCurrentProjectId(id)
         setCurrentEnvId(null)
         localStorage.setItem('currentProjectId', id)
+        // Immediately refresh envs for the new project
+        try {
+            const envs = await stubGetEnvironments(id)
+            setEnvironments(envs)
+        } catch { /* ignore */ }
     }, [])
 
     const selectEnvironment = useCallback((id: string | null) => {
@@ -111,11 +118,10 @@ export function ProjectProvider({children}: { children: React.ReactNode }) {
             }
             setProjects((prev) => [...prev, project])
             selectProject(project.id)
-            await refreshEnvironments(project.id)
         } finally {
             setLoading(false)
         }
-    }, [refreshEnvironments, selectProject])
+    }, [selectProject])
 
     return (
         <ProjectContext.Provider
@@ -128,7 +134,8 @@ export function ProjectProvider({children}: { children: React.ReactNode }) {
                 selectEnvironment,
                 createProject,
                 refreshEnvironments,
-                loading
+                loading,
+                initialized,
             }}
         >
             {children}

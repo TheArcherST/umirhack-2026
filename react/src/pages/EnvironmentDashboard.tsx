@@ -117,10 +117,17 @@ export default function EnvironmentDashboard() {
               <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Connectivity Graph
               </h2>
-              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                <span>{graphEdges.filter((e) => e.status === 'reachable').length} {t('env.reachable')}</span>
-                <span>{graphEdges.filter((e) => e.status !== 'reachable').length} {t('env.unreachable')}</span>
-              </div>
+              {isLoadingGraph ? (
+                <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-3 w-16" />
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                  <span>{hosts.filter((e) => e.status === 'online').length} {t('env.reachable')}</span>
+                  <span>{hosts.filter((e) => e.status !== 'online').length} {t('env.unreachable')}</span>
+                </div>
+              )}
             </div>
             <div className="rounded-lg border border-border bg-card overflow-hidden" style={{ height: 360 }}>
               <EnvironmentGraph graphEdges={graphEdges} hosts={hosts} />

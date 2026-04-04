@@ -276,9 +276,9 @@
     "interfaces": "Интерфейсы",
     "ipAddress": "IP-адрес",
     "uptime": "Время работы",
+    "schedule": "Кроны",
     "reachable": "Доступно",
-    "unreachable": "Недоступно",
-    "schedule": "Кроны"
+    "unreachable": "Недоступно"
   },
   "taskTemplates": {
     "ping": "Пинг",
