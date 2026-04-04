@@ -94,7 +94,7 @@ export default function Dashboard() {
 
     // Load stats
     const {data: stats} = useQuery({
-        queryKey: ['stats'],
+        queryKey: ['stats', currentProject?.id],
         queryFn: stubGetStats,
         refetchInterval: 15_000,
         enabled: !!currentProject,
@@ -102,7 +102,7 @@ export default function Dashboard() {
 
     // Load all agents (across all envs)
     const {data: allAgents = []} = useQuery({
-        queryKey: ['agents-all'],
+        queryKey: ['agents-all', currentProject?.id],
         queryFn: () => stubGetAgents(),
         refetchInterval: 15_000,
         enabled: !!currentProject,
@@ -110,7 +110,7 @@ export default function Dashboard() {
 
     // Load recent tasks
     const {data: recentTasks = []} = useQuery({
-        queryKey: ['recent-tasks'],
+        queryKey: ['recent-tasks', currentProject?.id],
         queryFn: () => stubGetRecentTasks(8),
         refetchInterval: 10_000,
         enabled: !!currentProject,

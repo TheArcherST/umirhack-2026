@@ -16,13 +16,12 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { CreateProjectModal } from '@/components/CreateProjectModal'
 import { CreateEnvironmentModal } from '@/components/CreateEnvironmentModal'
-import { stubGetEnvironments } from '@/api/stubs'
 
 export function Sidebar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const { t, setLocale, locale } = useI18n()
-  const { projects, currentProject, environments, currentEnv, selectProject, selectEnvironment, createProject, loading } = useProject()
+  const { projects, currentProject, environments, currentEnv, selectProject, createProject } = useProject()
   const [createOpen, setCreateOpen] = useState(false)
   const [createEnvOpen, setCreateEnvOpen] = useState(false)
   const [envsExpanded, setEnvsExpanded] = useState(true)
@@ -61,7 +60,7 @@ export function Sidebar() {
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-1 flex-1 min-w-0 text-left px-1.5 py-1 rounded-md hover:bg-accent/50 transition-colors">
                 <span className="text-xs font-semibold tracking-tight font-display truncate">
-                  {currentProject?.name ?? 'DIAG'}
+                  {currentProject?.name ?? t('project.createProjectFirst')}
                 </span>
                 <ChevronsUpDown size={11} className="text-muted-foreground shrink-0" />
               </button>
@@ -126,7 +125,10 @@ export function Sidebar() {
               </button>
               <button
                 onClick={() => setCreateEnvOpen(true)}
-                className="p-1 mr-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+                className={cn(
+                  'p-1 mr-1 rounded text-muted-foreground transition-colors',
+                  hasProject ? 'hover:text-foreground hover:bg-accent/50' : 'opacity-45 cursor-not-allowed',
+                )}
                 title={t('project.createEnvironment')}
                 disabled={!hasProject}
               >
