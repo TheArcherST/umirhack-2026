@@ -185,7 +185,6 @@ export default function MemberDetail() {
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="none">{t('member.noAccess')}</SelectItem>
-                                            <SelectItem value="admin">{roleLabels.admin}</SelectItem>
                                             <SelectItem value="operator">{roleLabels.operator}</SelectItem>
                                             <SelectItem value="observer">{roleLabels.observer}</SelectItem>
                                         </SelectContent>

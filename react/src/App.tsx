@@ -5,6 +5,7 @@ import {ProjectProvider} from '@/hooks/useProject'
 import {ThemeProvider} from '@/hooks/useTheme'
 import {I18nProvider} from '@/i18n'
 import {Layout} from '@/components/Layout'
+import {EnvironmentLayout} from '@/components/EnvironmentLayout'
 import Auth from '@/pages/Auth'
 import Dashboard from '@/pages/Dashboard'
 import Agents from '@/pages/Agents'
@@ -13,6 +14,10 @@ import ProfileSettings from '@/pages/ProfileSettings'
 import ProjectAgents from '@/pages/ProjectAgents'
 import ProjectMembers from '@/pages/ProjectMembers'
 import MemberDetail from '@/pages/MemberDetail'
+import EnvironmentDashboard from '@/pages/EnvironmentDashboard'
+import EnvironmentHosts from '@/pages/EnvironmentHosts'
+import EnvironmentHostDetail from '@/pages/EnvironmentHostDetail'
+import EnvironmentTasks from '@/pages/EnvironmentTasks'
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -28,6 +33,7 @@ function ProtectedRoutes() {
     if (!isAuthenticated) return <Navigate to="/login" replace/>
     return (
         <Routes>
+            {/* Project routes */}
             <Route element={<Layout/>}>
                 <Route index element={<Navigate to="/dashboard" replace/>}/>
                 <Route path="dashboard" element={<Dashboard/>}/>
@@ -35,8 +41,14 @@ function ProtectedRoutes() {
                 <Route path="agents/:agentId/tasks" element={<AgentTasks/>}/>
                 <Route path="members" element={<ProjectMembers/>}/>
                 <Route path="members/:memberId" element={<MemberDetail/>}/>
-                <Route path="environments/:envId" element={<Dashboard/>}/>
                 <Route path="settings/profile" element={<ProfileSettings/>}/>
+            </Route>
+            {/* Environment routes */}
+            <Route element={<EnvironmentLayout/>}>
+                <Route path="environments/:envId" element={<EnvironmentDashboard/>}/>
+                <Route path="environments/:envId/hosts" element={<EnvironmentHosts/>}/>
+                <Route path="environments/:envId/hosts/:hostId" element={<EnvironmentHostDetail/>}/>
+                <Route path="environments/:envId/tasks" element={<EnvironmentTasks/>}/>
             </Route>
         </Routes>
     )

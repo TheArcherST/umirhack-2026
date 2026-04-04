@@ -136,7 +136,7 @@ export function Sidebar() {
                 {environments.map((env) => (
                   <button
                     key={env.id}
-                    onClick={() => selectEnvironment(env.id === currentEnv?.id ? null : env.id)}
+                    onClick={() => navigate(`/environments/${env.id}`)}
                     className={cn(
                       'flex items-center gap-2 w-full px-2 py-1.5 rounded text-xs transition-colors',
                       env.id === currentEnv?.id

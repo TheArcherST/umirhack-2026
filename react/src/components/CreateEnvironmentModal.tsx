@@ -81,7 +81,6 @@ export function CreateEnvironmentModal({ open, onClose, onCreated }: Props) {
   const agentOptions = agents.map((a) => ({ id: a.id, name: a.name, status: a.status }))
 
   const roleOptions = [
-    { value: 'admin', label: t('member.roleAdmin') },
     { value: 'operator', label: t('member.roleOperator') },
     { value: 'observer', label: t('member.roleObserver') },
   ]

@@ -220,5 +220,30 @@
     "roleMember": "Member",
     "envRoles": "Environment access",
     "noAccess": "No access"
+  },
+  "env": {
+    "dashboard": "Dashboard",
+    "hosts": "Hosts",
+    "tasks": "Tasks",
+    "createTask": "Create Task",
+    "selectAgent": "Select Agent",
+    "selectTask": "Select Task",
+    "taskTarget": "Target (for ping)",
+    "taskTargetPlaceholder": "e.g. 8.8.8.8 or google.com",
+    "taskCreated": "Task created",
+    "hostInfo": "Host Info",
+    "services": "Services",
+    "ports": "Ports",
+    "noHosts": "No hosts in this environment",
+    "noTasks": "No tasks yet",
+    "hostname": "Hostname",
+    "osVersion": "OS Version",
+    "kernel": "Kernel",
+    "cpuModel": "CPU",
+    "cpuCores": "Cores",
+    "memoryTotal": "Memory",
+    "interfaces": "Interfaces",
+    "ipAddress": "IP Address",
+    "uptime": "Uptime"
   }
 }

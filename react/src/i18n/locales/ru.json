@@ -219,5 +219,30 @@
     "roleMember": "Участник",
     "envRoles": "Доступ к окружениям",
     "noAccess": "Нет доступа"
+  },
+  "env": {
+    "dashboard": "Дашборд",
+    "hosts": "Хосты",
+    "tasks": "Задачи",
+    "createTask": "Создать задачу",
+    "selectAgent": "Выберите агента",
+    "selectTask": "Выберите задачу",
+    "taskTarget": "Цель (для ping)",
+    "taskTargetPlaceholder": "например 8.8.8.8 или google.com",
+    "taskCreated": "Задача создана",
+    "hostInfo": "Информация о хосте",
+    "services": "Сервисы",
+    "ports": "Порты",
+    "noHosts": "В этом окружении нет хостов",
+    "noTasks": "Задач пока нет",
+    "hostname": "Имя хоста",
+    "osVersion": "Версия ОС",
+    "kernel": "Ядро",
+    "cpuModel": "Процессор",
+    "cpuCores": "Ядра",
+    "memoryTotal": "Память",
+    "interfaces": "Интерфейсы",
+    "ipAddress": "IP-адрес",
+    "uptime": "Время работы"
   }
 }

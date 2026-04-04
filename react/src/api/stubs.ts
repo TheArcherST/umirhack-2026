@@ -28,6 +28,10 @@ import {
     AssignEnvRolePayload,
     InstallScript,
     UserSearchResult, MemberRole, TaskStatus,
+    HostInfo,
+    ServiceInfo,
+    PortInfo,
+    CreateTaskPayloadV2,
 } from './types'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -472,4 +476,252 @@ export async function stubSearchUsers(query: string): Promise<UserSearchResult[]
     return KNOWN_USERS.filter(
         (u) => u.email.toLowerCase().includes(q) || u.name.toLowerCase().includes(q),
     )
+}
+
+// ─── Host Info, Services, Ports ──────────────────────────────────────────────
+
+const HOST_INFO_MAP: Record<string, HostInfo> = {
+    'ag-001': {
+        hostname: 'web-prod-01.internal',
+        os_name: 'Ubuntu',
+        os_version: '22.04.3 LTS (Jammy Jellyfish)',
+        kernel: '5.15.0-91-generic',
+        interfaces: [
+            { name: 'lo', mac: '00:00:00:00:00:00', ipv4: ['127.0.0.1'], ipv6: ['::1'] },
+            { name: 'eth0', mac: '02:42:ac:11:00:0a', ipv4: ['10.0.1.10'], ipv6: ['fe80::42:acff:fe11:a'] },
+        ],
+        ip_addresses: ['10.0.1.10', '127.0.0.1'],
+        uptime: '42 days, 18:06:12',
+        cpu_model: 'Intel(R) Xeon(R) Gold 6248R @ 3.00GHz',
+        cpu_cores: 8,
+        memory_total_mb: 16384,
+    },
+    'ag-002': {
+        hostname: 'web-prod-02.internal',
+        os_name: 'Ubuntu',
+        os_version: '22.04.3 LTS (Jammy Jellyfish)',
+        kernel: '5.15.0-91-generic',
+        interfaces: [
+            { name: 'lo', mac: '00:00:00:00:00:00', ipv4: ['127.0.0.1'], ipv6: ['::1'] },
+            { name: 'eth0', mac: '02:42:ac:11:00:0b', ipv4: ['10.0.1.11'], ipv6: ['fe80::42:acff:fe11:b'] },
+        ],
+        ip_addresses: ['10.0.1.11', '127.0.0.1'],
+        uptime: '42 days, 18:05:44',
+        cpu_model: 'Intel(R) Xeon(R) Gold 6248R @ 3.00GHz',
+        cpu_cores: 8,
+        memory_total_mb: 16384,
+    },
+    'ag-003': {
+        hostname: 'db-master-01.internal',
+        os_name: 'Debian GNU/Linux',
+        os_version: '12 (bookworm)',
+        kernel: '6.1.0-17-amd64',
+        interfaces: [
+            { name: 'lo', mac: '00:00:00:00:00:00', ipv4: ['127.0.0.1'], ipv6: ['::1'] },
+            { name: 'eth0', mac: '02:42:ac:11:00:1a', ipv4: ['10.0.2.10'], ipv6: ['fe80::42:acff:fe11:1a'] },
+        ],
+        ip_addresses: ['10.0.2.10', '127.0.0.1'],
+        uptime: '90 days, 04:22:37',
+        cpu_model: 'AMD EPYC 7763 64-Core Processor',
+        cpu_cores: 16,
+        memory_total_mb: 65536,
+    },
+    'ag-004': {
+        hostname: 'db-replica-01.internal',
+        os_name: 'Debian GNU/Linux',
+        os_version: '12 (bookworm)',
+        kernel: '6.1.0-17-amd64',
+        interfaces: [
+            { name: 'lo', mac: '00:00:00:00:00:00', ipv4: ['127.0.0.1'], ipv6: ['::1'] },
+            { name: 'eth0', mac: '02:42:ac:11:00:1b', ipv4: ['10.0.2.11'], ipv6: ['fe80::42:acff:fe11:1b'] },
+        ],
+        ip_addresses: ['10.0.2.11', '127.0.0.1'],
+        uptime: '90 days, 04:20:11',
+        cpu_model: 'AMD EPYC 7763 64-Core Processor',
+        cpu_cores: 16,
+        memory_total_mb: 65536,
+    },
+    'ag-005': {
+        hostname: 'staging-web-01.internal',
+        os_name: 'AlmaLinux',
+        os_version: '9.3 (Shamrock Pampas Cat)',
+        kernel: '5.14.0-362.18.1.el9_3.x86_64',
+        interfaces: [
+            { name: 'lo', mac: '00:00:00:00:00:00', ipv4: ['127.0.0.1'], ipv6: ['::1'] },
+            { name: 'eth0', mac: '02:42:ac:11:01:0a', ipv4: ['10.1.1.10'], ipv6: ['fe80::42:acff:fe11:10a'] },
+        ],
+        ip_addresses: ['10.1.1.10', '127.0.0.1'],
+        uptime: '20 days, 11:42:05',
+        cpu_model: 'Intel(R) Xeon(R) Platinum 8375C @ 2.90GHz',
+        cpu_cores: 4,
+        memory_total_mb: 8192,
+    },
+    'ag-006': {
+        hostname: 'staging-worker-01.internal',
+        os_name: 'AlmaLinux',
+        os_version: '9.3 (Shamrock Pampas Cat)',
+        kernel: '5.14.0-362.18.1.el9_3.x86_64',
+        interfaces: [
+            { name: 'lo', mac: '00:00:00:00:00:00', ipv4: ['127.0.0.1'], ipv6: ['::1'] },
+            { name: 'eth0', mac: '02:42:ac:11:04:0a', ipv4: ['10.1.4.10'], ipv6: ['fe80::42:acff:fe11:40a'] },
+        ],
+        ip_addresses: ['10.1.4.10', '127.0.0.1'],
+        uptime: '60 days, 08:15:33',
+        cpu_model: 'Intel(R) Xeon(R) Platinum 8375C @ 2.90GHz',
+        cpu_cores: 4,
+        memory_total_mb: 8192,
+    },
+}
+
+const HOST_SERVICES_MAP: Record<string, { services: ServiceInfo[]; ports: PortInfo[] }> = {
+    'ag-001': {
+        services: [
+            { name: 'nginx', status: 'running', port: 80, known: true },
+            { name: 'sshd', status: 'running', port: 22, known: false },
+            { name: 'node-app', status: 'running', port: 3000, known: false },
+            { name: 'redis', status: 'running', port: 6379, known: false },
+        ],
+        ports: [
+            { port: 22, protocol: 'tcp', service: 'sshd', state: 'listening' },
+            { port: 80, protocol: 'tcp', service: 'nginx', state: 'listening' },
+            { port: 443, protocol: 'tcp', service: 'nginx', state: 'listening' },
+            { port: 3000, protocol: 'tcp', service: 'node', state: 'listening' },
+            { port: 6379, protocol: 'tcp', service: 'redis', state: 'listening' },
+        ],
+    },
+    'ag-002': {
+        services: [
+            { name: 'nginx', status: 'running', port: 80, known: true },
+            { name: 'sshd', status: 'running', port: 22, known: false },
+            { name: 'node-app', status: 'running', port: 3000, known: false },
+        ],
+        ports: [
+            { port: 22, protocol: 'tcp', service: 'sshd', state: 'listening' },
+            { port: 80, protocol: 'tcp', service: 'nginx', state: 'listening' },
+            { port: 443, protocol: 'tcp', service: 'nginx', state: 'listening' },
+            { port: 3000, protocol: 'tcp', service: 'node', state: 'listening' },
+        ],
+    },
+    'ag-003': {
+        services: [
+            { name: 'postgres', status: 'running', port: 5432, known: true },
+            { name: 'sshd', status: 'running', port: 22, known: false },
+            { name: 'prometheus', status: 'running', port: 9090, known: false },
+            { name: 'pgbouncer', status: 'running', port: 6432, known: false },
+        ],
+        ports: [
+            { port: 22, protocol: 'tcp', service: 'sshd', state: 'listening' },
+            { port: 5432, protocol: 'tcp', service: 'postgres', state: 'listening' },
+            { port: 6432, protocol: 'tcp', service: 'pgbouncer', state: 'listening' },
+            { port: 9090, protocol: 'tcp', service: 'prometheus', state: 'listening' },
+        ],
+    },
+    'ag-004': {
+        services: [
+            { name: 'postgres', status: 'running', port: 5432, known: true },
+            { name: 'sshd', status: 'running', port: 22, known: false },
+            { name: 'mongo', status: 'stopped', known: true },
+        ],
+        ports: [
+            { port: 22, protocol: 'tcp', service: 'sshd', state: 'listening' },
+            { port: 5432, protocol: 'tcp', service: 'postgres', state: 'listening' },
+        ],
+    },
+    'ag-005': {
+        services: [
+            { name: 'nginx', status: 'running', port: 80, known: true },
+            { name: 'sshd', status: 'running', port: 22, known: false },
+            { name: 'node-app', status: 'running', port: 3000, known: false },
+            { name: 'mongo', status: 'stopped', known: true },
+        ],
+        ports: [
+            { port: 22, protocol: 'tcp', service: 'sshd', state: 'listening' },
+            { port: 80, protocol: 'tcp', service: 'nginx', state: 'listening' },
+            { port: 3000, protocol: 'tcp', service: 'node', state: 'listening' },
+        ],
+    },
+    'ag-006': {
+        services: [
+            { name: 'sshd', status: 'running', port: 22, known: false },
+            { name: 'redis', status: 'running', port: 6379, known: false },
+            { name: 'celery-worker', status: 'running', known: false },
+        ],
+        ports: [
+            { port: 22, protocol: 'tcp', service: 'sshd', state: 'listening' },
+            { port: 6379, protocol: 'tcp', service: 'redis', state: 'listening' },
+        ],
+    },
+}
+
+export async function stubGetHostInfo(hostId: string): Promise<HostInfo | null> {
+    await delay(200)
+    return HOST_INFO_MAP[hostId] ?? null
+}
+
+export async function stubGetHostServices(hostId: string): Promise<{ services: ServiceInfo[]; ports: PortInfo[] }> {
+    await delay(200)
+    return HOST_SERVICES_MAP[hostId] ?? { services: [], ports: [] }
+}
+
+export async function stubGetHostPorts(hostId: string): Promise<PortInfo[]> {
+    await delay(200)
+    return HOST_SERVICES_MAP[hostId]?.ports ?? []
+}
+
+// ─── Task Creation V2 (template-based) ───────────────────────────────────────
+
+const TEMPLATE_COMMANDS: Record<string, string> = {
+    ping: 'ping -c 4 {target}',
+    system_info: 'uname -a && cat /etc/os-release 2>/dev/null',
+    network_interfaces: 'ip addr show',
+    port_scan: 'ss -tulpn | grep LISTEN',
+    disk_usage: 'df -h',
+    memory_cpu: 'free -m && uptime',
+    service_status: 'systemctl status nginx postgresql mongod --no-pager 2>/dev/null || echo "services not found"',
+    system_logs: 'journalctl -n 50 --no-pager',
+}
+
+export async function stubCreateTaskV2(payload: CreateTaskPayloadV2): Promise<Task> {
+    await delay(400)
+    const agent = AGENTS.find((a) => a.id === payload.agent_id)
+    if (!agent) throw new Error('Agent not found')
+
+    let command = TEMPLATE_COMMANDS[payload.template] ?? payload.template
+    if (payload.template === 'ping' && payload.target) {
+        command = command.replace('{target}', payload.target)
+    }
+
+    const newTask: Task = {
+        id: `task-${payload.agent_id}-${Date.now()}`,
+        agent_id: payload.agent_id,
+        agent_name: agent.name,
+        command,
+        status: 'pending',
+        timeout: 30,
+        duration: null,
+        started_at: null,
+        completed_at: null,
+        created_at: new Date().toISOString(),
+    }
+    _tasks = [newTask, ..._tasks]
+
+    // Simulate task execution
+    setTimeout(() => {
+        const idx = _tasks.findIndex((t) => t.id === newTask.id)
+        if (idx !== -1) _tasks[idx] = { ..._tasks[idx], status: 'running', started_at: new Date().toISOString() }
+    }, 800)
+    setTimeout(() => {
+        const idx = _tasks.findIndex((t) => t.id === newTask.id)
+        if (idx !== -1) {
+            const dur = 1.2 + Math.random() * 4
+            _tasks[idx] = {
+                ..._tasks[idx],
+                status: 'success',
+                duration: Math.round(dur * 10) / 10,
+                completed_at: new Date().toISOString(),
+            }
+        }
+    }, 2500)
+
+    return newTask
 }

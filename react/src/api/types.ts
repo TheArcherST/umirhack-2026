@@ -2,9 +2,37 @@
 
 export type AgentStatus = 'online' | 'offline'
 export type TaskStatus = 'pending' | 'running' | 'success' | 'failed' | 'timeout'
-export type MemberRole = 'none' | 'owner' | 'admin' | 'operator' | 'observer'
-export type EnvRole = 'none' | 'admin' | 'operator' | 'observer'
+export type MemberRole = 'owner' | 'admin' | 'operator' | 'observer'
+export type EnvRole = 'operator' | 'observer'
 export type AgentOS = 'linux' | 'windows' | 'macos'
+
+// ─── Task Templates ─────────────────────────────────────────────────────────
+
+export type TaskTemplate = 'ping' | 'system_info' | 'network_interfaces' | 'port_scan' | 'disk_usage' | 'memory_cpu' | 'service_status' | 'system_logs'
+
+export interface TaskTemplateOption {
+    id: TaskTemplate
+    label: string
+    description: string
+    requiresTarget?: boolean  // true if user needs to select a target (e.g. ping)
+}
+
+export const TASK_TEMPLATES: TaskTemplateOption[] = [
+    { id: 'ping', label: 'Ping', description: 'Ping a host or domain', requiresTarget: true },
+    { id: 'system_info', label: 'System Info', description: 'OS version, hostname, interfaces' },
+    { id: 'network_interfaces', label: 'Network Interfaces', description: 'IP addresses, routes, interfaces' },
+    { id: 'port_scan', label: 'Port Scan', description: 'List listening ports and services' },
+    { id: 'disk_usage', label: 'Disk Usage', description: 'Disk space and partitions' },
+    { id: 'memory_cpu', label: 'Memory & CPU', description: 'RAM, CPU load, uptime' },
+    { id: 'service_status', label: 'Service Status', description: 'Running services (nginx, postgres, etc.)' },
+    { id: 'system_logs', label: 'System Logs', description: 'Recent system logs (journalctl)' },
+]
+
+export interface CreateTaskPayloadV2 {
+    agent_id: string
+    template: TaskTemplate
+    target?: string  // For ping: domain/IP or host
+}
 
 export interface Project {
     id: string
@@ -34,7 +62,7 @@ export interface ProjectMember {
 export interface EnvMemberAssignment {
     user_id: string
     env_id: string
-    role: EnvRole
+    role: EnvRole | 'admin'  // 'admin' for auto-assigned creator
 }
 
 export interface Agent {
@@ -48,6 +76,33 @@ export interface Agent {
     tasks_count: number
     environment_ids: string[]
     created_at: string
+}
+
+export interface HostInfo {
+    hostname: string
+    os_name: string
+    os_version: string
+    kernel: string
+    interfaces: { name: string; mac: string; ipv4: string[]; ipv6: string[] }[]
+    ip_addresses: string[]
+    uptime: string
+    cpu_model: string
+    cpu_cores: number
+    memory_total_mb: number
+}
+
+export interface ServiceInfo {
+    name: string
+    status: 'running' | 'stopped'
+    port?: number
+    known: boolean  // true for known services like nginx, postgres, mongo
+}
+
+export interface PortInfo {
+    port: number
+    protocol: 'tcp' | 'udp'
+    service?: string
+    state: 'listening' | 'established'
 }
 
 export interface Task {
