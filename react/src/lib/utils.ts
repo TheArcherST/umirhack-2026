@@ -37,15 +37,6 @@ export function timeAgo(dateStr: string): string {
 }
 
 export async function copyText(text: string): Promise<boolean> {
-    try {
-        if (navigator.clipboard?.writeText) {
-            await navigator.clipboard.writeText(text)
-            return true
-        }
-    } catch {
-        // Fall back to execCommand below for browsers that block Clipboard API.
-    }
-
     const textarea = document.createElement('textarea')
     textarea.value = text
     textarea.setAttribute('readonly', '')
@@ -60,8 +51,23 @@ export async function copyText(text: string): Promise<boolean> {
     textarea.setSelectionRange(0, textarea.value.length)
 
     try {
-        return document.execCommand('copy')
+        if (document.execCommand('copy')) {
+            return true
+        }
+    } catch {
+        // Fall through to Clipboard API for browsers that reject execCommand.
     } finally {
         document.body.removeChild(textarea)
     }
+
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text)
+            return true
+        }
+    } catch {
+        // Ignore and return false below.
+    }
+
+    return false
 }
