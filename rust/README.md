@@ -41,7 +41,7 @@ Build them from the repository root with:
 
 That script uses `cargo zigbuild` for Linux targets, a MinGW-backed Rust target for Windows, and native `cargo` builds for macOS when run on a Darwin host with the Apple Rust targets installed.
 
-For CI/CD and Linux deployment hosts without a Rust toolchain, use:
+For Linux deployment hosts without a Rust toolchain, use:
 
 ```bash
 make artifacts args="--clean --container-only"

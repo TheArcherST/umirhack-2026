@@ -16,7 +16,8 @@ run_deploy() {
     git fetch origin
     git checkout --detach "$REVISION"
 
-    make artifacts
+    # make artifacts
+    # Note: compile now only manually because it takes time...
     make up
 }
 
