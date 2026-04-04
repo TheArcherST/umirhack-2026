@@ -9,12 +9,14 @@ from sqlalchemy.orm import Session
 
 from hack_backend.core.models import (
     Agent,
+    AgentBootstrapToken,
     AgentStatus,
     InviteStatus,
     ProjectMember,
     ProjectMemberRole,
 )
 from hack_backend.core.providers import ConfigHack
+from hack_backend.core.security import hash_secret
 
 
 def _template_id_for_kind(templates: list[dict[str, Any]], kind: str) -> str:
@@ -103,6 +105,22 @@ def _grant_project_membership(
             else:
                 membership.role = role
                 membership.invite_status = InviteStatus.ACCEPTED
+            session.commit()
+    finally:
+        engine.dispose()
+
+
+def _expire_bootstrap_token(raw_token: str) -> None:
+    config = ConfigHack()
+    engine = create_engine(
+        config.postgres.get_sqlalchemy_url("psycopg", is_test_database=True)
+    )
+    try:
+        with Session(engine) as session:
+            bootstrap = session.query(AgentBootstrapToken).filter(
+                AgentBootstrapToken.token_hash == hash_secret(raw_token)
+            ).one()
+            bootstrap.expires_at = datetime(2026, 4, 4, 12, 0, tzinfo=UTC)
             session.commit()
     finally:
         engine.dispose()
@@ -968,3 +986,116 @@ def test_non_admin_cannot_update_agent_concurrency_limit(api) -> None:
     )
     assert update_response.status_code == 403, update_response.text
     assert update_response.json()["detail"] == "Project admin access required"
+
+
+def test_expired_install_link_returns_explicit_message_and_cannot_register(api) -> None:
+    owner = api.register_user(prefix="owner")
+    bundle = api.create_project_bundle(
+        user=owner,
+        project_name="Expired Install",
+    )
+    created_agent = api.create_agent(
+        user=owner,
+        project_id=bundle.project["id"],
+        environment_id=bundle.environment["id"],
+        name="expiring-agent",
+    )
+    install_script = api.get_install_script(
+        user=owner,
+        agent_id=created_agent["id"],
+    )
+    bootstrap_token = install_script["script_url"].rstrip("/").split("/")[-1]
+    _expire_bootstrap_token(bootstrap_token)
+
+    expired_response = api.client.get(
+        install_script["script_url"],
+    )
+    assert expired_response.status_code == 200, expired_response.text
+    assert "expired" in expired_response.text.lower()
+    assert "generate a new agent install script" in expired_response.text.lower()
+
+    register_response = api.client.post(
+        "/agent/register",
+        json={
+            "bootstrap_token": bootstrap_token,
+            "agent_version": "0.1.0",
+            "declared_os": "linux",
+            "capabilities_json": {
+                "task_kinds": [
+                    "host.system_profile",
+                    "host.ip_interfaces",
+                    "network.endpoint_connectivity",
+                ]
+            },
+        },
+    )
+    assert register_response.status_code == 401, register_response.text
+    assert register_response.json()["detail"] == "Bootstrap token expired"
+
+
+def test_schedule_rule_can_be_updated_and_deleted(api) -> None:
+    owner = api.register_user(prefix="owner")
+    bundle = api.create_project_bundle(
+        user=owner,
+        project_name="Schedules",
+    )
+    created_agent = api.create_agent(
+        user=owner,
+        project_id=bundle.project["id"],
+        environment_id=bundle.environment["id"],
+        name="scheduled-agent",
+    )
+    hosts_response = api.client.get(
+        f"/environments/{bundle.environment['id']}/hosts",
+        headers=owner.headers,
+    )
+    assert hosts_response.status_code == 200, hosts_response.text
+    host_id = hosts_response.json()[0]["id"]
+
+    connectivity_template_id = _template_id_for_kind(
+        bundle.templates,
+        "network.endpoint_connectivity",
+    )
+    create_rule = api.client.post(
+        "/schedule-rules",
+        json={
+            "environment_id": bundle.environment["id"],
+            "task_template_id": connectivity_template_id,
+            "cron_expr": "*/15 * * * *",
+            "target_endpoint": "alpha.internal",
+            "host_ids": [host_id],
+        },
+        headers=owner.headers,
+    )
+    assert create_rule.status_code == 201, create_rule.text
+    rule = create_rule.json()
+
+    patch_rule = api.client.patch(
+        f"/schedule-rules/{rule['id']}",
+        json={
+            "cron_expr": "0 * * * *",
+            "is_enabled": False,
+            "target_endpoint": "beta.internal",
+            "host_ids": [],
+        },
+        headers=owner.headers,
+    )
+    assert patch_rule.status_code == 200, patch_rule.text
+    patched = patch_rule.json()
+    assert patched["cron_expr"] == "0 * * * *"
+    assert patched["is_enabled"] is False
+    assert patched["target_selector_json"]["target_endpoint"] == "beta.internal"
+    assert "host_ids" not in patched["target_selector_json"]
+
+    delete_rule = api.client.delete(
+        f"/schedule-rules/{rule['id']}",
+        headers=owner.headers,
+    )
+    assert delete_rule.status_code == 204, delete_rule.text
+
+    list_rules = api.client.get(
+        f"/environments/{bundle.environment['id']}/schedule-rules",
+        headers=owner.headers,
+    )
+    assert list_rules.status_code == 200, list_rules.text
+    assert list_rules.json() == []

@@ -109,6 +109,25 @@ def render_install_script(
     )
 
 
+def render_install_error_script(
+    *,
+    platform: InstallPlatform,
+    message: str,
+) -> str:
+    if platform == "windows":
+        return (
+            "$ErrorActionPreference = \"Stop\"\n"
+            f"Write-Error {_powershell_quote(message)}\n"
+            "exit 1\n"
+        )
+    return (
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        f"echo {_shell_quote(message)} >&2\n"
+        "exit 1\n"
+    )
+
+
 def _render_linux_install_script(
     *,
     api_url: str,
@@ -214,6 +233,7 @@ download_file "$ARTIFACT_ROOT_URL/$arch/hack-agent" "$tmp_binary"
 install -d "$INSTALL_DIR" "$STATE_DIR"
 install -m 0755 "$tmp_binary" "$BINARY_PATH"
 rm -f "$tmp_binary"
+rm -f "$STATE_PATH"
 
 cat > "$ENV_FILE" <<EOF
 HACK_AGENT_API_URL=$API_URL
@@ -244,6 +264,7 @@ EOF
 
 systemctl daemon-reload
 systemctl enable --now "$SERVICE_NAME"
+systemctl restart "$SERVICE_NAME"
 echo "Installed $SERVICE_NAME and started the Rust agent."
 """
 
@@ -307,12 +328,14 @@ switch ($archValue) {{
 }}
 
 Confirm-ReplaceIfNeeded
+Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue | Out-Null
 
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
 
 $downloadUrl = "$artifactRootUrl/$arch/hack-agent.exe"
 Invoke-WebRequest -UseBasicParsing -Uri $downloadUrl -OutFile $binaryPath
+Remove-Item -Path (Join-Path $stateDir "state.json") -ErrorAction SilentlyContinue
 
 $runner = @"
 $env:HACK_AGENT_API_URL = '$apiUrl'
@@ -436,6 +459,7 @@ download_file "$ARTIFACT_ROOT_URL/$arch/hack-agent" "$tmp_binary"
 install -d "$INSTALL_DIR" "$LIBEXEC_DIR" "$STATE_DIR"
 install -m 0755 "$tmp_binary" "$BINARY_PATH"
 rm -f "$tmp_binary"
+rm -f "$STATE_PATH"
 
 cat > "$RUNNER_PATH" <<EOF
 #!/bin/sh

@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from hack_backend.core.providers import ConfigHack
 from hack_backend.core.models import Agent, AgentBootstrapToken
+from hack_backend.core.platform_ops import ensure_utc, utcnow
 from hack_backend.core.security import hash_secret
 from hack_backend.core.services.access import AccessService
 from hack_backend.core.services.platform_service import PlatformService
@@ -20,6 +21,7 @@ from hack_backend.rest_server.agent_install import (
     normalize_install_platform,
     parse_install_platform,
     render_install_script,
+    render_install_error_script,
     script_kind_for_platform,
 )
 from hack_backend.rest_server.providers import AuthorizedUser
@@ -27,6 +29,9 @@ from hack_backend.rest_server.schemas.platform import AgentDTO, InstallScriptDTO
 from hack_backend.rest_server.serializers import agent_to_dto, task_run_to_dto
 
 router = APIRouter(tags=["agents"])
+EXPIRED_INSTALL_LINK_MESSAGE = (
+    "This install link has expired. Generate a new agent install script and run it again."
+)
 
 
 def _public_agent_url(url: str, *, config: ConfigHack) -> str:
@@ -235,16 +240,35 @@ async def get_agent_install_script_payload(
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     token_hash = hash_secret(bootstrap_token)
-    agent = await platform_service.session.scalar(
-        select(Agent)
-        .join(AgentBootstrapToken, AgentBootstrapToken.agent_id == Agent.id)
-        .where(
+    bootstrap = await platform_service.session.scalar(
+        select(AgentBootstrapToken).where(
             AgentBootstrapToken.token_hash == token_hash,
-            AgentBootstrapToken.revoked_at.is_(None),
         )
     )
+    if (
+        bootstrap is None
+        or bootstrap.revoked_at is not None
+        or (
+            bootstrap.expires_at is not None
+            and ensure_utc(bootstrap.expires_at) <= utcnow()
+        )
+    ):
+        return PlainTextResponse(
+            render_install_error_script(
+                platform=normalized_platform,
+                message=EXPIRED_INSTALL_LINK_MESSAGE,
+            ),
+            media_type="text/plain; charset=utf-8",
+        )
+    agent = await platform_service.session.get(Agent, bootstrap.agent_id)
     if agent is None:
-        raise HTTPException(status_code=404, detail="Install script token not found")
+        return PlainTextResponse(
+            render_install_error_script(
+                platform=normalized_platform,
+                message=EXPIRED_INSTALL_LINK_MESSAGE,
+            ),
+            media_type="text/plain; charset=utf-8",
+        )
     target_version = platform_service.agent_versioning_service.normalize_agent_version(agent)
     platform_service.agent_versioning_service.ensure_artifact_version_available(
         target_version

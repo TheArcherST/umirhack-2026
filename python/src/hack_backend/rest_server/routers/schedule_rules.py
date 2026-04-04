@@ -28,6 +28,9 @@ class CreateScheduleRulePayload(BaseModel):
 class PatchScheduleRulePayload(BaseModel):
     is_enabled: bool | None = None
     cron_expr: str | None = None
+    host_ids: list[str] | None = None
+    approved_command: str | None = None
+    target_endpoint: str | None = None
 
 
 @router.get(
@@ -86,21 +89,41 @@ async def patch_schedule_rule(
     schedule_rule_id: str,
     payload: PatchScheduleRulePayload,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
     uow_ctl: FromDishka[UoWCtl],
 ) -> ScheduleRuleDTO:
     rule = await platform_service.get_schedule_rule(schedule_rule_id)
     if rule is None:
         raise HTTPException(status_code=404, detail="Schedule rule not found")
-    await require_environment_member(
+    await access_service.require_environment_member(
         rule.environment_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
+    target_selector_json = dict(rule.target_selector_json or {})
+    selector_fields = {"host_ids", "approved_command", "target_endpoint"}
+    replace_target_selector = bool(payload.model_fields_set & selector_fields)
+    if "host_ids" in payload.model_fields_set:
+        if payload.host_ids:
+            target_selector_json["host_ids"] = payload.host_ids
+        else:
+            target_selector_json.pop("host_ids", None)
+    if "approved_command" in payload.model_fields_set:
+        if payload.approved_command and payload.approved_command.strip():
+            target_selector_json["approved_command"] = payload.approved_command.strip()
+        else:
+            target_selector_json.pop("approved_command", None)
+    if "target_endpoint" in payload.model_fields_set:
+        if payload.target_endpoint and payload.target_endpoint.strip():
+            target_selector_json["target_endpoint"] = payload.target_endpoint.strip()
+        else:
+            target_selector_json.pop("target_endpoint", None)
     rule = await platform_service.patch_schedule_rule(
         schedule_rule_id,
         is_enabled=payload.is_enabled,
         cron_expr=payload.cron_expr,
+        target_selector_json=target_selector_json,
+        replace_target_selector=replace_target_selector,
     )
     await uow_ctl.commit()
     return schedule_rule_to_dto(rule, rule.task_template)
@@ -111,15 +134,15 @@ async def patch_schedule_rule(
 async def delete_schedule_rule(
     schedule_rule_id: str,
     current_user: FromDishka[AuthorizedUser],
+    access_service: FromDishka[AccessService],
     platform_service: FromDishka[PlatformService],
     uow_ctl: FromDishka[UoWCtl],
 ) -> None:
     rule = await platform_service.get_schedule_rule(schedule_rule_id)
     if rule is None:
         raise HTTPException(status_code=404, detail="Schedule rule not found")
-    await require_environment_member(
+    await access_service.require_environment_member(
         rule.environment_id,
-        session=platform_service.session,
         user_id=current_user.id,
     )
     await platform_service.delete_schedule_rule(schedule_rule_id)

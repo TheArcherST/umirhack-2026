@@ -37,6 +37,7 @@ BOOTSTRAP_TEMPLATE_KINDS = {
     "host.ip_interfaces",
     "diagnostic.command.service_status",
 }
+BOOTSTRAP_TOKEN_TTL = timedelta(minutes=10)
 
 BUILTIN_TEMPLATES: tuple[dict[str, Any], ...] = (
     {
@@ -254,6 +255,7 @@ async def issue_bootstrap_token(
     bootstrap_token = AgentBootstrapToken(
         agent_id=agent_id,
         token_hash=hash_secret(raw_token),
+        expires_at=utcnow() + BOOTSTRAP_TOKEN_TTL,
     )
     session.add(bootstrap_token)
     await session.flush()
