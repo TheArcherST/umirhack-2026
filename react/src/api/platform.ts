@@ -138,6 +138,15 @@ type TaskTemplateApi = {
 
 const CURRENT_PROJECT_KEY = 'currentProjectId'
 
+type StructuredServiceTelemetry = {
+    services?: Array<{
+        name?: unknown
+        status?: unknown
+        active_state?: unknown
+        sub_state?: unknown
+    }>
+}
+
 function currentProjectId(): string | null {
     return localStorage.getItem(CURRENT_PROJECT_KEY)
 }
@@ -153,6 +162,70 @@ function mapTaskStatus(status: string): Task['status'] {
 function secondsBetween(startedAt: string | null, finishedAt: string | null): number | null {
     if (!startedAt || !finishedAt) return null
     return Math.max(0, (new Date(finishedAt).getTime() - new Date(startedAt).getTime()) / 1000)
+}
+
+function extractPortFromEndpoint(value: unknown): number | undefined {
+    const raw = String(value ?? '')
+    const match = raw.match(/:(\d+)(?:\/)?$/)
+    if (!match) return undefined
+    const port = Number(match[1])
+    return Number.isFinite(port) ? port : undefined
+}
+
+function normalizeServiceStatus(entry: {
+    status?: unknown
+    active_state?: unknown
+    sub_state?: unknown
+}): ServiceInfo['status'] {
+    const status = String(entry.status ?? '').toLowerCase()
+    const activeState = String(entry.active_state ?? '').toLowerCase()
+    const subState = String(entry.sub_state ?? '').toLowerCase()
+    if (
+        status === 'running' ||
+        activeState === 'active' ||
+        subState === 'running' ||
+        subState === 'listening' ||
+        subState === 'start_pending'
+    ) {
+        return 'running'
+    }
+    return 'stopped'
+}
+
+function mapConnectivityServices(connectivity: TelemetryApi[]): ServiceInfo[] {
+    return connectivity.map((item) => ({
+        name: String(item.payload_json.target_endpoint ?? 'endpoint'),
+        status: item.payload_json.success ? 'running' : 'stopped',
+        port: extractPortFromEndpoint(item.payload_json.target_endpoint) ?? 443,
+        known: true,
+    }))
+}
+
+function mapConnectivityPorts(connectivity: TelemetryApi[]): PortInfo[] {
+    return connectivity.map((item) => ({
+        port: extractPortFromEndpoint(item.payload_json.target_endpoint) ?? 443,
+        protocol: 'tcp',
+        service: 'https',
+        state: item.payload_json.success ? 'listening' : 'established',
+    }))
+}
+
+function mapStructuredServices(
+    payload: StructuredServiceTelemetry | undefined,
+): ServiceInfo[] {
+    if (!Array.isArray(payload?.services)) return []
+
+    const byName = new Map<string, ServiceInfo>()
+    for (const entry of payload.services) {
+        const name = String(entry?.name ?? '').trim()
+        if (!name) continue
+        byName.set(name, {
+            name,
+            status: normalizeServiceStatus(entry ?? {}),
+            known: false,
+        })
+    }
+    return Array.from(byName.values()).sort((left, right) => left.name.localeCompare(right.name))
 }
 
 function kindToTemplate(kind: string): TaskTemplate {
@@ -192,7 +265,7 @@ function mapAgent(row: AgentApi): Agent {
         hostname: null,
         ip_address: '',
         os: normalizeAgentOs(row.declared_os ?? row.agent_version ?? ''),
-        status: row.status === 'stale' ? 'offline' : (row.status as Agent['status']),
+        status: row.status as Agent['status'],
         last_heartbeat: row.last_seen_at,
         tasks_count: 0,
         environment_ids: row.environments.map((env) => env.id),
@@ -217,7 +290,7 @@ function mapHost(row: HostApi): Host {
         name: row.name,
         hostname: row.hostname,
         os_name: row.os_name,
-        status: row.status === 'stale' ? 'offline' : row.status,
+        status: row.status as Host['status'],
         primary_ipv4: row.primary_ipv4,
         primary_ipv6: row.primary_ipv6,
         last_seen_at: row.last_seen_at,
@@ -417,9 +490,7 @@ export async function stubGetHost(hostId: string): Promise<Host | null> {
         name: detail.data.name,
         hostname: detail.data.hostname,
         os_name: detail.data.os_name,
-        status: hostRow
-            ? (hostRow.status === 'stale' ? 'offline' : hostRow.status)
-            : 'offline',
+        status: hostRow ? (hostRow.status as Host['status']) : 'offline',
         primary_ipv4: detail.data.primary_ipv4,
         primary_ipv6: detail.data.primary_ipv6,
         last_seen_at: hostRow?.last_seen_at ?? null,
@@ -468,18 +539,15 @@ export async function stubGetHostInfo(hostId: string): Promise<HostInfo | null> 
 export async function stubGetHostServices(hostId: string): Promise<{ services: ServiceInfo[]; ports: PortInfo[] }> {
     const telemetry = await apiClient.get<TelemetryApi[]>(`/hosts/${hostId}/telemetry`)
     const connectivity = telemetry.data.filter((item) => item.kind === 'network.endpoint_connectivity')
-    const services: ServiceInfo[] = connectivity.map((item) => ({
-        name: String(item.payload_json.target_endpoint ?? 'endpoint'),
-        status: item.payload_json.success ? 'running' : 'stopped',
-        port: Number(String(item.payload_json.target_endpoint ?? '').split(':').pop()) || 443,
-        known: true,
-    }))
-    const ports: PortInfo[] = connectivity.map((item) => ({
-        port: Number(String(item.payload_json.target_endpoint ?? '').split(':').pop()) || 443,
-        protocol: 'tcp',
-        service: 'https',
-        state: item.payload_json.success ? 'listening' : 'established',
-    }))
+    const latestServiceStatus = telemetry.data.find((item) => item.kind === 'diagnostic.command.service_status')
+    const structuredServices = mapStructuredServices(latestServiceStatus?.payload_json as StructuredServiceTelemetry | undefined)
+    const hasStructuredServices = Array.isArray(
+        (latestServiceStatus?.payload_json as StructuredServiceTelemetry | undefined)?.services,
+    )
+    const services = hasStructuredServices
+        ? structuredServices
+        : mapConnectivityServices(connectivity)
+    const ports = mapConnectivityPorts(connectivity)
     return { services, ports }
 }
 

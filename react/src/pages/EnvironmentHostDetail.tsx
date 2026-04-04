@@ -5,6 +5,7 @@ import { ChevronLeft, Cpu, Network, Server } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { stubGetHost, stubGetHostInfo, stubGetHostServices, stubGetRecentTasks } from '@/api/stubs'
 import { formatDate, formatDuration, cn } from '@/lib/utils'
+import { agentStatusLabelKey, agentStatusTextTone, agentStatusTone } from '@/lib/agentStatus'
 import { TaskLogModal } from '@/components/TaskLogModal'
 import type { Task } from '@/api/types'
 import { useI18n } from '@/i18n'
@@ -83,13 +84,13 @@ export default function EnvironmentHostDetail() {
             <div className="flex items-center gap-1.5">
               <span className={cn(
                 'w-1.5 h-1.5 rounded-full',
-                host.status === 'online' ? 'bg-green-400 status-pulse' : 'bg-muted-foreground/40',
+                agentStatusTone(host.status),
               )} />
               <span className={cn(
                 'text-xs font-mono',
-                host.status === 'online' ? 'text-green-400' : 'text-muted-foreground',
+                agentStatusTextTone(host.status),
               )}>
-                {host.status === 'online' ? t('common.online') : t('common.offline')}
+                {t(agentStatusLabelKey(host.status))}
               </span>
             </div>
           )}

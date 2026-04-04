@@ -107,6 +107,7 @@ def test_project_creation_bootstraps_main_environment_and_templates(api) -> None
         "host.system_profile",
         "host.ip_interfaces",
         "network.endpoint_connectivity",
+        "agent.self_update",
         "diagnostic.command.custom",
         "diagnostic.command.port_scan",
         "diagnostic.command.disk_usage",

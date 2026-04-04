@@ -7,6 +7,7 @@ import { stubGetHosts } from '@/api/stubs'
 import { timeAgo } from '@/lib/utils'
 import type { AgentStatus } from '@/api/types'
 import { cn } from '@/lib/utils'
+import { agentStatusLabelKey, agentStatusTextTone, agentStatusTone } from '@/lib/agentStatus'
 import { useI18n } from '@/i18n'
 
 type Filter = '' | AgentStatus
@@ -28,11 +29,13 @@ export default function EnvironmentHosts() {
   })
 
   const online = hosts.filter((host) => host.status === 'online').length
-  const offline = hosts.length - online
+  const stale = hosts.filter((host) => host.status === 'stale').length
+  const offline = hosts.filter((host) => host.status === 'offline').length
 
   const filters: [Filter, string, string?, string?][] = [
     ['', t('common.all')],
     ['online', t('common.online'), 'text-green-400', String(online)],
+    ['stale', t('common.stale'), 'text-amber-400', String(stale)],
     ['offline', t('common.offline'), 'text-muted-foreground/60', String(offline)],
   ]
 
@@ -93,9 +96,9 @@ export default function EnvironmentHosts() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
-                        <span className={cn('w-1.5 h-1.5 rounded-full', host.status === 'online' ? 'bg-green-400 status-pulse' : 'bg-muted-foreground/40')} />
-                        <span className={cn('text-xs font-mono', host.status === 'online' ? 'text-green-400' : 'text-muted-foreground')}>
-                          {host.status === 'online' ? t('common.online') : t('common.offline')}
+                        <span className={cn('w-1.5 h-1.5 rounded-full', agentStatusTone(host.status))} />
+                        <span className={cn('text-xs font-mono', agentStatusTextTone(host.status))}>
+                          {t(agentStatusLabelKey(host.status))}
                         </span>
                       </div>
                     </td>

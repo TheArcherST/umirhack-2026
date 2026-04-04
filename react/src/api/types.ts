@@ -1,4 +1,4 @@
-export type AgentStatus = 'online' | 'offline'
+export type AgentStatus = 'online' | 'stale' | 'offline'
 export type TaskStatus = 'pending' | 'running' | 'success' | 'failed' | 'timeout'
 export type MemberRole = 'owner' | 'admin' | 'member' | 'operator' | 'observer'
 export type EnvRole = 'operator' | 'observer'

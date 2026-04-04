@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { agentStatusTone } from '@/lib/agentStatus'
 import { cn } from '@/lib/utils'
 
 interface AgentOption {
@@ -62,7 +63,7 @@ export function MultiAgentSelect({ agents, value, onChange, placeholder }: Props
               <span className="truncate">{agent.name}</span>
               <span className={cn(
                 'w-1.5 h-1.5 rounded-full ml-auto shrink-0',
-                agent.status === 'online' ? 'bg-green-400' : 'bg-muted-foreground/40',
+                agentStatusTone(agent.status as 'online' | 'stale' | 'offline'),
               )} />
             </button>
           )

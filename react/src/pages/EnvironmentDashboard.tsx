@@ -9,6 +9,7 @@ import {
   stubGetHosts,
   stubGetTasks,
 } from '@/api/stubs'
+import { agentStatusTone } from '@/lib/agentStatus'
 import { formatDate, formatDuration } from '@/lib/utils'
 import type { Task } from '@/api/types'
 import { useI18n } from '@/i18n'
@@ -75,7 +76,9 @@ export default function EnvironmentDashboard() {
   })
 
   const online = hosts.filter((host) => host.status === 'online').length
-  const offline = hosts.length - online
+  const stale = hosts.filter((host) => host.status === 'stale').length
+  const offline = hosts.filter((host) => host.status === 'offline').length
+  const nonOnline = stale + offline
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -91,7 +94,7 @@ export default function EnvironmentDashboard() {
           {/* Stats */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <StatCard icon={Server} label={t('dashboard.totalAgents')} value={hosts.length} />
-            <StatCard icon={Activity} label={t('dashboard.onlineNow')} value={online} sub={offline > 0 ? `${offline} offline` : undefined} />
+            <StatCard icon={Activity} label={t('dashboard.onlineNow')} value={online} sub={nonOnline > 0 ? `${nonOnline} ${t('common.offline').toLowerCase()}` : undefined} />
             <StatCard icon={CheckCircle2} label={t('dashboard.successful')} value={envTasks.filter((t) => t.status === 'success').length} />
             <StatCard icon={XCircle} label={t('dashboard.failedTasks')} value={envTasks.filter((t) => t.status === 'failed').length} />
           </div>
@@ -164,7 +167,7 @@ export default function EnvironmentDashboard() {
                     <p className="text-sm font-mono font-medium">{host.name}</p>
                     <span className={cn(
                       'w-2 h-2 rounded-full',
-                      host.status === 'online' ? 'bg-green-400 status-pulse' : 'bg-muted-foreground/40',
+                      agentStatusTone(host.status),
                     )} />
                   </div>
                   <p className="text-xs text-muted-foreground font-mono">{host.primary_ipv4 ?? host.primary_ipv6 ?? '—'}</p>

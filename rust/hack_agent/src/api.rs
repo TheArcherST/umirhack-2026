@@ -12,6 +12,7 @@ use crate::models::{
 use crate::state::AgentState;
 use crate::tasks::declared_os;
 
+#[derive(Clone)]
 pub struct AgentApi {
     client: reqwest::Client,
     config: Config,

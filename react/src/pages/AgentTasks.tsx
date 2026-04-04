@@ -11,6 +11,7 @@ import {TaskLogModal} from '@/components/TaskLogModal'
 import {NewTaskModal} from '@/components/NewTaskModal'
 import type {Task, TaskStatus} from '@/api/types'
 import {cn} from '@/lib/utils'
+import {agentStatusTextTone, agentStatusTone} from '@/lib/agentStatus'
 import {useI18n} from '@/i18n'
 
 type StatusFilter = '' | TaskStatus
@@ -84,11 +85,11 @@ export default function AgentTasks() {
                 <span
                     className={cn(
                         'w-1.5 h-1.5 rounded-full',
-                        agent.status === 'online' ? 'bg-green-400 status-pulse' : 'bg-muted-foreground/40',
+                        agentStatusTone(agent.status),
                     )}
                 />
                                 <span
-                                    className={cn('text-xs font-mono', agent.status === 'online' ? 'text-green-400' : 'text-muted-foreground')}>
+                                    className={cn('text-xs font-mono', agentStatusTextTone(agent.status))}>
                   {agent.ip_address}
                 </span>
                             </div>

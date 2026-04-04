@@ -64,6 +64,7 @@ def test_mock_agent_drives_bootstrap_and_projection_flow(api) -> None:
     assert {lease["task_template"]["kind"] for lease in bootstrap_leases} == {
         "host.system_profile",
         "host.ip_interfaces",
+        "diagnostic.command.service_status",
     }
 
     leases_by_kind = {

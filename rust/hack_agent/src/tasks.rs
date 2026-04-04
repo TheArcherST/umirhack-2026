@@ -1,10 +1,11 @@
 use std::collections::BTreeSet;
 use std::net::ToSocketAddrs;
-use std::process::Stdio;
-use std::time::Duration;
+use std::path::{Path, PathBuf};
+use std::process::{Command as StdCommand, Stdio};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, anyhow};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sysinfo::System;
 use tokio::net::TcpStream;
@@ -12,24 +13,64 @@ use tokio::process::Command;
 use tokio::time::{Instant, timeout};
 use url::Url;
 
+use crate::config::Config;
 use crate::models::{AgentTaskLease, CompletePayload};
 
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const SAFE_MODE_CUSTOM_TASK_ERROR: &str =
     "Safe-installed agent is not allowed to execute arbitrary command tasks.";
+const LINUX_SERVICE_NAME: &str = "umirhack-agent";
+const MACOS_PLIST_ID: &str = "com.umirhack.agent";
+const WINDOWS_TASK_NAME: &str = "UmirhackAgent";
 
-pub async fn execute_task(task: &AgentTaskLease, safe_mode: bool) -> CompletePayload {
-    match execute_task_inner(task, safe_mode).await {
-        Ok(result) => result,
-        Err(error) => failure_result(task, error.to_string()),
+#[derive(Debug)]
+pub struct TaskExecutionOutcome {
+    pub result: CompletePayload,
+    pub post_action: Option<PostTaskAction>,
+}
+
+#[derive(Debug)]
+pub struct PostTaskAction {
+    launcher_path: PathBuf,
+    download_url: String,
+    version: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct SelfUpdatePayload {
+    artifact_url: Option<String>,
+    version: Option<String>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+struct ServiceTelemetryEntry {
+    name: String,
+    status: String,
+    display_name: Option<String>,
+    description: Option<String>,
+    load_state: Option<String>,
+    active_state: Option<String>,
+    sub_state: Option<String>,
+}
+
+pub async fn execute_task(
+    task: &AgentTaskLease,
+    config: &Config,
+) -> TaskExecutionOutcome {
+    match execute_task_inner(task, config).await {
+        Ok(outcome) => outcome,
+        Err(error) => TaskExecutionOutcome {
+            result: failure_result(task, error.to_string()),
+            post_action: None,
+        },
     }
 }
 
 async fn execute_task_inner(
     task: &AgentTaskLease,
-    safe_mode: bool,
-) -> Result<CompletePayload> {
+    config: &Config,
+) -> Result<TaskExecutionOutcome> {
     let template = &task.task_template;
     let kind = template.kind.as_str();
     let payload = &template.payload_json;
@@ -37,11 +78,11 @@ async fn execute_task_inner(
     match kind {
         "host.system_profile" => {
             let telemetry = collect_system_profile();
-            Ok(success_result(task, kind, telemetry))
+            Ok(success_outcome(task, kind, telemetry))
         }
         "host.ip_interfaces" => {
             let telemetry = collect_interfaces().await?;
-            Ok(success_result(task, kind, telemetry))
+            Ok(success_outcome(task, kind, telemetry))
         }
         "network.endpoint_connectivity" => {
             let target = payload
@@ -49,11 +90,21 @@ async fn execute_task_inner(
                 .and_then(Value::as_str)
                 .ok_or_else(|| anyhow!("missing target endpoint"))?;
             let telemetry = collect_endpoint_connectivity(target).await;
-            Ok(success_result(task, kind, telemetry))
+            Ok(success_outcome(task, kind, telemetry))
+        }
+        "agent.self_update" => {
+            let post_action = prepare_self_update(config, payload).await?;
+            Ok(TaskExecutionOutcome {
+                result: self_update_result(task, &post_action),
+                post_action: Some(post_action),
+            })
         }
         "diagnostic.command.custom" => {
-            if safe_mode {
-                return Ok(forbidden_custom_command_result(task));
+            if config.safe_mode {
+                return Ok(TaskExecutionOutcome {
+                    result: forbidden_custom_command_result(task),
+                    post_action: None,
+                });
             }
             let command = payload
                 .get("approved_command")
@@ -61,7 +112,10 @@ async fn execute_task_inner(
                 .map(str::trim)
                 .filter(|command| !command.is_empty())
                 .ok_or_else(|| anyhow!("missing approved command"))?;
-            Ok(command_result(task, kind, command).await)
+            Ok(TaskExecutionOutcome {
+                result: command_result(task, kind, command).await,
+                post_action: None,
+            })
         }
         kind if kind.starts_with("diagnostic.command.") => {
             let requested_command = template
@@ -69,12 +123,15 @@ async fn execute_task_inner(
                 .as_deref()
                 .or_else(|| payload.get("approved_command").and_then(Value::as_str));
             let command = resolve_command_for_kind(kind, requested_command)?;
-            Ok(command_result(task, kind, command).await)
+            Ok(TaskExecutionOutcome {
+                result: command_result(task, kind, command).await,
+                post_action: None,
+            })
         }
-        _ => Ok(failure_result(
-            task,
-            format!("Unsupported task kind: {kind}"),
-        )),
+        _ => Ok(TaskExecutionOutcome {
+            result: failure_result(task, format!("Unsupported task kind: {kind}")),
+            post_action: None,
+        }),
     }
 }
 
@@ -104,6 +161,17 @@ fn success_result(
     }
 }
 
+fn success_outcome(
+    task: &AgentTaskLease,
+    telemetry_kind: &str,
+    telemetry_payload: Value,
+) -> TaskExecutionOutcome {
+    TaskExecutionOutcome {
+        result: success_result(task, telemetry_kind, telemetry_payload),
+        post_action: None,
+    }
+}
+
 fn failure_result(task: &AgentTaskLease, reason: String) -> CompletePayload {
     CompletePayload {
         lease_token: task.lease_token.clone(),
@@ -115,6 +183,28 @@ fn failure_result(task: &AgentTaskLease, reason: String) -> CompletePayload {
         telemetry_kind: None,
         telemetry_payload: None,
         failure_reason: Some(reason),
+    }
+}
+
+fn self_update_result(
+    task: &AgentTaskLease,
+    post_action: &PostTaskAction,
+) -> CompletePayload {
+    let summary_json = json!({
+        "action": "self_update",
+        "artifact_url": post_action.download_url,
+        "version": post_action.version,
+    });
+    CompletePayload {
+        lease_token: task.lease_token.clone(),
+        status: "succeeded".to_string(),
+        exit_code: Some(0),
+        stdout_text: Some(pretty_json(&summary_json)),
+        stderr_text: Some(String::new()),
+        summary_json: Some(summary_json),
+        telemetry_kind: None,
+        telemetry_payload: None,
+        failure_reason: None,
     }
 }
 
@@ -141,10 +231,13 @@ async fn command_result(
     command: &str,
 ) -> CompletePayload {
     let result = run_command(command).await;
-    let telemetry_payload = json!({
-        "sample": result.stdout,
-        "command": command,
-    });
+    let telemetry_payload =
+        build_command_telemetry_payload(kind, command, &result.stdout);
+    let stdout_text = if renders_structured_stdout(kind) {
+        pretty_json(&telemetry_payload)
+    } else {
+        result.stdout.clone()
+    };
     CompletePayload {
         lease_token: task.lease_token.clone(),
         status: if result.exit_code == 0 {
@@ -153,7 +246,7 @@ async fn command_result(
             "failed".to_string()
         },
         exit_code: Some(result.exit_code),
-        stdout_text: Some(result.stdout),
+        stdout_text: Some(stdout_text),
         stderr_text: Some(result.stderr.clone()),
         summary_json: Some(json!({ "command": command })),
         telemetry_kind: Some(kind.to_string()),
@@ -332,6 +425,177 @@ fn pretty_json(value: &Value) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())
 }
 
+fn build_command_telemetry_payload(
+    kind: &str,
+    command: &str,
+    stdout: &str,
+) -> Value {
+    match kind {
+        "diagnostic.command.service_status" => json!({
+            "command": command,
+            "sample": stdout,
+            "services": parse_service_status_output(stdout),
+        }),
+        _ => json!({
+            "sample": stdout,
+            "command": command,
+        }),
+    }
+}
+
+fn renders_structured_stdout(kind: &str) -> bool {
+    matches!(kind, "diagnostic.command.service_status")
+}
+
+fn parse_service_status_output(stdout: &str) -> Vec<ServiceTelemetryEntry> {
+    match std::env::consts::OS {
+        "windows" => parse_windows_service_status(stdout),
+        "macos" => parse_macos_service_status(stdout),
+        _ => parse_linux_service_status(stdout),
+    }
+}
+
+fn parse_linux_service_status(stdout: &str) -> Vec<ServiceTelemetryEntry> {
+    stdout
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.is_empty()
+                || trimmed.starts_with("UNIT ")
+                || trimmed.starts_with("LOAD ")
+                || trimmed.starts_with("Legend:")
+                || !trimmed.contains(".service")
+            {
+                return None;
+            }
+
+            let parts = trimmed.split_whitespace().collect::<Vec<_>>();
+            if parts.len() < 4 || !parts[0].ends_with(".service") {
+                return None;
+            }
+
+            let description = parts
+                .get(4..)
+                .unwrap_or(&[])
+                .join(" ")
+                .trim()
+                .to_string();
+            let active_state = parts[2];
+            let sub_state = parts[3];
+
+            Some(ServiceTelemetryEntry {
+                name: parts[0].to_string(),
+                status: normalized_service_status(active_state, sub_state),
+                display_name: None,
+                description: if description.is_empty() {
+                    None
+                } else {
+                    Some(description)
+                },
+                load_state: Some(parts[1].to_string()),
+                active_state: Some(active_state.to_string()),
+                sub_state: Some(sub_state.to_string()),
+            })
+        })
+        .collect()
+}
+
+fn parse_macos_service_status(stdout: &str) -> Vec<ServiceTelemetryEntry> {
+    stdout
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with("PID") {
+                return None;
+            }
+
+            let parts = trimmed.split_whitespace().collect::<Vec<_>>();
+            if parts.len() < 3 {
+                return None;
+            }
+
+            let pid = parts[0];
+            let last_exit_status = parts[1];
+            let name = parts[2..].join(" ");
+            let sub_state = if pid == "-" { "stopped" } else { "running" };
+
+            Some(ServiceTelemetryEntry {
+                name,
+                status: normalized_service_status("loaded", sub_state),
+                display_name: None,
+                description: Some(format!("last_exit_status={last_exit_status}")),
+                load_state: Some("loaded".to_string()),
+                active_state: Some("loaded".to_string()),
+                sub_state: Some(sub_state.to_string()),
+            })
+        })
+        .collect()
+}
+
+fn parse_windows_service_status(stdout: &str) -> Vec<ServiceTelemetryEntry> {
+    let mut services = Vec::new();
+    let mut current_name: Option<String> = None;
+    let mut current_state: Option<String> = None;
+
+    let push_current = |services: &mut Vec<ServiceTelemetryEntry>,
+                        current_name: &mut Option<String>,
+                        current_state: &mut Option<String>| {
+        let Some(name) = current_name.take() else {
+            return;
+        };
+        let raw_state = current_state.take().unwrap_or_else(|| "UNKNOWN".to_string());
+        let sub_state = raw_state.to_ascii_lowercase();
+        services.push(ServiceTelemetryEntry {
+            name,
+            status: normalized_service_status("loaded", &sub_state),
+            display_name: None,
+            description: None,
+            load_state: Some("loaded".to_string()),
+            active_state: Some(raw_state),
+            sub_state: Some(sub_state),
+        });
+    };
+
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        if let Some(name) = trimmed.strip_prefix("SERVICE_NAME:") {
+            push_current(&mut services, &mut current_name, &mut current_state);
+            current_name = Some(name.trim().to_string());
+            continue;
+        }
+
+        if trimmed.starts_with("STATE")
+            && let Some((_, raw_state)) = trimmed.split_once(':')
+        {
+            let parts = raw_state.split_whitespace().collect::<Vec<_>>();
+            if let Some(state_name) = parts.get(1).or(parts.first()) {
+                current_state = Some((*state_name).to_string());
+            }
+        }
+    }
+
+    push_current(&mut services, &mut current_name, &mut current_state);
+    services
+}
+
+fn normalized_service_status(active_state: &str, sub_state: &str) -> String {
+    let active = active_state.to_ascii_lowercase();
+    let sub = sub_state.to_ascii_lowercase();
+    if active == "active"
+        || sub == "running"
+        || sub == "listening"
+        || sub == "start_pending"
+    {
+        "running".to_string()
+    } else {
+        "stopped".to_string()
+    }
+}
+
 fn resolve_command_for_kind<'a>(
     kind: &str,
     requested_command: Option<&'a str>,
@@ -415,12 +679,221 @@ fn allowed_commands_for_kind(kind: &str) -> &'static [&'static str] {
     }
 }
 
+pub fn launch_post_action(action: PostTaskAction) -> Result<()> {
+    let mut command = if cfg!(target_os = "windows") {
+        let mut cmd = StdCommand::new("powershell.exe");
+        cmd.arg("-NoProfile")
+            .arg("-ExecutionPolicy")
+            .arg("Bypass")
+            .arg("-File")
+            .arg(&action.launcher_path);
+        cmd
+    } else {
+        let mut cmd = StdCommand::new("sh");
+        cmd.arg(&action.launcher_path);
+        cmd
+    };
+
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .with_context(|| {
+            format!(
+                "failed to launch self-update helper: {}",
+                action.launcher_path.display()
+            )
+        })?;
+    Ok(())
+}
+
+async fn prepare_self_update(
+    config: &Config,
+    payload: &Value,
+) -> Result<PostTaskAction> {
+    let payload: SelfUpdatePayload = serde_json::from_value(payload.clone())
+        .context("invalid self-update payload")?;
+    let download_url = resolve_self_update_download_url(config, &payload)?;
+    let work_dir = unique_self_update_dir();
+    tokio::fs::create_dir_all(&work_dir)
+        .await
+        .with_context(|| format!("failed to create {}", work_dir.display()))?;
+
+    let binary_name = current_binary_name();
+    let staged_binary = work_dir.join(binary_name);
+    let launcher_path = work_dir.join(if cfg!(target_os = "windows") {
+        "apply-self-update.ps1"
+    } else {
+        "apply-self-update.sh"
+    });
+    let target_binary = std::env::current_exe()
+        .context("failed to resolve current executable path for self-update")?;
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(120))
+        .build()
+        .context("failed to construct self-update HTTP client")?;
+    let response = client
+        .get(&download_url)
+        .send()
+        .await
+        .with_context(|| format!("failed to download update from {download_url}"))?;
+    let response = response
+        .error_for_status()
+        .with_context(|| format!("agent update download returned error for {download_url}"))?;
+    let bytes = response
+        .bytes()
+        .await
+        .context("failed to read downloaded self-update artifact")?;
+    tokio::fs::write(&staged_binary, bytes.as_ref())
+        .await
+        .with_context(|| format!("failed to write {}", staged_binary.display()))?;
+    ensure_executable(&staged_binary)?;
+
+    let launcher = render_self_update_launcher(&staged_binary, &target_binary);
+    tokio::fs::write(&launcher_path, launcher.as_bytes())
+        .await
+        .with_context(|| format!("failed to write {}", launcher_path.display()))?;
+    ensure_executable(&launcher_path)?;
+
+    Ok(PostTaskAction {
+        launcher_path,
+        download_url,
+        version: payload.version,
+    })
+}
+
+fn resolve_self_update_download_url(
+    config: &Config,
+    payload: &SelfUpdatePayload,
+) -> Result<String> {
+    if let Some(artifact_url) = payload
+        .artifact_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return Ok(artifact_url.to_string());
+    }
+
+    let platform = declared_os();
+    let arch = current_arch_label()?;
+    let filename = current_binary_name();
+    Ok(format!(
+        "{}/agent-artifacts/{platform}/{arch}/{filename}",
+        config.api_url
+    ))
+}
+
+fn current_arch_label() -> Result<&'static str> {
+    match std::env::consts::ARCH {
+        "x86_64" => Ok("amd64"),
+        "aarch64" | "arm64" => Ok("arm64"),
+        "x86" if cfg!(target_os = "windows") => Ok("amd64"),
+        other => Err(anyhow!("unsupported CPU architecture for self-update: {other}")),
+    }
+}
+
+fn current_binary_name() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "hack-agent.exe"
+    } else {
+        "hack-agent"
+    }
+}
+
+fn unique_self_update_dir() -> PathBuf {
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    std::env::temp_dir().join(format!(
+        "umirhack-self-update-{}-{stamp}",
+        std::process::id()
+    ))
+}
+
+fn render_self_update_launcher(staged_binary: &Path, target_binary: &Path) -> String {
+    if cfg!(target_os = "windows") {
+        return render_windows_self_update_launcher(staged_binary, target_binary);
+    }
+    if cfg!(target_os = "macos") {
+        return render_macos_self_update_launcher(staged_binary, target_binary);
+    }
+    render_linux_self_update_launcher(staged_binary, target_binary)
+}
+
+fn render_linux_self_update_launcher(staged_binary: &Path, target_binary: &Path) -> String {
+    let staged = shell_quote(&staged_binary.to_string_lossy());
+    let target = shell_quote(&target_binary.to_string_lossy());
+    let service_name = shell_quote(LINUX_SERVICE_NAME);
+    format!(
+        "#!/bin/sh\nset -eu\nsleep 2\nTARGET={target}\nSTAGED={staged}\nNEW_TARGET=\"$TARGET.new\"\ninstall -m 0755 \"$STAGED\" \"$NEW_TARGET\"\nmv \"$NEW_TARGET\" \"$TARGET\"\nsystemctl restart {service_name}\nrm -f \"$STAGED\" \"$0\"\n"
+    )
+}
+
+fn render_macos_self_update_launcher(staged_binary: &Path, target_binary: &Path) -> String {
+    let staged = shell_quote(&staged_binary.to_string_lossy());
+    let target = shell_quote(&target_binary.to_string_lossy());
+    format!(
+        "#!/bin/sh\nset -eu\nsleep 2\nTARGET={target}\nSTAGED={staged}\nNEW_TARGET=\"$TARGET.new\"\ninstall -m 0755 \"$STAGED\" \"$NEW_TARGET\"\nmv \"$NEW_TARGET\" \"$TARGET\"\nlaunchctl kickstart -k system/{plist_id}\nrm -f \"$STAGED\" \"$0\"\n",
+        plist_id = MACOS_PLIST_ID,
+    )
+}
+
+fn render_windows_self_update_launcher(staged_binary: &Path, target_binary: &Path) -> String {
+    let staged = powershell_quote(&staged_binary.to_string_lossy());
+    let target = powershell_quote(&target_binary.to_string_lossy());
+    let task_name = powershell_quote(WINDOWS_TASK_NAME);
+    format!(
+        "$ErrorActionPreference = \"Stop\"\n$staged = {staged}\n$target = {target}\n$newTarget = \"$target.new\"\nStart-Sleep -Seconds 2\nfor ($i = 0; $i -lt 20; $i++) {{\n    try {{\n        if (Test-Path $newTarget) {{ Remove-Item -Force $newTarget }}\n        Copy-Item -Force $staged $newTarget\n        if (Test-Path $target) {{ Remove-Item -Force $target }}\n        Move-Item -Force $newTarget $target\n        break\n    }} catch {{\n        if ($i -eq 19) {{ throw }}\n        Start-Sleep -Seconds 1\n    }}\n}}\nStart-ScheduledTask -TaskName {task_name}\nRemove-Item -Force $staged\nRemove-Item -Force $PSCommandPath\n"
+    )
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\"'\"'"))
+}
+
+fn powershell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "''"))
+}
+
+#[cfg(unix)]
+fn ensure_executable(path: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut permissions = std::fs::metadata(path)
+        .with_context(|| format!("failed to stat {}", path.display()))?
+        .permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(path, permissions)
+        .with_context(|| format!("failed to chmod {}", path.display()))?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn ensure_executable(_path: &Path) -> Result<()> {
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use serde_json::json;
     use crate::models::{AgentExecutionHost, AgentExecutionTemplate, AgentTaskLease};
 
-    use super::execute_task;
+    use crate::config::Config;
+
+    use super::{
+        SelfUpdatePayload,
+        execute_task,
+        parse_linux_service_status,
+        parse_macos_service_status,
+        parse_windows_service_status,
+        resolve_self_update_download_url,
+    };
 
     fn lease_for_kind(
         kind: &str,
@@ -450,11 +923,22 @@ mod tests {
         }
     }
 
+    fn test_config(safe_mode: bool) -> Config {
+        Config {
+            api_url: "http://example.invalid/api".to_string(),
+            bootstrap_token: None,
+            state_path: PathBuf::from("/tmp/hack-agent-test-state.json"),
+            poll_interval_seconds: 5,
+            agent_version: "rust-test-agent/1".to_string(),
+            safe_mode,
+        }
+    }
+
     #[tokio::test]
     async fn system_profile_task_returns_structured_success() {
         let task = lease_for_kind("host.system_profile", json!({}), None);
 
-        let result = execute_task(&task, false).await;
+        let result = execute_task(&task, &test_config(false)).await.result;
 
         assert_eq!(result.status, "succeeded");
         assert_eq!(result.telemetry_kind.as_deref(), Some("host.system_profile"));
@@ -473,7 +957,7 @@ mod tests {
             None,
         );
 
-        let result = execute_task(&task, false).await;
+        let result = execute_task(&task, &test_config(false)).await.result;
 
         assert_eq!(result.status, "failed");
         assert_eq!(result.telemetry_kind, None);
@@ -494,7 +978,7 @@ mod tests {
             Some("rm -rf /"),
         );
 
-        let result = execute_task(&task, false).await;
+        let result = execute_task(&task, &test_config(false)).await.result;
 
         assert_eq!(result.status, "failed");
         assert_eq!(result.telemetry_kind, None);
@@ -515,7 +999,7 @@ mod tests {
             None,
         );
 
-        let result = execute_task(&task, true).await;
+        let result = execute_task(&task, &test_config(true)).await.result;
 
         assert_eq!(result.status, "failed");
         assert_eq!(result.exit_code, Some(126));
@@ -524,6 +1008,77 @@ mod tests {
             result.failure_reason.as_deref(),
             Some(super::SAFE_MODE_CUSTOM_TASK_ERROR)
         );
+    }
+
+    #[test]
+    fn self_update_url_defaults_to_agent_artifact_endpoint() {
+        let url = resolve_self_update_download_url(
+            &test_config(false),
+            &SelfUpdatePayload::default(),
+        )
+        .expect("self update url should resolve");
+
+        let platform = super::declared_os();
+        assert!(url.starts_with("http://example.invalid/api/agent-artifacts/"));
+        assert!(url.contains(&format!("/agent-artifacts/{platform}/")));
+        assert!(url.ends_with(super::current_binary_name()));
+    }
+
+    #[test]
+    fn self_update_url_respects_explicit_override() {
+        let url = resolve_self_update_download_url(
+            &test_config(false),
+            &SelfUpdatePayload {
+                artifact_url: Some("https://updates.example.com/hack-agent".to_string()),
+                version: Some("2026.04.04".to_string()),
+            },
+        )
+        .expect("explicit self update url should resolve");
+
+        assert_eq!(url, "https://updates.example.com/hack-agent");
+    }
+
+    #[test]
+    fn parses_linux_service_status_into_structured_entries() {
+        let services = parse_linux_service_status(
+            "UNIT LOAD ACTIVE SUB DESCRIPTION\ncron.service loaded active running Regular background program processing daemon\nnginx.service loaded active running A high performance web server\n",
+        );
+
+        assert_eq!(services.len(), 2);
+        assert_eq!(services[0].name, "cron.service");
+        assert_eq!(services[0].status, "running");
+        assert_eq!(services[0].active_state.as_deref(), Some("active"));
+        assert_eq!(services[0].sub_state.as_deref(), Some("running"));
+        assert_eq!(
+            services[0].description.as_deref(),
+            Some("Regular background program processing daemon")
+        );
+    }
+
+    #[test]
+    fn parses_macos_service_status_into_structured_entries() {
+        let services = parse_macos_service_status(
+            "PID\tStatus\tLabel\n123\t0\tcom.example.running\n-\t78\tcom.example.stopped\n",
+        );
+
+        assert_eq!(services.len(), 2);
+        assert_eq!(services[0].name, "com.example.running");
+        assert_eq!(services[0].status, "running");
+        assert_eq!(services[1].name, "com.example.stopped");
+        assert_eq!(services[1].status, "stopped");
+    }
+
+    #[test]
+    fn parses_windows_service_status_into_structured_entries() {
+        let services = parse_windows_service_status(
+            "SERVICE_NAME: Appinfo\n        TYPE               : 20  WIN32_SHARE_PROCESS\n        STATE              : 4  RUNNING\nSERVICE_NAME: BITS\n        TYPE               : 20  WIN32_SHARE_PROCESS\n        STATE              : 1  STOPPED\n",
+        );
+
+        assert_eq!(services.len(), 2);
+        assert_eq!(services[0].name, "Appinfo");
+        assert_eq!(services[0].status, "running");
+        assert_eq!(services[1].name, "BITS");
+        assert_eq!(services[1].status, "stopped");
     }
 }
 

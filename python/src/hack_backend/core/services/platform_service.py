@@ -654,6 +654,23 @@ class PlatformService:
                 status_code=400,
                 detail="approved_command override is only allowed for custom command tasks",
             )
+        if task_template.kind == "agent.self_update":
+            artifact_url = validated_payload_overrides.get("artifact_url")
+            if artifact_url is not None:
+                if not isinstance(artifact_url, str) or not artifact_url.strip():
+                    raise HTTPException(
+                        status_code=400,
+                        detail="artifact_url override must be a non-empty string",
+                    )
+                validated_payload_overrides["artifact_url"] = artifact_url.strip()
+            version = validated_payload_overrides.get("version")
+            if version is not None:
+                if not isinstance(version, str) or not version.strip():
+                    raise HTTPException(
+                        status_code=400,
+                        detail="version override must be a non-empty string",
+                    )
+                validated_payload_overrides["version"] = version.strip()
         resolved_host_ids = list(dict.fromkeys(host_ids))
         hosts = list(
             await self.session.scalars(
@@ -667,7 +684,12 @@ class PlatformService:
             raise HTTPException(status_code=400, detail="Some hosts are invalid")
 
         task_runs: list[TaskRun] = []
-        for host in hosts:
+        if task_template.kind == "agent.self_update":
+            selected_hosts = list({host.agent_id: host for host in hosts}.values())
+        else:
+            selected_hosts = hosts
+
+        for host in selected_hosts:
             task_run = TaskRun(
                 environment_id=environment.id,
                 host_id=host.id,

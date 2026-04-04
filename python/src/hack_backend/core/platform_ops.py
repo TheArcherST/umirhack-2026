@@ -34,6 +34,7 @@ from hack_backend.core.security import hash_secret, new_secret
 BOOTSTRAP_TEMPLATE_KINDS = {
     "host.system_profile",
     "host.ip_interfaces",
+    "diagnostic.command.service_status",
 }
 
 BUILTIN_TEMPLATES: tuple[dict[str, Any], ...] = (
@@ -56,6 +57,13 @@ BUILTIN_TEMPLATES: tuple[dict[str, Any], ...] = (
         "name": "Endpoint Connectivity",
         "payload_json": {"template_code": "ping", "default_port": 443},
         "metric_policy_json": {"metric_kind": "endpoint_connectivity"},
+        "approved_command": None,
+    },
+    {
+        "kind": "agent.self_update",
+        "name": "Self Update Agent",
+        "payload_json": {"template_code": "self_update"},
+        "metric_policy_json": {},
         "approved_command": None,
     },
     {

@@ -9,6 +9,7 @@ import {stubGetAgentInstallScript, stubGetAgents, stubGetEnvironments} from '@/a
 import {timeAgo} from '@/lib/utils'
 import type {AgentStatus, Agent} from '@/api/types'
 import {cn, copyText} from '@/lib/utils'
+import {agentStatusLabelKey, agentStatusTextTone, agentStatusTone} from '@/lib/agentStatus'
 import {useI18n} from '@/i18n'
 import {useProject} from '@/hooks/useProject'
 import {AddAgentModal} from '@/components/AddAgentModal'
@@ -41,11 +42,13 @@ export default function ProjectAgents() {
     })
 
     const online = agents.filter((a) => a.status === 'online').length
+    const stale = agents.filter((a) => a.status === 'stale').length
     const offline = agents.filter((a) => a.status === 'offline').length
 
     const filters: [Filter, string, string?, string?][] = [
         ['', t('common.all')],
         ['online', t('common.online'), 'text-green-400', String(online)],
+        ['stale', t('common.stale'), 'text-amber-400', String(stale)],
         ['offline', t('common.offline'), 'text-muted-foreground/60', String(offline)],
     ]
 
@@ -150,11 +153,11 @@ export default function ProjectAgents() {
                                         <div className="flex items-center gap-1.5">
                         <span className={cn(
                             'w-1.5 h-1.5 rounded-full',
-                            agent.status === 'online' ? 'bg-green-400 status-pulse' : 'bg-muted-foreground/40',
+                            agentStatusTone(agent.status),
                         )}/>
                                             <span
-                                                className={cn('text-xs font-mono', agent.status === 'online' ? 'text-green-400' : 'text-muted-foreground')}>
-                          {agent.status === 'online' ? t('common.online') : t('common.offline')}
+                                                className={cn('text-xs font-mono', agentStatusTextTone(agent.status))}>
+                          {t(agentStatusLabelKey(agent.status))}
                         </span>
                                         </div>
                                     </td>

@@ -12,6 +12,7 @@
     "noResults": "No results found",
     "all": "All",
     "online": "Online",
+    "stale": "Stale",
     "offline": "Offline",
     "success": "success",
     "failed": "failed",

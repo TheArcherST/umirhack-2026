@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 
 def _serialize_datetime_utc(value: datetime) -> str:
@@ -14,11 +14,24 @@ def _serialize_datetime_utc(value: datetime) -> str:
     return value.isoformat().replace("+00:00", "Z")
 
 
+def _normalize_datetimes(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return _serialize_datetime_utc(value)
+    if isinstance(value, dict):
+        return {key: _normalize_datetimes(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_normalize_datetimes(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_normalize_datetimes(item) for item in value)
+    return value
+
+
 class BaseDTO(BaseModel):
-    model_config = ConfigDict(
-        from_attributes=True,
-        json_encoders={datetime: _serialize_datetime_utc},
-    )
+    model_config = ConfigDict(from_attributes=True)
+
+    @model_serializer(mode="plain", when_used="json")
+    def serialize_model(self) -> dict[str, Any]:
+        return _normalize_datetimes(self.model_dump(mode="python"))
 
 
 class ProjectDTO(BaseDTO):
