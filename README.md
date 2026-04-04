@@ -23,10 +23,10 @@ multiply hosts at it's added into multiply environments). Host is defined by age
 When we speak about tasks and their results for some host, we can say that it's a telemetry of the task.  
   
 Examples of such a telemetry:  
-4. Pv4 interfaces configuration info.  
-5. Ethernet interfaces configuration.  
-6. Ethernet interface statistics snapshot.  
-7. HTTPS server endpoint connectivity to HTTPS client endpoint (TCP/IP stats + L7 info).  
+1. Pv4 interfaces configuration info.  
+2. Ethernet interfaces configuration.  
+3. Ethernet interface statistics snapshot.  
+4. HTTPS server endpoint connectivity to HTTPS client endpoint (TCP/IP stats + L7 info).  
   
 Clause 6.  
 There are tasks scheduling mechanism in addition to manual task assignation.  Currently supported only CRON-based tasks   
@@ -38,9 +38,9 @@ metric telemetry. Such telemetry loses some details of raw telemetry but often m
 There are builtin, configurable metrics for builtin tasks.  
   
 Examples of builtin metrics:  
-8. Network endpoint connectivity statistics  
-9. CPU usage statistics  
-10. Host resources degradation statistics  
+1. Network endpoint connectivity statistics  
+2. CPU usage statistics  
+3. Host resources degradation statistics  
   
 Backend must support metrics up-to-date. CRON tasks scheduling rule may be used in order to define logic of raw telemetry supplement, and then fresh aggregate must be computed.  
   
