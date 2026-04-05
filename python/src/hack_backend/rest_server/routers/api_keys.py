@@ -16,6 +16,7 @@ from sqlalchemy.orm import joinedload
 from hack_backend.core.models import ApiKey
 from hack_backend.core.models.enums import ApiKeyRole
 from hack_backend.core.security import hash_secret, new_secret
+from hack_backend.core.services.uow_ctl import UoWCtl
 from hack_backend.rest_server.providers import AuthorizedUser
 
 router = APIRouter(prefix="/environments/{environment_id}/api-keys", tags=["api-keys"])
@@ -108,6 +109,7 @@ async def create_api_key(
     body: ApiKeyCreateRequest,
     current_user: FromDishka[AuthorizedUser],
     session: FromDishka[AsyncSession],
+    uow_ctl: FromDishka[UoWCtl],
 ) -> ApiKeyCreateResponse:
     from hack_backend.core.services.access import AccessService
     from argon2 import PasswordHasher
@@ -137,6 +139,7 @@ async def create_api_key(
     )
     session.add(api_key)
     await session.flush()
+    await uow_ctl.commit()
 
     return ApiKeyCreateResponse(
         id=api_key.id,
@@ -156,6 +159,7 @@ async def revoke_api_key(
     key_id: str,
     current_user: FromDishka[AuthorizedUser],
     session: FromDishka[AsyncSession],
+    uow_ctl: FromDishka[UoWCtl],
 ) -> dict:
     from hack_backend.core.services.access import AccessService
     from argon2 import PasswordHasher
@@ -174,6 +178,7 @@ async def revoke_api_key(
 
     api_key.revoked_at = datetime.datetime.now(tz=UTC)
     await session.flush()
+    await uow_ctl.commit()
 
     return {"status": "revoked"}
 
@@ -185,6 +190,7 @@ async def delete_api_key(
     key_id: str,
     current_user: FromDishka[AuthorizedUser],
     session: FromDishka[AsyncSession],
+    uow_ctl: FromDishka[UoWCtl],
 ) -> dict:
     from hack_backend.core.services.access import AccessService
     from argon2 import PasswordHasher
@@ -200,5 +206,6 @@ async def delete_api_key(
 
     await session.delete(api_key)
     await session.flush()
+    await uow_ctl.commit()
 
     return {"status": "deleted"}
