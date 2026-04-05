@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from hack_backend.core.providers import ConfigHack
-from tests.integration.conftest import ApiDriver
 
 
 def _grant_project_membership(
@@ -42,7 +41,7 @@ def _grant_project_membership(
         engine.dispose()
 
 
-def test_create_api_key_returns_raw_key_once(api: ApiDriver) -> None:
+def test_create_api_key_returns_raw_key_once(api) -> None:
     """Creating an API key returns the raw key exactly once."""
     owner = api.register_user(prefix="keyowner")
     bundle = api.create_project_bundle(user=owner, project_name="KeyTest")
@@ -64,7 +63,7 @@ def test_create_api_key_returns_raw_key_once(api: ApiDriver) -> None:
     assert payload["id"] is not None
 
 
-def test_list_api_keys_shows_all_keys(api: ApiDriver) -> None:
+def test_list_api_keys_shows_all_keys(api) -> None:
     """Listing API keys returns all keys for the environment."""
     owner = api.register_user(prefix="keyowner2")
     bundle = api.create_project_bundle(user=owner, project_name="KeyListTest")
@@ -94,7 +93,7 @@ def test_list_api_keys_shows_all_keys(api: ApiDriver) -> None:
     assert "key-two" in names
 
 
-def test_revoke_api_key_marks_it_inactive(api: ApiDriver) -> None:
+def test_revoke_api_key_marks_it_inactive(api) -> None:
     """Revoking an API key marks it as revoked and is_active becomes False."""
     owner = api.register_user(prefix="keyowner3")
     bundle = api.create_project_bundle(user=owner, project_name="KeyRevokeTest")
@@ -128,7 +127,7 @@ def test_revoke_api_key_marks_it_inactive(api: ApiDriver) -> None:
     assert revoked_key["revoked_at"] is not None
 
 
-def test_delete_api_key_removes_it(api: ApiDriver) -> None:
+def test_delete_api_key_removes_it(api) -> None:
     """Deleting an API key removes it from the list."""
     owner = api.register_user(prefix="keyowner4")
     bundle = api.create_project_bundle(user=owner, project_name="KeyDeleteTest")
@@ -160,7 +159,7 @@ def test_delete_api_key_removes_it(api: ApiDriver) -> None:
     assert all(k["id"] != key_id for k in keys)
 
 
-def test_api_key_requires_project_membership(api: ApiDriver) -> None:
+def test_api_key_requires_project_membership(api) -> None:
     """A user who is not a project member cannot create API keys for that environment."""
     owner = api.register_user(prefix="keyowner5")
     stranger = api.register_user(prefix="stranger5")
@@ -175,7 +174,7 @@ def test_api_key_requires_project_membership(api: ApiDriver) -> None:
     assert response.status_code == 403, response.text
 
 
-def test_api_key_permanent_expiry_is_allowed(api: ApiDriver) -> None:
+def test_api_key_permanent_expiry_is_allowed(api) -> None:
     """Creating a key with expiry='never' sets expires_at to null."""
     owner = api.register_user(prefix="keyowner6")
     bundle = api.create_project_bundle(user=owner, project_name="KeyPermanentTest")
@@ -191,7 +190,7 @@ def test_api_key_permanent_expiry_is_allowed(api: ApiDriver) -> None:
     assert payload["expires_at"] is None
 
 
-def test_api_key_invalid_expiry_is_rejected(api: ApiDriver) -> None:
+def test_api_key_invalid_expiry_is_rejected(api) -> None:
     """Creating a key with an invalid expiry value returns 400."""
     owner = api.register_user(prefix="keyowner7")
     bundle = api.create_project_bundle(user=owner, project_name="KeyInvalidTest")
@@ -205,7 +204,7 @@ def test_api_key_invalid_expiry_is_rejected(api: ApiDriver) -> None:
     assert response.status_code == 400, response.text
 
 
-def test_double_revoke_is_rejected(api: ApiDriver) -> None:
+def test_double_revoke_is_rejected(api) -> None:
     """Revoking an already revoked key returns 400."""
     owner = api.register_user(prefix="keyowner8")
     bundle = api.create_project_bundle(user=owner, project_name="KeyDoubleRevokeTest")
@@ -233,7 +232,7 @@ def test_double_revoke_is_rejected(api: ApiDriver) -> None:
     assert response.status_code == 400, response.text
 
 
-def test_revoke_key_from_wrong_environment_is_not_found(api: ApiDriver) -> None:
+def test_revoke_key_from_wrong_environment_is_not_found(api) -> None:
     """Trying to revoke a key that belongs to a different environment returns 404."""
     owner = api.register_user(prefix="keyowner9")
     bundle1 = api.create_project_bundle(user=owner, project_name="KeyEnv1Test")
@@ -255,7 +254,7 @@ def test_revoke_key_from_wrong_environment_is_not_found(api: ApiDriver) -> None:
     assert response.status_code == 404, response.text
 
 
-def test_delete_key_from_wrong_environment_is_not_found(api: ApiDriver) -> None:
+def test_delete_key_from_wrong_environment_is_not_found(api) -> None:
     """Trying to delete a key that belongs to a different environment returns 404."""
     owner = api.register_user(prefix="keyowner10")
     bundle1 = api.create_project_bundle(user=owner, project_name="KeyEnv1DelTest")
