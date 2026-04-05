@@ -6,12 +6,13 @@ from fastapi import HTTPException
 from fastapi.requests import Request
 from starlette.testclient import TestClient
 
-from hack_backend.core.models import Agent, LoginSession, User
+from hack_backend.core.models import Agent, ApiKey, LoginSession, User
 from hack_backend.core.services.access import AccessService
 from hack_backend.core.services.agent_runtime_service import AgentRuntimeService
 
 AuthorizedUser = NewType("AuthorizedUser", User)
 CurrentLoginSession = NewType("CurrentLoginSession", LoginSession)
+CurrentApiKey = NewType("CurrentApiKey", ApiKey)
 CurrentAgent = NewType("CurrentAgent", Agent)
 
 
@@ -29,10 +30,34 @@ class ProviderServer(Provider):
         request: Request,
         access_service: AccessService,
     ) -> CurrentLoginSession:
+        authorization = request.headers.get("Authorization")
+
+        api_key = await access_service.resolve_api_key(authorization)
+        if api_key is not None:
+            return CurrentLoginSession(
+                LoginSession(
+                    user_id=api_key.created_by,
+                    user=api_key.creator,
+                )
+            )
+
+        # Fall back to login session
         login_session = await access_service.resolve_bearer_login_session(
-            request.headers.get("Authorization"),
+            authorization,
         )
         return CurrentLoginSession(login_session)
+
+    @provide(scope=Scope.REQUEST)
+    async def get_current_api_key(
+        self,
+        request: Request,
+        access_service: AccessService,
+    ) -> CurrentApiKey | None:
+        authorization = request.headers.get("Authorization")
+        api_key = await access_service.resolve_api_key(authorization)
+        if api_key is not None:
+            return CurrentApiKey(api_key)
+        return None
 
     @provide(scope=Scope.REQUEST)
     async def get_authorized_user(

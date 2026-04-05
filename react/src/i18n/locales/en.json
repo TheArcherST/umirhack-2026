@@ -28,6 +28,7 @@
     "task": "Task",
     "environment": "Environment",
     "connected": "connected",
+    "created": "Created at",
     "theme": {
       "switchToLight": "Switch to light mode",
       "switchToDark": "Switch to dark mode"

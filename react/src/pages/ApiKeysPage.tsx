@@ -38,6 +38,7 @@ import {stubGetApiKeys, stubCreateApiKey, stubRevokeApiKey, stubDeleteApiKey} fr
 import type {ApiKey, ApiKeyRole, ApiKeyCreateResponse} from '@/api/types'
 import {useI18n} from '@/i18n'
 import {formatDate} from '@/lib/utils'
+import {useProject} from "@/hooks/useProject.tsx";
 
 const EXPIRY_OPTIONS: {value: string; labelKey: string;}[] = [
     {value: '1d', labelKey: 'apiKey.expiry1d'},
@@ -47,10 +48,42 @@ const EXPIRY_OPTIONS: {value: string; labelKey: string;}[] = [
     {value: 'never', labelKey: 'apiKey.expiryNever'},
 ]
 
+function CopyableId({label, value}: {label: string; value: string}) {
+    const [copied, setCopied] = useState(false)
+
+    const handleCopy = async () => {
+        if (!value) return
+        try {
+            await navigator.clipboard.writeText(value)
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1500)
+        } catch {
+            // ignore
+        }
+    }
+
+    return (
+        <button
+            onClick={handleCopy}
+            className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors"
+            title="Click to copy"
+        >
+            <span className="uppercase tracking-wider text-[10px]">{label}</span>
+            <span className="text-foreground">{value?.slice(0, 8)}...</span>
+            {copied ? (
+                <CheckCircle2 size={11} className="text-green-400" />
+            ) : (
+                <Copy size={11} />
+            )}
+        </button>
+    )
+}
+
 export default function ApiKeysPage() {
     const {envId} = useParams<{envId: string}>()
     const {t} = useI18n()
     const queryClient = useQueryClient()
+    const {currentProject} = useProject()
     const [createOpen, setCreateOpen] = useState(false)
     const [createdKey, setCreatedKey] = useState<ApiKeyCreateResponse | null>(null)
     const [copiedId, setCopiedId] = useState<string | null>(null)
@@ -101,9 +134,21 @@ export default function ApiKeysPage() {
 
             <div className="flex-1 overflow-y-auto">
                 <div className="p-5 space-y-4">
-                    {/* Create button */}
-                    <div className="flex justify-end">
-                        <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5 h-7 text-xs">
+                    {/* Info bar: IDs on left, create button on right */}
+                    <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-4 flex-wrap">
+                            <CopyableId label="Project ID" value={currentProject?.id ?? ''} />
+                            <CopyableId label="Environment ID" value={envId ?? ''} />
+                            <a
+                                href="/api/docs"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2"
+                            >
+                                API Docs (/api/docs)
+                            </a>
+                        </div>
+                        <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5 h-7 text-xs shrink-0">
                             <Plus size={12} />
                             {t('apiKey.createKey')}
                         </Button>
@@ -210,47 +255,25 @@ export default function ApiKeysPage() {
                                 <CheckCircle2 size={16} className="text-green-400" />
                                 <DialogTitle>{t('apiKey.keyCreated')}</DialogTitle>
                             </div>
-                            <DialogDescription className="font-mono text-xs">
-                                {t('apiKey.copyWarning')}
-                            </DialogDescription>
                         </DialogHeader>
 
-                        <div className="px-6 pb-4 space-y-3">
-                            <div>
-                                <Label className="text-xs">{t('apiKey.nameLabel')}</Label>
-                                <p className="text-sm font-mono mt-1">{createdKey.name}</p>
-                            </div>
-                            <div>
-                                <Label className="text-xs">{t('apiKey.roleLabel')}</Label>
-                                <p className="text-sm mt-1">
-                                    {createdKey.role === 'operator' ? t('apiKey.roleOperator') : t('apiKey.roleObserver')}
-                                </p>
-                            </div>
-                            <div>
-                                <Label className="text-xs">API Key</Label>
-                                <div className="flex items-center gap-2 mt-1">
-                                    <code className="flex-1 text-xs font-mono bg-muted/50 rounded px-3 py-2 break-all select-all">
-                                        {createdKey.key}
-                                    </code>
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="shrink-0 h-8"
-                                        onClick={() => copyKey(createdKey.key)}
-                                    >
-                                        {copiedId === createdKey.key ? (
-                                            <CheckCircle2 size={14} className="text-green-400" />
-                                        ) : (
-                                            <Copy size={14} />
-                                        )}
-                                    </Button>
-                                </div>
-                            </div>
-                            <div>
-                                <Label className="text-xs">Usage</Label>
-                                <code className="block text-xs font-mono bg-muted/50 rounded px-3 py-2 mt-1">
-                                    Authorization: Bearer {createdKey.key}
+                        <div className="px-6 pb-4">
+                            <div className="flex items-center gap-2">
+                                <code className="flex-1 text-sm font-mono bg-muted/50 rounded px-3 py-2 break-all select-all">
+                                    {createdKey.key}
                                 </code>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="shrink-0 h-8"
+                                    onClick={() => copyKey(createdKey.key)}
+                                >
+                                    {copiedId === createdKey.key ? (
+                                        <CheckCircle2 size={14} className="text-green-400" />
+                                    ) : (
+                                        <Copy size={14} />
+                                    )}
+                                </Button>
                             </div>
                         </div>
 
