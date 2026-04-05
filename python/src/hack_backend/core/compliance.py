@@ -361,10 +361,15 @@ def _evaluate_compiled_policy(
 
     violated_rule_ids: list[str] = []
     for rule in requirement_rules or []:
-        if not _rule_matches(rule=rule, entity_values=entity_values):
+        if not _rule_applies_to_entity(rule=rule, entity_values=entity_values):
+            continue
+        if not _rule_stream_matches(rule=rule, entity_values=entity_values):
             violated_rule_ids.append(str(rule["id"]))
     for rule in forbid_rules or []:
-        if _rule_matches(rule=rule, entity_values=entity_values):
+        if (
+            _rule_applies_to_entity(rule=rule, entity_values=entity_values)
+            and _rule_stream_matches(rule=rule, entity_values=entity_values)
+        ):
             violated_rule_ids.append(str(rule["id"]))
 
     if mode == ComplianceMode.BLACKLIST:
@@ -376,6 +381,40 @@ def _rule_matches(*, rule: dict[str, Any], entity_values: dict[str, Any]) -> boo
     return all(
         _clause_matches(clause=clause, entity_values=entity_values)
         for clause in rule.get("clauses") or []
+    )
+
+
+def _rule_applies_to_entity(
+    *,
+    rule: dict[str, Any],
+    entity_values: dict[str, Any],
+) -> bool:
+    selector_clauses = [
+        clause
+        for clause in rule.get("clauses") or []
+        if str(clause.get("field")) == "task_kind"
+    ]
+    if not selector_clauses:
+        return True
+    return all(
+        _clause_matches(clause=clause, entity_values=entity_values)
+        for clause in selector_clauses
+    )
+
+
+def _rule_stream_matches(
+    *,
+    rule: dict[str, Any],
+    entity_values: dict[str, Any],
+) -> bool:
+    stream_clauses = [
+        clause
+        for clause in rule.get("clauses") or []
+        if str(clause.get("field")) != "task_kind"
+    ]
+    return all(
+        _clause_matches(clause=clause, entity_values=entity_values)
+        for clause in stream_clauses
     )
 
 

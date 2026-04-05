@@ -137,3 +137,45 @@ def test_evaluate_compiled_policy_enforces_requirements_and_forbids() -> None:
     )
     assert is_violation is True
     assert violated_rule_ids == ["rule-1", "rule-2"]
+
+
+def test_requirement_task_kind_is_scope_not_global_violation() -> None:
+    _, compiled = normalize_policy_definition(
+        entity_kind="task_stream",
+        definition_json={
+            "requirements": [
+                {
+                    "label": "custom nginx banner",
+                    "task_kind": "diagnostic.command.custom",
+                    "stdout_pattern": "Welcome to nginx",
+                }
+            ],
+        },
+        available_hosts=[],
+    )
+
+    is_violation, violated_rule_ids = _evaluate_compiled_policy(
+        compiled_json=compiled,
+        mode=ComplianceMode.BLACKLIST,
+        entity_values={
+            "task_kind": "host.system_profile",
+            "input_text": "",
+            "stdout_text": "",
+            "stderr_text": "",
+        },
+    )
+    assert is_violation is False
+    assert violated_rule_ids == []
+
+    is_violation, violated_rule_ids = _evaluate_compiled_policy(
+        compiled_json=compiled,
+        mode=ComplianceMode.BLACKLIST,
+        entity_values={
+            "task_kind": "diagnostic.command.custom",
+            "input_text": "curl https://example.internal",
+            "stdout_text": "",
+            "stderr_text": "",
+        },
+    )
+    assert is_violation is True
+    assert violated_rule_ids == ["rule-1"]
