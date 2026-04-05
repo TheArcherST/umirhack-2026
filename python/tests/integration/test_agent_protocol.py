@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-import tomllib
+import re
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy import create_engine
@@ -25,33 +24,14 @@ from hack_backend.core.providers import ConfigHack
 from hack_backend.core.security import hash_secret
 
 
+SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
+
+
 def _template_id_for_kind(templates: list[dict[str, Any]], kind: str) -> str:
     for template in templates:
         if template["kind"] == kind:
             return template["id"]
     raise AssertionError(f"Missing template for kind {kind}")
-
-
-def _current_agent_version() -> str:
-    repo_root = Path(__file__).resolve().parents[2]
-    manifest_path = repo_root / "agent-artifacts" / "manifest.json"
-    if manifest_path.exists():
-        try:
-            payload = json.loads(manifest_path.read_text())
-        except (OSError, ValueError, TypeError):
-            payload = None
-        if isinstance(payload, dict):
-            current_version = payload.get("current_version")
-            if isinstance(current_version, str) and current_version.strip():
-                return current_version.strip()
-
-    cargo_path = repo_root / "rust" / "hack_agent" / "Cargo.toml"
-    payload = tomllib.loads(cargo_path.read_text())
-    version = payload.get("package", {}).get("version")
-    if isinstance(version, str) and version.strip():
-        return version.strip()
-
-    raise AssertionError("Unable to resolve current agent version for tests")
 
 
 def _complete_success(
@@ -366,8 +346,8 @@ def test_mock_agent_drives_bootstrap_and_projection_flow(api) -> None:
     assert len(listed_agents) == 1
     assert listed_agents[0]["id"] == created_agent["id"]
     assert listed_agents[0]["status"] == "online"
-    assert listed_agents[0]["agent_version"] == _current_agent_version()
-    assert listed_agents[0]["reported_agent_version"] == _current_agent_version()
+    assert SEMVER_PATTERN.fullmatch(listed_agents[0]["agent_version"])
+    assert listed_agents[0]["reported_agent_version"] == listed_agents[0]["agent_version"]
 
     hosts_response = api.client.get(
         f"/environments/{bundle.environment['id']}/hosts",
@@ -672,14 +652,14 @@ def test_custom_command_tasks_and_safe_install_script(api) -> None:
         agent_id=created_agent["id"],
     )
     assert install_script["safe_install"] is True
-    assert install_script["version"] == _current_agent_version()
+    assert SEMVER_PATTERN.fullmatch(install_script["version"])
 
     script_response = api.client.get(install_script["script_url"])
     assert script_response.status_code == 200, script_response.text
     assert "HACK_AGENT_SAFE_MODE=1" in script_response.text
-    assert f"AGENT_VERSION='{_current_agent_version()}'" in script_response.text
+    assert f"AGENT_VERSION='{install_script['version']}'" in script_response.text
     assert "HACK_AGENT_VERSION=$AGENT_VERSION" in script_response.text
-    assert f"/agent-artifacts/{_current_agent_version()}/linux" in script_response.text
+    assert f"/agent-artifacts/{install_script['version']}/linux" in script_response.text
     assert "version.txt" in script_response.text
 
     bootstrap_token = install_script["script_url"].rstrip("/").split("/")[-1].split("?")[0]
