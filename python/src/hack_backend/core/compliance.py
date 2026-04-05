@@ -68,19 +68,36 @@ def normalize_policy_definition(
         )
 
     definition = dict(definition_json or {})
-    raw_rules = definition.get("rules")
-    if not isinstance(raw_rules, list) or not raw_rules:
+    raw_requirements = definition.get("requirements")
+    raw_forbids = definition.get("forbids")
+    legacy_rules = definition.get("rules")
+
+    requirements_input = (
+        raw_requirements if isinstance(raw_requirements, list) else []
+    )
+    forbids_input = raw_forbids if isinstance(raw_forbids, list) else []
+    if not requirements_input and not forbids_input and isinstance(legacy_rules, list):
+        forbids_input = legacy_rules
+
+    if not requirements_input and not forbids_input:
         raise ComplianceValidationError(
             "Compliance policy must contain at least one rule"
         )
 
-    normalized_rules = [
+    normalized_requirements = [
         _normalize_task_stream_rule(index=index, raw_rule=raw_rule)
-        for index, raw_rule in enumerate(raw_rules)
+        for index, raw_rule in enumerate(requirements_input)
     ]
-    return {"rules": normalized_rules}, {
+    normalized_forbids = [
+        _normalize_task_stream_rule(index=index + len(normalized_requirements), raw_rule=raw_rule)
+        for index, raw_rule in enumerate(forbids_input)
+    ]
+    return {"requirements": normalized_requirements, "forbids": normalized_forbids}, {
         "entity_kind": entity_kind,
-        "rules": [_compile_task_stream_rule(rule) for rule in normalized_rules],
+        "requirements": [
+            _compile_task_stream_rule(rule) for rule in normalized_requirements
+        ],
+        "forbids": [_compile_task_stream_rule(rule) for rule in normalized_forbids],
     }
 
 
@@ -303,7 +320,7 @@ def _matched_rule_labels(
 ) -> list[str]:
     labels_by_id = {
         str(rule.get("id")): str(rule.get("label") or rule.get("id"))
-        for rule in (definition_json or {}).get("rules") or []
+        for rule in _all_definition_rules(definition_json)
         if isinstance(rule, dict)
     }
     return [
@@ -312,20 +329,47 @@ def _matched_rule_labels(
     ]
 
 
+def _all_definition_rules(definition_json: dict[str, Any] | None) -> list[dict[str, Any]]:
+    definition = definition_json or {}
+    requirements = definition.get("requirements")
+    forbids = definition.get("forbids")
+    legacy_rules = definition.get("rules")
+
+    if isinstance(requirements, list) or isinstance(forbids, list):
+        return [
+            *(requirements if isinstance(requirements, list) else []),
+            *(forbids if isinstance(forbids, list) else []),
+        ]
+    if isinstance(legacy_rules, list):
+        return legacy_rules
+    return []
+
+
 def _evaluate_compiled_policy(
     *,
     compiled_json: dict[str, Any],
     mode: ComplianceMode,
     entity_values: dict[str, Any],
 ) -> tuple[bool, list[str]]:
-    matched_rule_ids: list[str] = []
-    for rule in compiled_json.get("rules") or []:
+    requirement_rules = compiled_json.get("requirements")
+    forbid_rules = compiled_json.get("forbids")
+    legacy_rules = compiled_json.get("rules")
+
+    if not isinstance(requirement_rules, list) and not isinstance(forbid_rules, list):
+        requirement_rules = []
+        forbid_rules = legacy_rules if isinstance(legacy_rules, list) else []
+
+    violated_rule_ids: list[str] = []
+    for rule in requirement_rules or []:
+        if not _rule_matches(rule=rule, entity_values=entity_values):
+            violated_rule_ids.append(str(rule["id"]))
+    for rule in forbid_rules or []:
         if _rule_matches(rule=rule, entity_values=entity_values):
-            matched_rule_ids.append(str(rule["id"]))
+            violated_rule_ids.append(str(rule["id"]))
 
     if mode == ComplianceMode.BLACKLIST:
-        return bool(matched_rule_ids), matched_rule_ids
-    return not matched_rule_ids, matched_rule_ids
+        return bool(violated_rule_ids), violated_rule_ids
+    return not violated_rule_ids, violated_rule_ids
 
 
 def _rule_matches(*, rule: dict[str, Any], entity_values: dict[str, Any]) -> bool:

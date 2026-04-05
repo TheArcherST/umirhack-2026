@@ -188,6 +188,12 @@ export interface TaskStreamComplianceRuleDefinition {
     stderr_negated: boolean
 }
 
+export interface TaskStreamComplianceDefinition {
+    requirements?: TaskStreamComplianceRuleDefinition[]
+    forbids?: TaskStreamComplianceRuleDefinition[]
+    rules?: TaskStreamComplianceRuleDefinition[]
+}
+
 export interface CompliancePolicy {
     id: string
     environment_id: string
@@ -199,9 +205,7 @@ export interface CompliancePolicy {
     current_revision_id: string | null
     revision_no: number | null
     rule_count: number
-    definition_json: {
-        rules: TaskStreamComplianceRuleDefinition[]
-    }
+    definition_json: TaskStreamComplianceDefinition
     created_at: string
 }
 

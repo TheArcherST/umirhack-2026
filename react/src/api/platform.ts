@@ -9,7 +9,7 @@ import type {
     ComplianceMode,
     CompliancePolicy,
     ComplianceEntityKind,
-    TaskStreamComplianceRuleDefinition,
+    TaskStreamComplianceDefinition,
     CreateAgentPayload,
     CreateEnvironmentPayload,
     CreateProjectPayload,
@@ -1152,9 +1152,7 @@ export interface CreateCompliancePolicyPayload {
     mode: ComplianceMode
     description?: string
     is_enabled?: boolean
-    definition_json: {
-        rules: TaskStreamComplianceRuleDefinition[]
-    }
+    definition_json: TaskStreamComplianceDefinition
 }
 
 export interface PatchCompliancePolicyPayload {
@@ -1163,9 +1161,7 @@ export interface PatchCompliancePolicyPayload {
     mode?: ComplianceMode
     description?: string
     is_enabled?: boolean
-    definition_json?: {
-        rules: TaskStreamComplianceRuleDefinition[]
-    }
+    definition_json?: TaskStreamComplianceDefinition
 }
 
 export async function stubCreateCompliancePolicy(

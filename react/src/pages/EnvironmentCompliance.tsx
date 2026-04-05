@@ -37,6 +37,7 @@ import type {
   ComplianceEvent,
   ComplianceFinding,
   CompliancePolicy,
+  TaskStreamComplianceDefinition,
   TaskTemplate,
   TaskStreamComplianceRuleDefinition,
 } from '@/api/types'
@@ -100,6 +101,31 @@ function hydrateRuleDraft(rule: Partial<TaskStreamRuleDraft>): TaskStreamRuleDra
       ? rule.stderr_pattern.trim()
       : null,
     stderr_negated: Boolean(rule.stderr_negated),
+  }
+}
+
+function extractRuleGroups(
+  definition: TaskStreamComplianceDefinition | undefined | null,
+): {
+  requirements: TaskStreamRuleDraft[]
+  forbids: TaskStreamRuleDraft[]
+} {
+  const requirements = Array.isArray(definition?.requirements)
+    ? definition.requirements.map(hydrateRuleDraft)
+    : []
+  const forbids = Array.isArray(definition?.forbids)
+    ? definition.forbids.map(hydrateRuleDraft)
+    : []
+
+  if (requirements.length > 0 || forbids.length > 0) {
+    return { requirements, forbids }
+  }
+
+  return {
+    requirements: [],
+    forbids: Array.isArray(definition?.rules)
+      ? definition.rules.map(hydrateRuleDraft)
+      : [],
   }
 }
 
@@ -306,14 +332,19 @@ function CompliancePanel({
   const { t } = useI18n()
   const queryClient = useQueryClient()
   const [isEnabled, setIsEnabled] = useState(policy?.is_enabled ?? true)
-  const [rules, setRules] = useState<TaskStreamRuleDraft[]>(
-    (policy?.definition_json.rules ?? []).map(hydrateRuleDraft),
+  const [requirements, setRequirements] = useState<TaskStreamRuleDraft[]>(
+    extractRuleGroups(policy?.definition_json).requirements,
+  )
+  const [forbids, setForbids] = useState<TaskStreamRuleDraft[]>(
+    extractRuleGroups(policy?.definition_json).forbids,
   )
   const [error, setError] = useState('')
 
   useEffect(() => {
+    const groups = extractRuleGroups(policy?.definition_json)
     setIsEnabled(policy?.is_enabled ?? true)
-    setRules((policy?.definition_json.rules ?? []).map(hydrateRuleDraft))
+    setRequirements(groups.requirements)
+    setForbids(groups.forbids)
     setError('')
   }, [policy])
 
@@ -326,7 +357,18 @@ function CompliancePanel({
   const saveMutation = useMutation({
     mutationFn: async () => {
       const definition_json = {
-        rules: rules.map((rule) => ({
+        requirements: requirements.map((rule) => ({
+          id: rule.id,
+          label: rule.label.trim(),
+          task_kind: rule.task_kind?.trim() || null,
+          input_pattern: rule.input_pattern === '' ? null : rule.input_pattern,
+          input_negated: Boolean(rule.input_negated),
+          stdout_pattern: rule.stdout_pattern === '' ? null : rule.stdout_pattern,
+          stdout_negated: Boolean(rule.stdout_negated),
+          stderr_pattern: rule.stderr_pattern === '' ? null : rule.stderr_pattern,
+          stderr_negated: Boolean(rule.stderr_negated),
+        })),
+        forbids: forbids.map((rule) => ({
           id: rule.id,
           label: rule.label.trim(),
           task_kind: rule.task_kind?.trim() || null,
@@ -379,7 +421,8 @@ function CompliancePanel({
     },
   })
 
-  const isSubmitDisabled = rules.length === 0 || rules.some((rule) =>
+  const allRules = [...requirements, ...forbids]
+  const isSubmitDisabled = allRules.length === 0 || allRules.some((rule) =>
     !rule.input_pattern
     && !rule.stdout_pattern
     && !rule.stderr_pattern
@@ -409,10 +452,6 @@ function CompliancePanel({
                 {t('compliance.enabled')}
               </label>
             </div>
-            <Button type="button" size="sm" onClick={() => setRules((prev) => [...prev, newTaskStreamRule()])}>
-              <Plus size={13} className="mr-1.5" />
-              {t('compliance.addRule')}
-            </Button>
             <Button
               type="button"
               size="sm"
@@ -440,18 +479,61 @@ function CompliancePanel({
           </div>
         </div>
 
-        <TaskStreamRuleTable
-          rules={rules}
-          onChange={(index, nextRule) =>
-            setRules((prev) =>
-              prev.map((item, itemIndex) => (itemIndex === index ? nextRule : item)),
-            )
-          }
-          onDelete={(index) =>
-            setRules((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
-          }
-          t={t}
-        />
+        <div className="space-y-5">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold">{t('compliance.requirements')}</h3>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setRequirements((prev) => [...prev, newTaskStreamRule()])}
+              >
+                <Plus size={13} className="mr-1.5" />
+                {t('compliance.addRequirement')}
+              </Button>
+            </div>
+            <TaskStreamRuleTable
+              rules={requirements}
+              onChange={(index, nextRule) =>
+                setRequirements((prev) =>
+                  prev.map((item, itemIndex) => (itemIndex === index ? nextRule : item)),
+                )
+              }
+              onDelete={(index) =>
+                setRequirements((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
+              }
+              t={t}
+            />
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold">{t('compliance.forbids')}</h3>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setForbids((prev) => [...prev, newTaskStreamRule()])}
+              >
+                <Plus size={13} className="mr-1.5" />
+                {t('compliance.addForbid')}
+              </Button>
+            </div>
+            <TaskStreamRuleTable
+              rules={forbids}
+              onChange={(index, nextRule) =>
+                setForbids((prev) =>
+                  prev.map((item, itemIndex) => (itemIndex === index ? nextRule : item)),
+                )
+              }
+              onDelete={(index) =>
+                setForbids((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
+              }
+              t={t}
+            />
+          </div>
+        </div>
 
         {error && (
           <p className="text-xs text-destructive font-mono">{error}</p>
@@ -474,7 +556,7 @@ function CompliancePanel({
                     {t('compliance.subject')}
                   </th>
                   <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">
-                    {t('compliance.matchedRules')}
+                    {t('compliance.violatedRules')}
                   </th>
                   <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">
                     {t('dashboard.time')}
@@ -498,7 +580,7 @@ function CompliancePanel({
                           </Badge>
                         ))}
                         {finding.matched_rule_labels.length === 0 && (
-                          <span className="text-[11px] text-muted-foreground">{t('compliance.noMatchedRule')}</span>
+                          <span className="text-[11px] text-muted-foreground">{t('compliance.noViolatedRule')}</span>
                         )}
                       </div>
                     </td>

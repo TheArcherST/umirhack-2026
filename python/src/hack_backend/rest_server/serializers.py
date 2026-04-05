@@ -260,7 +260,20 @@ def schedule_rule_to_dto(
         created_at=rule.created_at,
         task_name=template.name,
         task_kind=template.kind,
-    )
+)
+
+
+def _compliance_rule_count(definition_json: dict[str, Any] | None) -> int:
+    definition = definition_json or {}
+    requirements = definition.get("requirements")
+    forbids = definition.get("forbids")
+    legacy_rules = definition.get("rules")
+
+    if isinstance(requirements, list) or isinstance(forbids, list):
+        return len(requirements or []) + len(forbids or [])
+    if isinstance(legacy_rules, list):
+        return len(legacy_rules)
+    return 0
 
 
 def compliance_catalog_item_to_dto(
@@ -287,7 +300,7 @@ def compliance_policy_with_revision_to_dto(
         is_enabled=bool(policy.is_enabled),
         current_revision_id=revision.id if revision is not None else None,
         revision_no=revision.revision_no if revision is not None else None,
-        rule_count=len((revision.definition_json or {}).get("rules") or [])
+        rule_count=_compliance_rule_count(revision.definition_json)
         if revision is not None
         else 0,
         definition_json=revision.definition_json or {} if revision is not None else {},

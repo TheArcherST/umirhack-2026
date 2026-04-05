@@ -450,9 +450,21 @@ class ComplianceService:
         revision: CompliancePolicyRevision,
         matched_rule_ids: list[str],
     ) -> list[str]:
+        definition = revision.definition_json or {}
+        requirements = definition.get("requirements")
+        forbids = definition.get("forbids")
+        legacy_rules = definition.get("rules")
+        all_rules = (
+            [
+                *(requirements if isinstance(requirements, list) else []),
+                *(forbids if isinstance(forbids, list) else []),
+            ]
+            if isinstance(requirements, list) or isinstance(forbids, list)
+            else (legacy_rules if isinstance(legacy_rules, list) else [])
+        )
         labels_by_id = {
             str(rule.get("id")): str(rule.get("label") or rule.get("id"))
-            for rule in (revision.definition_json or {}).get("rules") or []
+            for rule in all_rules
             if isinstance(rule, dict)
         }
         return [
