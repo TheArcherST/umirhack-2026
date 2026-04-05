@@ -4,6 +4,7 @@ import {
   LayoutDashboard, Server, ClipboardList, ArrowLeft,
   LayoutDashboard as DashboardIcon,
   CalendarClock,
+  KeyRound,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useI18n } from '@/i18n'
@@ -21,6 +22,7 @@ export function EnvironmentSidebar() {
     { to: `/environments/${envId}/hosts`, icon: Server, labelKey: 'env.hosts' },
     { to: `/environments/${envId}/tasks`, icon: ClipboardList, labelKey: 'env.tasks' },
     { to: `/environments/${envId}/schedule`, icon: CalendarClock, labelKey: 'env.schedule' },
+    { to: `/environments/${envId}/api-keys`, icon: KeyRound, labelKey: 'env.apiKeys' },
   ]
 
   return (

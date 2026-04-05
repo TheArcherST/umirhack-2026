@@ -2,8 +2,10 @@ export type AgentStatus = 'online' | 'stale' | 'offline'
 export type TaskStatus = 'pending' | 'running' | 'success' | 'failed' | 'timeout'
 export type MemberRole = 'owner' | 'admin' | 'member' | 'operator' | 'observer'
 export type EnvRole = 'operator' | 'observer'
+export type ApiKeyRole = 'operator' | 'observer'
 export type AgentOS = 'linux' | 'windows' | 'macos'
 export type InviteStatus = 'pending' | 'accepted'
+export type ApiKeyExpiry = '1d' | '7d' | '30d' | '90d' | 'never'
 
 export type TaskTemplate =
     | 'ping'
@@ -202,6 +204,32 @@ export interface EndpointSuggestion {
     source: string
     kind: 'host' | 'socket' | 'url' | 'observed'
     host_id?: string
+}
+
+export interface ApiKey {
+    id: string
+    name: string
+    role: ApiKeyRole
+    environment_id: string
+    created_by: string
+    expires_at: string | null
+    revoked_at: string | null
+    created_at: string
+    is_active: boolean
+}
+
+export interface ApiKeyCreateResponse {
+    id: string
+    name: string
+    role: ApiKeyRole
+    environment_id: string
+    key: string
+    expires_at: string | null
+    created_at: string
+}
+
+export interface ApiKeyListResponse {
+    keys: ApiKey[]
 }
 
 export interface Task {

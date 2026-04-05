@@ -18,6 +18,11 @@ class EnvironmentMemberRole(StrEnum):
     OBSERVER = "observer"
 
 
+class ApiKeyRole(StrEnum):
+    OPERATOR = "operator"
+    OBSERVER = "observer"
+
+
 class AgentStatus(StrEnum):
     ONLINE = "online"
     OFFLINE = "offline"

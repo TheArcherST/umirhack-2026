@@ -10,8 +10,10 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from hack_backend.core.models import (
+    ApiKey,
     Environment,
     EnvironmentMember,
+    EnvironmentMemberRole,
     LoginSession,
     Project,
     ProjectMember,
@@ -173,6 +175,49 @@ class AccessService:
         if login_session is None:
             raise HTTPException(status_code=401, detail="Invalid bearer token")
         return login_session
+
+    async def resolve_api_key(
+        self,
+        authorization: str | None,
+    ) -> ApiKey | None:
+        if not authorization or not authorization.startswith("Bearer "):
+            return None
+
+        token = authorization.removeprefix("Bearer ").strip()
+        if not token:
+            return None
+
+        key_hash = hash_secret(token)
+        api_key = await self.orm_session.scalar(
+            select(ApiKey)
+            .options(joinedload(ApiKey.creator))
+            .where(ApiKey.key_hash == key_hash)
+        )
+        if api_key is None:
+            return None
+
+        if not api_key.is_active:
+            if api_key.revoked_at is not None:
+                raise HTTPException(status_code=401, detail="API key has been revoked")
+            raise HTTPException(status_code=401, detail="API key has expired")
+
+        return api_key
+
+    async def require_environment_access_by_api_key(
+        self,
+        environment_id: str,
+        api_key: ApiKey,
+    ) -> Environment:
+        environment = await self.orm_session.get(Environment, environment_id)
+        if environment is None:
+            raise HTTPException(status_code=404, detail="Environment not found")
+
+        if api_key.environment_id != environment_id:
+            raise HTTPException(
+                status_code=403,
+                detail="API key is not scoped to this environment",
+            )
+        return environment
 
     async def require_project_member(
         self,

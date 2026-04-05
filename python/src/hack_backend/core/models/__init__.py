@@ -1,9 +1,11 @@
 from .agent import Agent
 from .agent_bootstrap_token import AgentBootstrapToken
+from .api_key import ApiKey
 from .login_session import LoginSession
 from .environment import Environment
 from .enums import (
     AgentStatus,
+    ApiKeyRole,
     EnvironmentMemberRole,
     InviteStatus,
     ProjectMemberRole,
@@ -25,6 +27,8 @@ __all__ = [
     "Agent",
     "AgentBootstrapToken",
     "AgentStatus",
+    "ApiKey",
+    "ApiKeyRole",
     "Environment",
     "EnvironmentMember",
     "EnvironmentMemberRole",
