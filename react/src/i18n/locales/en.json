@@ -452,6 +452,8 @@
     "noMatchedRule": "No explicit match",
     "noViolatedRule": "No violated rule labels",
     "saveFailed": "Failed to save compliance policy",
+    "deleteRuleConfirmTitle": "Delete rule?",
+    "deleteRuleConfirmBody": "This will remove the selected rule from the current ruleset.",
     "deleteConfirm": "Delete this compliance policy? Historical evaluations and events for it will be removed.",
     "saveRuleSet": "Save rules",
     "deleteRuleSet": "Delete ruleset",

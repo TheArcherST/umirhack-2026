@@ -11,6 +11,13 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -185,12 +192,12 @@ function RegexPatternInput({
 function TaskStreamRuleTable({
   rules,
   onChange,
-  onDelete,
+  onDeleteRequest,
   t,
 }: {
   rules: TaskStreamRuleDraft[]
   onChange: (index: number, nextRule: TaskStreamRuleDraft) => void
-  onDelete: (index: number) => void
+  onDeleteRequest: (index: number) => void
   t: (key: string) => string
 }) {
   if (rules.length === 0) {
@@ -203,16 +210,16 @@ function TaskStreamRuleTable({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
-      <table className="w-full min-w-[1120px] text-sm">
+      <table className="w-full min-w-[1040px] text-sm">
         <thead>
           <tr className="border-b border-border bg-muted/20">
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.name')}</th>
-            <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.windowMinutes')}</th>
+            <th className="w-20 px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.windowMinutes')}</th>
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.taskKind')}</th>
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.inputPattern')}</th>
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.stdoutPattern')}</th>
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.stderrPattern')}</th>
-            <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">{t('common.actions')}</th>
+            <th className="w-10 px-3 py-2 text-right text-xs font-medium text-muted-foreground">{t('common.delete')}</th>
           </tr>
         </thead>
         <tbody>
@@ -225,16 +232,18 @@ function TaskStreamRuleTable({
                   placeholder={t('compliance.namePlaceholder')}
                 />
               </td>
-              <td className="px-3 py-3">
+              <td className="w-20 px-3 py-3">
                 <Input
                   type="number"
                   min={1}
+                  max={999}
                   step={1}
                   value={rule.window_minutes}
+                  className="w-16 min-w-0 font-mono text-xs"
                   onChange={(e) =>
                     onChange(index, {
                       ...rule,
-                      window_minutes: Math.max(1, Number.parseInt(e.target.value || '1', 10) || 1),
+                      window_minutes: Math.min(999, Math.max(1, Number.parseInt(e.target.value || '1', 10) || 1)),
                     })
                   }
                   placeholder={t('compliance.windowMinutesPlaceholder')}
@@ -323,10 +332,16 @@ function TaskStreamRuleTable({
                   t={t}
                 />
               </td>
-              <td className="px-3 py-3 text-right">
-                <Button type="button" size="sm" variant="ghost" onClick={() => onDelete(index)}>
-                  <Trash2 size={12} />
-                </Button>
+              <td className="w-10 px-3 py-3">
+                <div className="flex items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={() => onDeleteRequest(index)}
+                    className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-accent transition-colors"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               </td>
             </tr>
           ))}
@@ -358,6 +373,7 @@ function CompliancePanel({
   const [forbids, setForbids] = useState<TaskStreamRuleDraft[]>(
     extractRuleGroups(policy?.definition_json).forbids,
   )
+  const [deleteTarget, setDeleteTarget] = useState<{ group: 'requirements' | 'forbids'; index: number } | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -365,6 +381,7 @@ function CompliancePanel({
     setIsEnabled(policy?.is_enabled ?? true)
     setRequirements(groups.requirements)
     setForbids(groups.forbids)
+    setDeleteTarget(null)
     setError('')
   }, [policy])
 
@@ -522,9 +539,7 @@ function CompliancePanel({
                   prev.map((item, itemIndex) => (itemIndex === index ? nextRule : item)),
                 )
               }
-              onDelete={(index) =>
-                setRequirements((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
-              }
+              onDeleteRequest={(index) => setDeleteTarget({ group: 'requirements', index })}
               t={t}
             />
           </div>
@@ -549,9 +564,7 @@ function CompliancePanel({
                   prev.map((item, itemIndex) => (itemIndex === index ? nextRule : item)),
                 )
               }
-              onDelete={(index) =>
-                setForbids((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
-              }
+              onDeleteRequest={(index) => setDeleteTarget({ group: 'forbids', index })}
               t={t}
             />
           </div>
@@ -684,6 +697,35 @@ function CompliancePanel({
           </div>
         </div>
       </div>
+
+      <Dialog open={!!deleteTarget} onOpenChange={(value) => { if (!value) setDeleteTarget(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('compliance.deleteRuleConfirmTitle')}</DialogTitle>
+          </DialogHeader>
+          <p className="px-6 text-xs text-muted-foreground">{t('compliance.deleteRuleConfirmBody')}</p>
+          <DialogFooter>
+            <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                if (!deleteTarget) return
+                if (deleteTarget.group === 'requirements') {
+                  setRequirements((prev) => prev.filter((_, itemIndex) => itemIndex !== deleteTarget.index))
+                } else {
+                  setForbids((prev) => prev.filter((_, itemIndex) => itemIndex !== deleteTarget.index))
+                }
+                setDeleteTarget(null)
+              }}
+            >
+              {t('common.delete')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -452,6 +452,8 @@
     "noMatchedRule": "Явного совпадения нет",
     "noViolatedRule": "Нет подписей нарушенных правил",
     "saveFailed": "Не удалось сохранить compliance policy",
+    "deleteRuleConfirmTitle": "Удалить правило?",
+    "deleteRuleConfirmBody": "Выбранное правило будет удалено из текущего набора правил.",
     "deleteConfirm": "Удалить эту compliance policy? Её история вычислений и событий тоже будет удалена.",
     "saveRuleSet": "Сохранить правила",
     "deleteRuleSet": "Удалить набор правил",
