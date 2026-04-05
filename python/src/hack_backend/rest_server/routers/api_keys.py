@@ -1,15 +1,21 @@
+"""API keys management router for environment-scoped authentication."""
+
 from __future__ import annotations
 
 import datetime
 from datetime import UTC, timedelta
 
+from dishka import FromDishka
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
+from hack_backend.core.models import ApiKey
 from hack_backend.core.models.enums import ApiKeyRole
 from hack_backend.core.security import hash_secret, new_secret
-from hack_backend.db import async_session_maker
-from hack_backend.rest_server.providers import AuthorizedUser, FromDishka, inject
+from hack_backend.rest_server.providers import AuthorizedUser, inject
 
 router = APIRouter(prefix="/environments/{environment_id}/api-keys", tags=["api-keys"])
 
@@ -58,44 +64,40 @@ class ApiKeyListResponse(BaseModel):
 async def list_api_keys(
     environment_id: str,
     current_user: FromDishka[AuthorizedUser],
+    session: FromDishka[AsyncSession],
 ) -> ApiKeyListResponse:
-    from sqlalchemy import select
-    from sqlalchemy.orm import joinedload
-    from hack_backend.core.models import ApiKey
+    from hack_backend.core.services.access import AccessService
+    from argon2 import PasswordHasher
 
-    async with async_session_maker() as session:
-        # Check project membership first
-        from hack_backend.core.services.access import AccessService
-        from argon2 import PasswordHasher
+    access_service = AccessService(session, PasswordHasher())
+    await access_service.require_environment_member(
+        environment_id, user_id=current_user.id
+    )
 
-        access_service = AccessService(session, PasswordHasher())
-        await access_service.require_environment_member(
-            environment_id, user_id=current_user.id
-        )
+    result = await session.scalars(
+        select(ApiKey)
+        .where(ApiKey.environment_id == environment_id)
+        .options(joinedload(ApiKey.creator))
+        .order_by(ApiKey.created_at.desc())
+    )
+    keys = result.unique().all()
 
-        result = await session.scalars(
-            select(ApiKey)
-            .where(ApiKey.environment_id == environment_id)
-            .order_by(ApiKey.created_at.desc())
-        )
-        keys = result.all()
-
-        items = []
-        for key in keys:
-            items.append(
-                ApiKeyListItem(
-                    id=key.id,
-                    name=key.name,
-                    role=key.role,
-                    created_by=key.creator.username if key.creator else "unknown",
-                    expires_at=key.expires_at.isoformat() if key.expires_at else None,
-                    revoked_at=key.revoked_at.isoformat() if key.revoked_at else None,
-                    created_at=key.created_at.isoformat() if key.created_at else "",
-                    is_active=key.is_active,
-                )
+    items = []
+    for key in keys:
+        items.append(
+            ApiKeyListItem(
+                id=key.id,
+                name=key.name,
+                role=key.role,
+                created_by=key.creator.username if key.creator else "unknown",
+                expires_at=key.expires_at.isoformat() if key.expires_at else None,
+                revoked_at=key.revoked_at.isoformat() if key.revoked_at else None,
+                created_at=key.created_at.isoformat() if key.created_at else "",
+                is_active=key.is_active,
             )
+        )
 
-        return ApiKeyListResponse(keys=items)
+    return ApiKeyListResponse(keys=items)
 
 
 @router.post("", response_model=ApiKeyCreateResponse)
@@ -104,10 +106,10 @@ async def create_api_key(
     environment_id: str,
     body: ApiKeyCreateRequest,
     current_user: FromDishka[AuthorizedUser],
+    session: FromDishka[AsyncSession],
 ) -> ApiKeyCreateResponse:
-    from sqlalchemy import select
-    from sqlalchemy.orm import joinedload
-    from hack_backend.core.models import ApiKey
+    from hack_backend.core.services.access import AccessService
+    from argon2 import PasswordHasher
 
     if body.expiry not in EXPIRY_OPTIONS:
         raise HTTPException(
@@ -115,43 +117,35 @@ async def create_api_key(
             detail=f"Invalid expiry. Must be one of: {', '.join(EXPIRY_OPTIONS.keys())}",
         )
 
-    async with async_session_maker() as session:
-        # Check project membership first
-        from hack_backend.core.services.access import AccessService
-        from argon2 import PasswordHasher
+    access_service = AccessService(session, PasswordHasher())
+    await access_service.require_environment_member(
+        environment_id, user_id=current_user.id
+    )
 
-        access_service = AccessService(session, PasswordHasher())
-        await access_service.require_environment_member(
-            environment_id, user_id=current_user.id
-        )
+    raw_key = new_secret(48)
+    key_hash = hash_secret(raw_key)
+    expires_at = EXPIRY_OPTIONS[body.expiry]()
 
-        # Generate raw key
-        raw_key = new_secret(48)
-        key_hash = hash_secret(raw_key)
+    api_key = ApiKey(
+        key_hash=key_hash,
+        name=body.name,
+        environment_id=environment_id,
+        role=body.role,
+        created_by=current_user.id,
+        expires_at=expires_at,
+    )
+    session.add(api_key)
+    await session.flush()
 
-        expires_at = EXPIRY_OPTIONS[body.expiry]()
-
-        api_key = ApiKey(
-            key_hash=key_hash,
-            name=body.name,
-            environment_id=environment_id,
-            role=body.role,
-            created_by=current_user.id,
-            expires_at=expires_at,
-        )
-        session.add(api_key)
-        await session.flush()
-        await session.refresh(api_key)
-
-        return ApiKeyCreateResponse(
-            id=api_key.id,
-            name=api_key.name,
-            role=api_key.role,
-            environment_id=api_key.environment_id,
-            key=raw_key,  # Only time the raw key is returned
-            expires_at=api_key.expires_at.isoformat() if api_key.expires_at else None,
-            created_at=api_key.created_at.isoformat() if api_key.created_at else "",
-        )
+    return ApiKeyCreateResponse(
+        id=api_key.id,
+        name=api_key.name,
+        role=api_key.role,
+        environment_id=api_key.environment_id,
+        key=raw_key,
+        expires_at=api_key.expires_at.isoformat() if api_key.expires_at else None,
+        created_at=api_key.created_at.isoformat() if api_key.created_at else "",
+    )
 
 
 @router.post("/{key_id}/revoke")
@@ -160,29 +154,27 @@ async def revoke_api_key(
     environment_id: str,
     key_id: str,
     current_user: FromDishka[AuthorizedUser],
+    session: FromDishka[AsyncSession],
 ) -> dict:
-    from hack_backend.core.models import ApiKey
+    from hack_backend.core.services.access import AccessService
+    from argon2 import PasswordHasher
 
-    async with async_session_maker() as session:
-        from hack_backend.core.services.access import AccessService
-        from argon2 import PasswordHasher
+    access_service = AccessService(session, PasswordHasher())
+    await access_service.require_environment_member(
+        environment_id, user_id=current_user.id
+    )
 
-        access_service = AccessService(session, PasswordHasher())
-        await access_service.require_environment_member(
-            environment_id, user_id=current_user.id
-        )
+    api_key = await session.get(ApiKey, key_id)
+    if api_key is None or api_key.environment_id != environment_id:
+        raise HTTPException(status_code=404, detail="API key not found")
 
-        api_key = await session.get(ApiKey, key_id)
-        if api_key is None or api_key.environment_id != environment_id:
-            raise HTTPException(status_code=404, detail="API key not found")
+    if api_key.revoked_at is not None:
+        raise HTTPException(status_code=400, detail="API key already revoked")
 
-        if api_key.revoked_at is not None:
-            raise HTTPException(status_code=400, detail="API key already revoked")
+    api_key.revoked_at = datetime.datetime.now(tz=UTC)
+    await session.flush()
 
-        api_key.revoked_at = datetime.datetime.now(tz=UTC)
-        await session.flush()
-
-        return {"status": "revoked"}
+    return {"status": "revoked"}
 
 
 @router.delete("/{key_id}")
@@ -191,23 +183,21 @@ async def delete_api_key(
     environment_id: str,
     key_id: str,
     current_user: FromDishka[AuthorizedUser],
+    session: FromDishka[AsyncSession],
 ) -> dict:
-    from hack_backend.core.models import ApiKey
+    from hack_backend.core.services.access import AccessService
+    from argon2 import PasswordHasher
 
-    async with async_session_maker() as session:
-        from hack_backend.core.services.access import AccessService
-        from argon2 import PasswordHasher
+    access_service = AccessService(session, PasswordHasher())
+    await access_service.require_environment_member(
+        environment_id, user_id=current_user.id
+    )
 
-        access_service = AccessService(session, PasswordHasher())
-        await access_service.require_environment_member(
-            environment_id, user_id=current_user.id
-        )
+    api_key = await session.get(ApiKey, key_id)
+    if api_key is None or api_key.environment_id != environment_id:
+        raise HTTPException(status_code=404, detail="API key not found")
 
-        api_key = await session.get(ApiKey, key_id)
-        if api_key is None or api_key.environment_id != environment_id:
-            raise HTTPException(status_code=404, detail="API key not found")
+    await session.delete(api_key)
+    await session.flush()
 
-        await session.delete(api_key)
-        await session.flush()
-
-        return {"status": "deleted"}
+    return {"status": "deleted"}

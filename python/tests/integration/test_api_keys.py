@@ -2,23 +2,44 @@
 
 from __future__ import annotations
 
-import httpx
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session
 
+from hack_backend.core.providers import ConfigHack
 from tests.integration.conftest import ApiDriver
 
 
-def _grant_project_membership(project_id: str, user_id: int, role: str) -> None:
+def _grant_project_membership(
+    *,
+    project_id: str,
+    user_id: int,
+    role: str = "member",
+) -> None:
     """Directly insert a project membership row for test setup."""
-    import sqlite3
-    import os
-    db_path = os.environ.get("HACK_TEST_DB_PATH", "test.db")
-    conn = sqlite3.connect(db_path)
-    conn.execute(
-        "INSERT OR IGNORE INTO project_member (project_id, user_id, role, invite_status) VALUES (?, ?, ?, 'accepted')",
-        (project_id, user_id, role),
+    config = ConfigHack()
+    engine = create_engine(
+        config.postgres.get_sqlalchemy_url("psycopg", is_test_database=True)
     )
-    conn.commit()
-    conn.close()
+    try:
+        with Session(engine) as session:
+            from hack_backend.core.models import ProjectMember, ProjectMemberRole
+            from hack_backend.core.models.enums import InviteStatus
+
+            existing = session.get(
+                ProjectMember,
+                {"project_id": project_id, "user_id": user_id},
+            )
+            if existing is None:
+                membership = ProjectMember(
+                    project_id=project_id,
+                    user_id=user_id,
+                    role=ProjectMemberRole.MEMBER,
+                    invite_status=InviteStatus.ACCEPTED,
+                )
+                session.add(membership)
+                session.commit()
+    finally:
+        engine.dispose()
 
 
 def test_create_api_key_returns_raw_key_once(api: ApiDriver) -> None:
