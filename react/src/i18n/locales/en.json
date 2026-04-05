@@ -372,8 +372,10 @@
     "newPolicy": "New policy",
     "editPolicy": "Edit policy",
     "policyCount": "Policies",
+    "configuredTypes": "Configured types",
     "openViolations": "Open violations",
     "allowlists": "Allowlists",
+    "allowanceModes": "Allowance modes",
     "recentEvents": "Recent events",
     "policies": "Policies",
     "policy": "Policy",
@@ -407,11 +409,18 @@
     "origin": "Origin",
     "events": "Events",
     "noPolicies": "No compliance policies yet",
+    "noRulesConfigured": "No rules configured yet",
     "noViolations": "No active violations",
     "noEvents": "No compliance events yet",
     "noMatchedRule": "No explicit match",
     "saveFailed": "Failed to save compliance policy",
     "deleteConfirm": "Delete this compliance policy? Historical evaluations and events for it will be removed.",
+    "saveRuleSet": "Save rules",
+    "deleteRuleSet": "Delete ruleset",
+    "deleteRuleSetConfirm": "Delete this ruleset? Historical events will remain, but current findings will be cleared.",
+    "ruleSetHint": "Each compliance type now uses a single shared ruleset with one interpretation mode.",
+    "legacyPolicies": "Legacy rule sets detected",
+    "legacyPoliciesHint": "This type still has older extra policy sets. Remove them to keep one clean rules table per type.",
     "moreRules": "+{count} more rules",
     "anySource": "Any source",
     "anyTarget": "Any target",
@@ -423,8 +432,8 @@
       "endpoint": "Endpoint string"
     },
     "modes": {
-      "allowlist": "allowlist",
-      "blacklist": "blacklist"
+      "allowlist": "allowance",
+      "blacklist": "prohibition"
     },
     "eventKinds": {
       "rise": "violation opened",

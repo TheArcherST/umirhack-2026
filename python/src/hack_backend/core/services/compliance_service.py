@@ -99,6 +99,10 @@ class ComplianceService:
         actor_user_id: int | None = None,
     ) -> CompliancePolicy:
         await self._ensure_environment_exists(environment_id)
+        await self._ensure_entity_kind_is_available(
+            environment_id=environment_id,
+            entity_kind=entity_kind,
+        )
         available_hosts = await self._environment_hosts(environment_id)
         normalized_definition, compiled_definition = self._normalize_definition(
             entity_kind=entity_kind,
@@ -150,6 +154,11 @@ class ComplianceService:
         current_revision = await self.get_policy_revision(policy.current_revision_id)
         next_entity_kind = entity_kind or policy.entity_kind
         next_mode = self._normalize_mode(mode) if mode is not None else policy.mode
+        await self._ensure_entity_kind_is_available(
+            environment_id=policy.environment_id,
+            entity_kind=next_entity_kind,
+            exclude_policy_id=policy.id,
+        )
         next_definition_json = (
             definition_json
             if definition_json is not None
@@ -395,6 +404,35 @@ class ComplianceService:
                 select(Host).where(Host.environment_id == environment_id)
             )
         )
+
+    async def _ensure_entity_kind_is_available(
+        self,
+        *,
+        environment_id: str,
+        entity_kind: str,
+        exclude_policy_id: str | None = None,
+    ) -> None:
+        existing_policies = await self._environment_policies(
+            environment_id,
+            include_deleted=False,
+        )
+        conflict = next(
+            (
+                policy
+                for policy in existing_policies
+                if policy.entity_kind == entity_kind
+                and policy.id != exclude_policy_id
+            ),
+            None,
+        )
+        if conflict is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Only one compliance rule set is allowed per entity type"
+                    " in an environment"
+                ),
+            )
 
     def _normalize_definition(
         self,

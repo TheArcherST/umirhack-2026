@@ -15,4 +15,4 @@ https://lvalue.linkoo.dev
 
 ## Концептуальное описание предметной области
 
-Его можно найти в [whitepaper](./whitepaper.md).
+Ео можно найти в [whitepaper](./whitepaper.md).

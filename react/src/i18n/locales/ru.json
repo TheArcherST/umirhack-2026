@@ -372,8 +372,10 @@
     "newPolicy": "Новая политика",
     "editPolicy": "Редактировать политику",
     "policyCount": "Политики",
+    "configuredTypes": "Настроенные типы",
     "openViolations": "Открытые нарушения",
     "allowlists": "Allowlists",
+    "allowanceModes": "Разрешающие режимы",
     "recentEvents": "Последние события",
     "policies": "Политики",
     "policy": "Политика",
@@ -407,11 +409,18 @@
     "origin": "Источник",
     "events": "События",
     "noPolicies": "Пока нет compliance policies",
+    "noRulesConfigured": "Правила пока не настроены",
     "noViolations": "Активных нарушений нет",
     "noEvents": "Событий compliance пока нет",
     "noMatchedRule": "Явного совпадения нет",
     "saveFailed": "Не удалось сохранить compliance policy",
     "deleteConfirm": "Удалить эту compliance policy? Её история вычислений и событий тоже будет удалена.",
+    "saveRuleSet": "Сохранить правила",
+    "deleteRuleSet": "Удалить набор правил",
+    "deleteRuleSetConfirm": "Удалить этот набор правил? История событий сохранится, но текущее состояние очистится.",
+    "ruleSetHint": "У каждого compliance-типа теперь один общий набор правил и один режим интерпретации.",
+    "legacyPolicies": "Обнаружены legacy-наборы правил",
+    "legacyPoliciesHint": "У этого типа остались старые дополнительные policy sets. Удали их, чтобы оставить одну чистую таблицу правил на тип.",
     "moreRules": "+ещё {count} правил",
     "anySource": "Любой источник",
     "anyTarget": "Любая цель",
@@ -423,8 +432,8 @@
       "endpoint": "Строковый endpoint"
     },
     "modes": {
-      "allowlist": "allowlist",
-      "blacklist": "blacklist"
+      "allowlist": "разрешающий",
+      "blacklist": "запрещающий"
     },
     "eventKinds": {
       "rise": "нарушение открыто",
