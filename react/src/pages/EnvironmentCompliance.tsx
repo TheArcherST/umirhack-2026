@@ -210,7 +210,7 @@ function TaskStreamRuleTable({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
-      <table className="w-full min-w-[1040px] text-sm">
+      <table className="w-full min-w-[1010px] text-sm">
         <thead>
           <tr className="border-b border-border bg-muted/20">
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.name')}</th>
@@ -219,7 +219,9 @@ function TaskStreamRuleTable({
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.inputPattern')}</th>
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.stdoutPattern')}</th>
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.stderrPattern')}</th>
-            <th className="w-10 px-3 py-2 text-right text-xs font-medium text-muted-foreground">{t('common.delete')}</th>
+            <th className="w-8 px-2 py-2 text-right text-xs font-medium text-muted-foreground">
+              <span className="sr-only">{t('common.delete')}</span>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -332,7 +334,7 @@ function TaskStreamRuleTable({
                   t={t}
                 />
               </td>
-              <td className="w-10 px-3 py-3">
+              <td className="w-8 px-2 py-3">
                 <div className="flex items-center justify-end">
                   <button
                     type="button"
