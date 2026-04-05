@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import create_engine
@@ -60,7 +60,7 @@ def _expire_current_finding(policy_id: str, subject_key: str) -> None:
                 ComplianceCurrentFinding.policy_id == policy_id,
                 ComplianceCurrentFinding.subject_key == subject_key,
             ).one()
-            finding.expires_at = datetime.now(tz=UTC) - timedelta(minutes=1)
+            finding.expires_at = datetime.now(tz=UTC)
             session.commit()
     finally:
         engine.dispose()
