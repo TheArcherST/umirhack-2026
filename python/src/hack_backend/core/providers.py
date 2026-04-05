@@ -77,6 +77,7 @@ class ConfigEmail(BaseModel):
     template_name: str = ""
     password_change_template_name: str = ""
     invite_template_name: str = ""
+    compliance_event_template_name: str = "compliance-event"
     invite_validity_hours: int = Field(default=48, ge=1)
     app_name: str = "Madrigal Diagnostics"
     code_validity_minutes: int = Field(default=5, ge=1)

@@ -123,6 +123,7 @@ async def send_compliance_event_email_task(
         matched_rule_labels=matched_rule_labels,
         api_key=email_config.resend_api_key,
         from_address=email_config.from_address,
+        template_name=email_config.compliance_event_template_name,
         compliance_url=compliance_url,
         app_name=email_config.app_name,
     )
