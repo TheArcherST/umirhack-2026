@@ -23,8 +23,8 @@ export function EnvironmentSidebar() {
     { to: `/environments/${envId}/hosts`, icon: Server, labelKey: 'env.hosts' },
     { to: `/environments/${envId}/tasks`, icon: ClipboardList, labelKey: 'env.tasks' },
     { to: `/environments/${envId}/schedule`, icon: CalendarClock, labelKey: 'env.schedule' },
-    { to: `/environments/${envId}/api-keys`, icon: KeyRound, labelKey: 'env.apiKeys' },
     { to: `/environments/${envId}/compliance`, icon: ShieldCheck, labelKey: 'env.compliance' },
+    { to: `/environments/${envId}/api-keys`, icon: KeyRound, labelKey: 'env.apiKeys' },
   ]
 
   return (

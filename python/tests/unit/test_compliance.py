@@ -14,6 +14,7 @@ def test_normalize_task_stream_policy_definition_compiles_regex_clauses() -> Non
                     "label": "ping to alpha",
                     "task_kind": "network.endpoint_connectivity",
                     "input_pattern": "alpha\\.internal",
+                    "input_negated": True,
                     "stdout_pattern": '"success": true',
                 }
             ]
@@ -26,9 +27,11 @@ def test_normalize_task_stream_policy_definition_compiles_regex_clauses() -> Non
         "label": "ping to alpha",
         "task_kind": "network.endpoint_connectivity",
         "input_pattern": "alpha\\.internal",
+        "input_negated": True,
         "stdout_pattern": '"success": true',
+        "stdout_negated": False,
         "stderr_pattern": None,
-        "summary_pattern": None,
+        "stderr_negated": False,
     }
     assert compiled["rules"][0]["clauses"] == [
         {
@@ -40,11 +43,13 @@ def test_normalize_task_stream_policy_definition_compiles_regex_clauses() -> Non
             "field": "input_text",
             "operator": "regex_search",
             "value": "alpha\\.internal",
+            "negated": True,
         },
         {
             "field": "stdout_text",
             "operator": "regex_search",
             "value": '"success": true',
+            "negated": False,
         },
     ]
 

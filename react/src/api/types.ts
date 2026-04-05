@@ -181,9 +181,11 @@ export interface TaskStreamComplianceRuleDefinition {
     label: string
     task_kind: string | null
     input_pattern: string | null
+    input_negated: boolean
     stdout_pattern: string | null
+    stdout_negated: boolean
     stderr_pattern: string | null
-    summary_pattern: string | null
+    stderr_negated: boolean
 }
 
 export interface CompliancePolicy {

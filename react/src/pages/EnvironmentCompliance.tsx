@@ -4,18 +4,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import {
   History,
-  ListChecks,
   Plus,
   ShieldAlert,
-  ShieldCheck,
   Trash2,
-  TriangleAlert,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -23,7 +19,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Skeleton } from '@/components/ui/skeleton'
 import { EnvironmentHeader } from '@/components/EnvironmentHeader'
 import {
   stubCreateCompliancePolicy,
@@ -36,18 +31,21 @@ import {
   type PatchCompliancePolicyPayload,
   stubPatchCompliancePolicy,
 } from '@/api/stubs'
+import { TASK_TEMPLATES } from '@/api/types'
 import type {
   ComplianceCatalogItem,
   ComplianceEvent,
   ComplianceFinding,
-  ComplianceMode,
   CompliancePolicy,
+  TaskTemplate,
   TaskStreamComplianceRuleDefinition,
 } from '@/api/types'
-import { formatDate } from '@/lib/utils'
+import { cn, formatDate } from '@/lib/utils'
 import { useI18n } from '@/i18n'
 
 type TaskStreamRuleDraft = TaskStreamComplianceRuleDefinition
+
+const ANY_TASK_KIND = '__any__'
 
 let draftRuleCounter = 1
 
@@ -56,15 +54,52 @@ function nextRuleId() {
   return `draft-${draftRuleCounter}`
 }
 
+const TASK_KIND_BY_TEMPLATE: Record<TaskTemplate, string> = {
+  ping: 'network.endpoint_connectivity',
+  system_info: 'host.system_profile',
+  network_interfaces: 'host.ip_interfaces',
+  self_update: 'agent.self_update',
+  custom_command: 'diagnostic.command.custom',
+  port_scan: 'diagnostic.command.port_scan',
+  disk_usage: 'diagnostic.command.disk_usage',
+  memory_cpu: 'diagnostic.command.memory_cpu',
+  service_status: 'diagnostic.command.service_status',
+  system_logs: 'diagnostic.command.system_logs',
+}
+
 function newTaskStreamRule(): TaskStreamRuleDraft {
   return {
     id: nextRuleId(),
     label: '',
-    task_kind: null,
+    task_kind: 'diagnostic.command.custom',
     input_pattern: null,
+    input_negated: false,
     stdout_pattern: null,
+    stdout_negated: false,
     stderr_pattern: null,
-    summary_pattern: null,
+    stderr_negated: false,
+  }
+}
+
+function hydrateRuleDraft(rule: Partial<TaskStreamRuleDraft>): TaskStreamRuleDraft {
+  return {
+    id: String(rule.id || nextRuleId()),
+    label: String(rule.label || ''),
+    task_kind: typeof rule.task_kind === 'string' && rule.task_kind.trim()
+      ? rule.task_kind.trim()
+      : null,
+    input_pattern: typeof rule.input_pattern === 'string' && rule.input_pattern.trim()
+      ? rule.input_pattern.trim()
+      : null,
+    input_negated: Boolean(rule.input_negated),
+    stdout_pattern: typeof rule.stdout_pattern === 'string' && rule.stdout_pattern.trim()
+      ? rule.stdout_pattern.trim()
+      : null,
+    stdout_negated: Boolean(rule.stdout_negated),
+    stderr_pattern: typeof rule.stderr_pattern === 'string' && rule.stderr_pattern.trim()
+      ? rule.stderr_pattern.trim()
+      : null,
+    stderr_negated: Boolean(rule.stderr_negated),
   }
 }
 
@@ -76,36 +111,43 @@ function apiErrorMessage(error: unknown, fallback: string) {
   return fallback
 }
 
-function StatCard({
-  icon: Icon,
-  label,
+function RegexPatternInput({
   value,
-  loading,
+  negated,
+  placeholder,
+  onChange,
+  onToggle,
+  t,
 }: {
-  icon: React.ElementType
-  label: string
-  value: number
-  loading?: boolean
+  value: string | null
+  negated: boolean
+  placeholder: string
+  onChange: (value: string | null) => void
+  onToggle: () => void
+  t: (key: string) => string
 }) {
-  if (loading) {
-    return (
-      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <Skeleton className="h-3 w-24" />
-          <Skeleton className="h-3 w-3 rounded" />
-        </div>
-        <Skeleton className="h-8 w-14" />
-      </div>
-    )
-  }
-
   return (
-    <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">{label}</span>
-        <Icon size={13} className="text-muted-foreground/50" />
-      </div>
-      <p className="text-2xl font-semibold font-display tracking-tight">{value}</p>
+    <div className="flex items-center gap-2">
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className={cn(
+          'h-9 w-9 px-0 shrink-0 font-mono text-sm',
+          negated
+            ? 'border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15'
+            : 'text-muted-foreground/40 hover:text-muted-foreground',
+        )}
+        title={t(negated ? 'compliance.negationEnabled' : 'compliance.negationDisabled')}
+        onClick={onToggle}
+      >
+        !
+      </Button>
+      <Input
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value.trim() || null)}
+        placeholder={placeholder}
+      />
     </div>
   )
 }
@@ -131,15 +173,14 @@ function TaskStreamRuleTable({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
-      <table className="w-full min-w-[1180px] text-sm">
+      <table className="w-full min-w-[980px] text-sm">
         <thead>
           <tr className="border-b border-border bg-muted/20">
-            <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.rule')}</th>
+            <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.name')}</th>
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.taskKind')}</th>
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.inputPattern')}</th>
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.stdoutPattern')}</th>
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.stderrPattern')}</th>
-            <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.summaryPattern')}</th>
             <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">{t('common.actions')}</th>
           </tr>
         </thead>
@@ -150,67 +191,90 @@ function TaskStreamRuleTable({
                 <Input
                   value={rule.label}
                   onChange={(e) => onChange(index, { ...rule, label: e.target.value })}
-                  placeholder={t('compliance.ruleLabelPlaceholder')}
+                  placeholder={t('compliance.namePlaceholder')}
                 />
               </td>
               <td className="px-3 py-3">
-                <Input
-                  value={rule.task_kind ?? ''}
-                  onChange={(e) =>
+                <Select
+                  value={rule.task_kind ?? ANY_TASK_KIND}
+                  onValueChange={(value) =>
                     onChange(index, {
                       ...rule,
-                      task_kind: e.target.value.trim() || null,
+                      task_kind: value === ANY_TASK_KIND ? null : value,
                     })
                   }
-                  placeholder={t('compliance.taskKindPlaceholder')}
-                />
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ANY_TASK_KIND}>{t('compliance.anyTaskKind')}</SelectItem>
+                    {TASK_TEMPLATES.map((template) => (
+                      <SelectItem key={template.id} value={TASK_KIND_BY_TEMPLATE[template.id]}>
+                        {t(template.labelKey)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </td>
               <td className="px-3 py-3">
-                <Input
+                <RegexPatternInput
                   value={rule.input_pattern ?? ''}
-                  onChange={(e) =>
+                  negated={rule.input_negated}
+                  onChange={(value) =>
                     onChange(index, {
                       ...rule,
-                      input_pattern: e.target.value.trim() || null,
+                      input_pattern: value,
+                    })
+                  }
+                  onToggle={() =>
+                    onChange(index, {
+                      ...rule,
+                      input_negated: !rule.input_negated,
                     })
                   }
                   placeholder={t('compliance.inputPatternPlaceholder')}
+                  t={t}
                 />
               </td>
               <td className="px-3 py-3">
-                <Input
+                <RegexPatternInput
                   value={rule.stdout_pattern ?? ''}
-                  onChange={(e) =>
+                  negated={rule.stdout_negated}
+                  onChange={(value) =>
                     onChange(index, {
                       ...rule,
-                      stdout_pattern: e.target.value.trim() || null,
+                      stdout_pattern: value,
+                    })
+                  }
+                  onToggle={() =>
+                    onChange(index, {
+                      ...rule,
+                      stdout_negated: !rule.stdout_negated,
                     })
                   }
                   placeholder={t('compliance.stdoutPatternPlaceholder')}
+                  t={t}
                 />
               </td>
               <td className="px-3 py-3">
-                <Input
+                <RegexPatternInput
                   value={rule.stderr_pattern ?? ''}
-                  onChange={(e) =>
+                  negated={rule.stderr_negated}
+                  onChange={(value) =>
                     onChange(index, {
                       ...rule,
-                      stderr_pattern: e.target.value.trim() || null,
+                      stderr_pattern: value,
+                    })
+                  }
+                  onToggle={() =>
+                    onChange(index, {
+                      ...rule,
+                      stderr_negated: !rule.stderr_negated,
                     })
                   }
                   placeholder={t('compliance.stderrPatternPlaceholder')}
-                />
-              </td>
-              <td className="px-3 py-3">
-                <Input
-                  value={rule.summary_pattern ?? ''}
-                  onChange={(e) =>
-                    onChange(index, {
-                      ...rule,
-                      summary_pattern: e.target.value.trim() || null,
-                    })
-                  }
-                  placeholder={t('compliance.summaryPatternPlaceholder')}
+                  t={t}
                 />
               </td>
               <td className="px-3 py-3 text-right">
@@ -241,17 +305,15 @@ function CompliancePanel({
 }) {
   const { t } = useI18n()
   const queryClient = useQueryClient()
-  const [mode, setMode] = useState<ComplianceMode>(policy?.mode ?? 'blacklist')
   const [isEnabled, setIsEnabled] = useState(policy?.is_enabled ?? true)
   const [rules, setRules] = useState<TaskStreamRuleDraft[]>(
-    policy?.definition_json.rules ?? [],
+    (policy?.definition_json.rules ?? []).map(hydrateRuleDraft),
   )
   const [error, setError] = useState('')
 
   useEffect(() => {
-    setMode(policy?.mode ?? 'blacklist')
     setIsEnabled(policy?.is_enabled ?? true)
-    setRules(policy?.definition_json.rules ?? [])
+    setRules((policy?.definition_json.rules ?? []).map(hydrateRuleDraft))
     setError('')
   }, [policy])
 
@@ -269,9 +331,11 @@ function CompliancePanel({
           label: rule.label.trim(),
           task_kind: rule.task_kind?.trim() || null,
           input_pattern: rule.input_pattern?.trim() || null,
+          input_negated: Boolean(rule.input_negated),
           stdout_pattern: rule.stdout_pattern?.trim() || null,
+          stdout_negated: Boolean(rule.stdout_negated),
           stderr_pattern: rule.stderr_pattern?.trim() || null,
-          summary_pattern: rule.summary_pattern?.trim() || null,
+          stderr_negated: Boolean(rule.stderr_negated),
         })),
       }
 
@@ -280,7 +344,7 @@ function CompliancePanel({
           environment_id: envId,
           name: catalogItem.label,
           entity_kind: catalogItem.entity_kind,
-          mode,
+          mode: 'blacklist',
           description: catalogItem.description,
           is_enabled: isEnabled,
           definition_json,
@@ -289,7 +353,6 @@ function CompliancePanel({
       }
 
       const payload: PatchCompliancePolicyPayload = {
-        mode,
         is_enabled: isEnabled,
         definition_json,
       }
@@ -320,41 +383,23 @@ function CompliancePanel({
     !rule.input_pattern?.trim()
     && !rule.stdout_pattern?.trim()
     && !rule.stderr_pattern?.trim()
-    && !rule.summary_pattern?.trim(),
   )
 
   return (
     <div className="space-y-5">
       <div className="rounded-xl border border-border bg-card p-5 space-y-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-lg font-semibold">{catalogItem.label}</h2>
-              {policy?.revision_no != null && (
-                <Badge variant="outline">r{policy.revision_no}</Badge>
-              )}
-              <Badge variant={isEnabled ? 'blue' : 'muted'}>
-                {isEnabled ? t('compliance.enabled') : t('cron.disabled')}
-              </Badge>
-            </div>
-            <p className="text-sm text-muted-foreground max-w-3xl">{catalogItem.description}</p>
-            <p className="text-xs text-muted-foreground">{t('compliance.rulesHint')}</p>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-lg font-semibold">{t('compliance.rules')}</h2>
+            {policy?.revision_no != null && (
+              <Badge variant="outline">r{policy.revision_no}</Badge>
+            )}
+            <Badge variant={isEnabled ? 'blue' : 'muted'}>
+              {isEnabled ? t('compliance.enabled') : t('cron.disabled')}
+            </Badge>
           </div>
-
           <div className="flex flex-wrap items-center gap-2">
-            <div className="min-w-[190px] space-y-1">
-              <Label>{t('compliance.mode')}</Label>
-              <Select value={mode} onValueChange={(value) => setMode(value as ComplianceMode)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="blacklist">{t('compliance.modes.blacklist')}</SelectItem>
-                  <SelectItem value="allowlist">{t('compliance.modes.allowlist')}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center gap-2 pt-5">
+            <div className="flex items-center gap-2 pr-2">
               <Checkbox
                 id="task-stream-enabled"
                 checked={isEnabled}
@@ -364,36 +409,34 @@ function CompliancePanel({
                 {t('compliance.enabled')}
               </label>
             </div>
-            <div className="flex items-center gap-2 pt-5">
-              <Button type="button" size="sm" onClick={() => setRules((prev) => [...prev, newTaskStreamRule()])}>
-                <Plus size={13} className="mr-1.5" />
-                {t('compliance.addRule')}
-              </Button>
+            <Button type="button" size="sm" onClick={() => setRules((prev) => [...prev, newTaskStreamRule()])}>
+              <Plus size={13} className="mr-1.5" />
+              {t('compliance.addRule')}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => saveMutation.mutate()}
+              disabled={saveMutation.isPending || isSubmitDisabled}
+            >
+              {t('compliance.saveRuleSet')}
+            </Button>
+            {policy && (
               <Button
                 type="button"
                 size="sm"
-                onClick={() => saveMutation.mutate()}
-                disabled={saveMutation.isPending || isSubmitDisabled}
+                variant="ghost"
+                onClick={() => {
+                  if (window.confirm(t('compliance.deleteRuleSetConfirm'))) {
+                    deleteMutation.mutate()
+                  }
+                }}
+                disabled={deleteMutation.isPending}
               >
-                {t('compliance.saveRuleSet')}
+                <Trash2 size={12} className="mr-1.5" />
+                {t('compliance.deleteRuleSet')}
               </Button>
-              {policy && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    if (window.confirm(t('compliance.deleteRuleSetConfirm'))) {
-                      deleteMutation.mutate()
-                    }
-                  }}
-                  disabled={deleteMutation.isPending}
-                >
-                  <Trash2 size={12} className="mr-1.5" />
-                  {t('compliance.deleteRuleSet')}
-                </Button>
-              )}
-            </div>
+            )}
           </div>
         </div>
 
@@ -549,18 +592,18 @@ export default function EnvironmentCompliance() {
     queryKey: ['compliance-catalog'],
     queryFn: () => stubGetComplianceCatalog(),
   })
-  const { data: policies = [], isLoading: loadingPolicies } = useQuery({
+  const { data: policies = [] } = useQuery({
     queryKey: ['compliance-policies', envId],
     queryFn: () => stubGetCompliancePolicies(envId!),
     enabled: !!envId,
   })
-  const { data: findings = [], isLoading: loadingFindings } = useQuery({
+  const { data: findings = [] } = useQuery({
     queryKey: ['compliance-findings', envId],
     queryFn: () => stubGetComplianceFindings(envId!),
     refetchInterval: 15_000,
     enabled: !!envId,
   })
-  const { data: events = [], isLoading: loadingEvents } = useQuery({
+  const { data: events = [] } = useQuery({
     queryKey: ['compliance-events', envId],
     queryFn: () => stubGetComplianceEvents(envId!),
     refetchInterval: 15_000,
@@ -584,33 +627,6 @@ export default function EnvironmentCompliance() {
 
       <div className="flex-1 overflow-y-auto">
         <div className="p-5 space-y-6">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatCard
-              icon={ShieldCheck}
-              label={t('compliance.policyCount')}
-              value={policies.length}
-              loading={loadingPolicies}
-            />
-            <StatCard
-              icon={TriangleAlert}
-              label={t('compliance.openViolations')}
-              value={findings.length}
-              loading={loadingFindings}
-            />
-            <StatCard
-              icon={ListChecks}
-              label={t('compliance.allowlists')}
-              value={policies.filter((item) => item.mode === 'allowlist').length}
-              loading={loadingPolicies}
-            />
-            <StatCard
-              icon={History}
-              label={t('compliance.recentEvents')}
-              value={events.length}
-              loading={loadingEvents}
-            />
-          </div>
-
           {catalogItem && envId ? (
             <CompliancePanel
               envId={envId}

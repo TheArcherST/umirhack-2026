@@ -157,6 +157,8 @@ def test_compliance_materializes_task_stream_policy(api) -> None:
                         "task_kind": "network.endpoint_connectivity",
                         "input_pattern": "alpha\\.internal",
                         "stdout_pattern": '"success": true',
+                        "stderr_pattern": "timeout",
+                        "stderr_negated": True,
                     }
                 ]
             },

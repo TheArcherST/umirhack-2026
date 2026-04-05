@@ -362,7 +362,7 @@ class ComplianceService:
                 "description": (
                     "Rules over completed task runs using an optional task kind"
                     " filter plus regular expressions on serialized input,"
-                    " stdout, stderr, and summary payloads"
+                    " stdout, and stderr payloads"
                 ),
             },
         ]

@@ -212,13 +212,14 @@ def _normalize_task_stream_rule(
     input_pattern = str(raw_rule.get("input_pattern") or "").strip() or None
     stdout_pattern = str(raw_rule.get("stdout_pattern") or "").strip() or None
     stderr_pattern = str(raw_rule.get("stderr_pattern") or "").strip() or None
-    summary_pattern = str(raw_rule.get("summary_pattern") or "").strip() or None
+    input_negated = bool(raw_rule.get("input_negated"))
+    stdout_negated = bool(raw_rule.get("stdout_negated"))
+    stderr_negated = bool(raw_rule.get("stderr_negated"))
 
     for field_name, pattern in (
         ("input_pattern", input_pattern),
         ("stdout_pattern", stdout_pattern),
         ("stderr_pattern", stderr_pattern),
-        ("summary_pattern", summary_pattern),
     ):
         if pattern is not None:
             _ensure_valid_regex(pattern, field_name=field_name)
@@ -229,7 +230,6 @@ def _normalize_task_stream_rule(
             input_pattern,
             stdout_pattern,
             stderr_pattern,
-            summary_pattern,
         )
     ):
         raise ComplianceValidationError(
@@ -241,9 +241,11 @@ def _normalize_task_stream_rule(
         "label": _normalize_rule_label(raw_rule.get("label"), index=index),
         "task_kind": task_kind,
         "input_pattern": input_pattern,
+        "input_negated": input_negated,
         "stdout_pattern": stdout_pattern,
+        "stdout_negated": stdout_negated,
         "stderr_pattern": stderr_pattern,
-        "summary_pattern": summary_pattern,
+        "stderr_negated": stderr_negated,
     }
 
 
@@ -257,11 +259,10 @@ def _compile_task_stream_rule(rule: dict[str, Any]) -> dict[str, Any]:
                 "value": rule["task_kind"],
             }
         )
-    for field_name, value_key in (
-        ("input_text", "input_pattern"),
-        ("stdout_text", "stdout_pattern"),
-        ("stderr_text", "stderr_pattern"),
-        ("summary_text", "summary_pattern"),
+    for field_name, value_key, negated_key in (
+        ("input_text", "input_pattern", "input_negated"),
+        ("stdout_text", "stdout_pattern", "stdout_negated"),
+        ("stderr_text", "stderr_pattern", "stderr_negated"),
     ):
         if rule[value_key] is None:
             continue
@@ -270,6 +271,7 @@ def _compile_task_stream_rule(rule: dict[str, Any]) -> dict[str, Any]:
                 "field": field_name,
                 "operator": "regex_search",
                 "value": rule[value_key],
+                "negated": bool(rule.get(negated_key)),
             }
         )
     return {
@@ -315,7 +317,10 @@ def _clause_matches(*, clause: dict[str, Any], entity_values: dict[str, Any]) ->
             pattern = re.compile(str(expected or ""), re.IGNORECASE)
         except re.error:
             return False
-        return bool(pattern.search(str(actual or "")))
+        matched = bool(pattern.search(str(actual or "")))
+        if clause.get("negated"):
+            return not matched
+        return matched
     raise ComplianceValidationError(f"Unsupported compliance operator: {operator}")
 
 

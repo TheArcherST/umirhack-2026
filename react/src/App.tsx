@@ -65,8 +65,8 @@ function ProtectedContent() {
                 <Route path="environments/:envId/hosts/:hostId" element={<EnvironmentHostDetail/>}/>
                 <Route path="environments/:envId/tasks" element={<EnvironmentTasks/>}/>
                 <Route path="environments/:envId/schedule" element={<EnvironmentScheduleRules/>}/>
-                <Route path="environments/:envId/api-keys" element={<ApiKeysPage/>}/>
                 <Route path="environments/:envId/compliance" element={<EnvironmentCompliance/>}/>
+                <Route path="environments/:envId/api-keys" element={<ApiKeysPage/>}/>
             </Route>
         </Routes>
     )
