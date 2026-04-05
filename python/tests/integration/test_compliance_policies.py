@@ -189,6 +189,44 @@ def test_compliance_materializes_task_stream_policy(api) -> None:
     assert events[0]["event_kind"] == "rise"
     assert events[0]["event_origin"] == "backfill"
 
+    patched_policy_response = api.client.patch(
+        f"/compliance/policies/{policy_response.json()['id']}",
+        json={
+            "definition_json": {
+                "rules": [
+                    {
+                        "label": "alpha connectivity v2",
+                        "task_kind": "network.endpoint_connectivity",
+                        "input_pattern": "alpha\\.internal",
+                        "stdout_pattern": '"success": true',
+                        "stderr_pattern": "timeout",
+                        "stderr_negated": True,
+                    }
+                ]
+            }
+        },
+        headers=owner.headers,
+    )
+    assert patched_policy_response.status_code == 200, patched_policy_response.text
+    assert patched_policy_response.json()["revision_no"] == 2
+
+    findings_response = api.client.get(
+        f"/environments/{bundle.environment['id']}/compliance/findings",
+        headers=owner.headers,
+    )
+    findings = findings_response.json()
+    assert len(findings) == 1
+    assert findings[0]["matched_rule_labels"] == ["alpha connectivity v2"]
+
+    events_response = api.client.get(
+        f"/environments/{bundle.environment['id']}/compliance/events",
+        headers=owner.headers,
+    )
+    events = events_response.json()
+    assert len(events) == 1
+    assert events[0]["event_kind"] == "rise"
+    assert events[0]["event_origin"] == "backfill"
+
     create_task_runs = api.client.post(
         "/task-runs",
         json={

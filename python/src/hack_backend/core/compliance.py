@@ -90,6 +90,10 @@ async def rebuild_policy(
     policy: CompliancePolicy,
     revision: CompliancePolicyRevision | None,
 ) -> None:
+    previous_findings = await _current_findings_for_policy(
+        session,
+        policy_id=policy.id,
+    )
     await session.execute(
         delete(ComplianceCurrentFinding).where(
             ComplianceCurrentFinding.policy_id == policy.id
@@ -122,7 +126,16 @@ async def rebuild_policy(
             task_run=task_run,
             task_result=task_result,
             event_origin=ComplianceEventOrigin.BACKFILL,
+            emit_events=False,
         )
+
+    await _synchronize_rebuild_events(
+        session,
+        policy=policy,
+        revision=revision,
+        event_origin=ComplianceEventOrigin.BACKFILL,
+        previous_findings=previous_findings,
+    )
 
 
 async def apply_compliance_materialization(
@@ -350,6 +363,7 @@ async def _apply_policy_to_task_result(
     task_run: TaskRun,
     task_result: TaskRunResult,
     event_origin: ComplianceEventOrigin,
+    emit_events: bool = True,
 ) -> None:
     extracted = _extract_task_result_source(
         task_run=task_run,
@@ -361,6 +375,7 @@ async def _apply_policy_to_task_result(
         revision=revision,
         extracted=extracted,
         event_origin=event_origin,
+        emit_events=emit_events,
     )
 
 
@@ -415,6 +430,7 @@ async def _apply_extracted_source(
     revision: CompliancePolicyRevision,
     extracted: ExtractedSource,
     event_origin: ComplianceEventOrigin,
+    emit_events: bool,
 ) -> None:
     previous_by_subject: dict[str, ComplianceCurrentFinding] = {}
     if extracted.authoritative_scope_key is not None:
@@ -445,6 +461,7 @@ async def _apply_extracted_source(
             evidence_json=entity.evidence_json,
             expires_at=entity.expires_at,
             event_origin=event_origin,
+            emit_events=emit_events,
         )
 
     if extracted.authoritative_scope_key is None:
@@ -483,6 +500,7 @@ async def _apply_extracted_source(
             evidence_json=clearing_entity.evidence_json,
             expires_at=None,
             event_origin=event_origin,
+            emit_events=emit_events,
         )
 
 
@@ -500,6 +518,7 @@ async def _append_evaluation(
     evidence_json: dict[str, Any],
     expires_at: datetime | None,
     event_origin: ComplianceEventOrigin,
+    emit_events: bool,
 ) -> None:
     previous = await _current_finding_for_subject(
         session,
@@ -555,6 +574,9 @@ async def _append_evaluation(
         observed_at=observed_at,
         expires_at=expires_at,
     )
+
+    if not emit_events:
+        return
 
     if not previous_is_violation and current_is_violation:
         session.add(
@@ -668,6 +690,21 @@ async def _current_findings_for_scope(
     return {finding.subject_key: finding for finding in findings}
 
 
+async def _current_findings_for_policy(
+    session: AsyncSession,
+    *,
+    policy_id: str,
+) -> dict[str, ComplianceCurrentFinding]:
+    findings = list(
+        await session.scalars(
+            select(ComplianceCurrentFinding).where(
+                ComplianceCurrentFinding.policy_id == policy_id,
+            )
+        )
+    )
+    return {finding.subject_key: finding for finding in findings}
+
+
 async def _upsert_current_finding(
     session: AsyncSession,
     *,
@@ -725,6 +762,103 @@ def _merged_task_input(task_run: TaskRun) -> dict[str, Any]:
     if task_run.task_template.approved_command:
         payload.setdefault("approved_command", task_run.task_template.approved_command)
     return payload
+
+
+async def _synchronize_rebuild_events(
+    session: AsyncSession,
+    *,
+    policy: CompliancePolicy,
+    revision: CompliancePolicyRevision,
+    event_origin: ComplianceEventOrigin,
+    previous_findings: dict[str, ComplianceCurrentFinding],
+) -> None:
+    current_findings = await _current_findings_for_policy(
+        session,
+        policy_id=policy.id,
+    )
+    subject_keys = sorted(set(previous_findings) | set(current_findings))
+    for subject_key in subject_keys:
+        previous = previous_findings.get(subject_key)
+        current = current_findings.get(subject_key)
+        comparison_at = (
+            current.observed_at
+            if current is not None
+            else previous.observed_at
+            if previous is not None
+            else datetime.now()
+        )
+        previous_is_violation = (
+            _is_active_violation(
+                previous.is_violation,
+                expires_at=previous.expires_at,
+                at=comparison_at,
+            )
+            if previous is not None
+            else False
+        )
+        current_is_violation = (
+            _is_active_violation(
+                current.is_violation,
+                expires_at=current.expires_at,
+                at=comparison_at,
+            )
+            if current is not None
+            else False
+        )
+        if previous_is_violation == current_is_violation:
+            continue
+
+        event = ComplianceEvent(
+            policy_id=policy.id,
+            revision_id=revision.id,
+            evaluation_id=current.latest_evaluation_id if current is not None else None,
+            environment_id=policy.environment_id,
+            host_id=(current.host_id if current is not None else previous.host_id),
+            entity_kind=policy.entity_kind,
+            subject_key=subject_key,
+            subject_label=(
+                current.subject_label
+                if current is not None
+                else previous.subject_label
+            ),
+            event_kind=(
+                ComplianceEventKind.RISE
+                if current_is_violation
+                else ComplianceEventKind.RESOLVED
+            ),
+            event_origin=event_origin,
+            happened_at=(
+                current.observed_at
+                if current is not None
+                else previous.observed_at
+            ),
+            payload_json={
+                "matched_rule_ids": (
+                    current.matched_rule_ids_json
+                    if current is not None
+                    else []
+                ),
+                "evidence": (
+                    current.evidence_json
+                    if current is not None
+                    else previous.evidence_json
+                ),
+            },
+        )
+        session.add(event)
+        queue_compliance_email_notification(
+            session,
+            environment_id=policy.environment_id,
+            policy_name=policy.name,
+            event_kind=event.event_kind.value,
+            event_origin=event_origin.value,
+            subject_label=event.subject_label,
+            happened_at=event.happened_at,
+            matched_rule_labels=_matched_rule_labels(
+                revision.definition_json or {},
+                current.matched_rule_ids_json if current is not None else [],
+            ),
+        )
 
 
 def _serialize_json_like(value: Any) -> str:
