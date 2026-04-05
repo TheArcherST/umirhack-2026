@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, select
@@ -55,6 +55,14 @@ class ExtractedSource:
     observed_at: datetime
     authoritative_scope_key: str | None
     entities: list[ObservedEntity]
+
+
+def _coerce_utc(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 def normalize_policy_definition(
@@ -424,6 +432,7 @@ async def _evaluate_subject_window(
     task_run: TaskRun,
     observed_at: datetime,
 ) -> tuple[bool, list[str], datetime | None]:
+    observed_at = _coerce_utc(observed_at) or observed_at
     compiled_json = revision.compiled_json or {}
     requirement_rules = compiled_json.get("requirements")
     forbid_rules = compiled_json.get("forbids")
@@ -506,6 +515,7 @@ async def _recent_subject_history(
     observed_at: datetime,
     max_window_minutes: int,
 ) -> list[tuple[datetime, dict[str, Any]]]:
+    observed_at = _coerce_utc(observed_at) or observed_at
     window_start = observed_at - timedelta(minutes=max_window_minutes)
     rows = (
         await session.execute(
@@ -528,7 +538,8 @@ async def _recent_subject_history(
     ).all()
     return [
         (
-            row_task_run.finished_at or row_task_result.created_at,
+            _coerce_utc(row_task_run.finished_at or row_task_result.created_at)
+            or (row_task_run.finished_at or row_task_result.created_at),
             {
                 "task_kind": row_task_run.task_template.kind,
                 "input_text": _serialize_json_like(_merged_task_input(row_task_run)),
@@ -547,6 +558,7 @@ def _window_entities_for_rule(
     observed_at: datetime,
     window_minutes: int,
 ) -> list[tuple[datetime, dict[str, Any]]]:
+    observed_at = _coerce_utc(observed_at) or observed_at
     window_start = observed_at - timedelta(minutes=window_minutes)
     return [
         (entity_observed_at, entity_values)
@@ -689,7 +701,9 @@ def _extract_task_result_source(
     task_name = task_run.task_template.name
     subject_key = f"task-stream:{task_run.host_id}:{task_kind}"
     merged_input = _merged_task_input(task_run)
-    observed_at = task_run.finished_at or task_result.created_at
+    observed_at = _coerce_utc(task_run.finished_at or task_result.created_at) or (
+        task_run.finished_at or task_result.created_at
+    )
 
     return ExtractedSource(
         source_kind="task_run_result",
@@ -823,6 +837,8 @@ async def _append_evaluation(
     event_origin: ComplianceEventOrigin,
     emit_events: bool,
 ) -> None:
+    observed_at = _coerce_utc(observed_at) or observed_at
+    expires_at = _coerce_utc(expires_at)
     previous = await _current_finding_for_subject(
         session,
         policy_id=policy.id,
@@ -955,6 +971,8 @@ def _is_active_violation(
     expires_at: datetime | None,
     at: datetime,
 ) -> bool:
+    at = _coerce_utc(at) or at
+    expires_at = _coerce_utc(expires_at)
     if not is_violation:
         return False
     if expires_at is not None and expires_at <= at:

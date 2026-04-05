@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from hack_backend.core.compliance import (
     ComplianceValidationError,
     ENTITY_KIND_TASK_STREAM,
+    _coerce_utc,
     normalize_policy_definition,
     rebuild_policy,
 )
@@ -285,7 +286,8 @@ class ComplianceService:
                 continue
             if not finding.is_violation:
                 continue
-            if finding.expires_at is not None and finding.expires_at <= now:
+            expires_at = _coerce_utc(finding.expires_at)
+            if expires_at is not None and expires_at <= now:
                 continue
             result.append(
                 ComplianceFindingView(
