@@ -53,7 +53,7 @@ async def delete_host(
     host = await platform_service.session.get(Host, host_id)
     if host is None:
         return
-    await access_service.require_environment_member(
+    await access_service.require_environment_operator(
         host.environment_id,
         user_id=current_user.id,
     )

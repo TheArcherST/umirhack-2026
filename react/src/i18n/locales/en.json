@@ -278,6 +278,7 @@
     "ipAddress": "IP Address",
     "uptime": "Uptime",
     "schedule": "Crons",
+    "compliance": "Compliance",
     "reachable": "reachable",
     "unreachable": "unreachable"
   },
@@ -329,5 +330,81 @@
     "delete": "Delete",
     "deleteConfirmTitle": "Delete cron job?",
     "deleteConfirmBody": "This will permanently remove the cron job and stop any future runs."
+  },
+  "compliance": {
+    "title": "Compliance",
+    "newPolicy": "New policy",
+    "editPolicy": "Edit policy",
+    "policyCount": "Policies",
+    "openViolations": "Open violations",
+    "allowlists": "Allowlists",
+    "recentEvents": "Recent events",
+    "policies": "Policies",
+    "policy": "Policy",
+    "policyName": "Policy name",
+    "policyNameRequired": "Enter a policy name",
+    "description": "Description",
+    "descriptionPlaceholder": "Optional operator note",
+    "entityKind": "Entity kind",
+    "mode": "Mode",
+    "enabled": "Enabled",
+    "rules": "Rules",
+    "rulesHint": "Rules are edited in a domain-specific form and compiled into internal predicates on the backend.",
+    "addRule": "Add rule",
+    "rule": "Rule",
+    "ruleLabel": "Rule label",
+    "ruleLabelPlaceholder": "Optional human-readable note",
+    "sourceHosts": "Source hosts",
+    "targetHosts": "Target hosts",
+    "targetMode": "Target selector",
+    "targetEndpoint": "Literal endpoint",
+    "targetEndpointPlaceholder": "db.internal or 10.0.0.25",
+    "expectedConnectivity": "Observed state",
+    "expectedState": "Expected state",
+    "maxLatency": "Max latency (ms)",
+    "serviceName": "Service name",
+    "serviceNamePlaceholder": "cron.service",
+    "hostScope": "Host scope",
+    "activeViolations": "Active violations",
+    "matchedRules": "Matched rules",
+    "subject": "Subject",
+    "origin": "Origin",
+    "events": "Events",
+    "noPolicies": "No compliance policies yet",
+    "noViolations": "No active violations",
+    "noEvents": "No compliance events yet",
+    "noMatchedRule": "No explicit match",
+    "saveFailed": "Failed to save compliance policy",
+    "deleteConfirm": "Delete this compliance policy? Historical evaluations and events for it will be removed.",
+    "moreRules": "+{count} more rules",
+    "anySource": "Any source",
+    "anyTarget": "Any target",
+    "anyHost": "Any host",
+    "anyState": "Any state",
+    "targetModes": {
+      "any": "Any target",
+      "hosts": "Environment hosts",
+      "endpoint": "Endpoint string"
+    },
+    "modes": {
+      "allowlist": "allowlist",
+      "blacklist": "blacklist"
+    },
+    "eventKinds": {
+      "rise": "violation opened",
+      "resolved": "resolved"
+    },
+    "eventOrigins": {
+      "live": "live",
+      "backfill": "backfill"
+    },
+    "connectivity": {
+      "reachable": "reachable",
+      "unreachable": "unreachable"
+    },
+    "serviceStatus": {
+      "running": "running",
+      "stopped": "stopped"
+    }
   }
 }

@@ -278,6 +278,7 @@
     "ipAddress": "IP-адрес",
     "uptime": "Время работы",
     "schedule": "Кроны",
+    "compliance": "Compliance",
     "reachable": "Доступно",
     "unreachable": "Недоступно"
   },
@@ -329,5 +330,81 @@
     "delete": "Удалить",
     "deleteConfirmTitle": "Удалить крон?",
     "deleteConfirmBody": "Крон будет удалён, дальнейшие запуски остановятся."
+  },
+  "compliance": {
+    "title": "Compliance",
+    "newPolicy": "Новая policy",
+    "editPolicy": "Редактировать policy",
+    "policyCount": "Policies",
+    "openViolations": "Открытые нарушения",
+    "allowlists": "Allowlists",
+    "recentEvents": "Последние события",
+    "policies": "Policies",
+    "policy": "Policy",
+    "policyName": "Название policy",
+    "policyNameRequired": "Введите название policy",
+    "description": "Описание",
+    "descriptionPlaceholder": "Необязательная заметка для оператора",
+    "entityKind": "Тип сущности",
+    "mode": "Режим",
+    "enabled": "Включено",
+    "rules": "Правила",
+    "rulesHint": "Правила редактируются в предметной форме и на backend компилируются в внутренние предикаты.",
+    "addRule": "Добавить правило",
+    "rule": "Правило",
+    "ruleLabel": "Подпись правила",
+    "ruleLabelPlaceholder": "Необязательная заметка для человека",
+    "sourceHosts": "Исходные хосты",
+    "targetHosts": "Целевые хосты",
+    "targetMode": "Выбор цели",
+    "targetEndpoint": "Явный endpoint",
+    "targetEndpointPlaceholder": "db.internal или 10.0.0.25",
+    "expectedConnectivity": "Ожидаемое состояние",
+    "expectedState": "Ожидаемое состояние",
+    "maxLatency": "Максимальная задержка (мс)",
+    "serviceName": "Имя сервиса",
+    "serviceNamePlaceholder": "cron.service",
+    "hostScope": "Охват хостов",
+    "activeViolations": "Активные нарушения",
+    "matchedRules": "Сработавшие правила",
+    "subject": "Сущность",
+    "origin": "Источник",
+    "events": "События",
+    "noPolicies": "Пока нет compliance policies",
+    "noViolations": "Активных нарушений нет",
+    "noEvents": "Событий compliance пока нет",
+    "noMatchedRule": "Явного совпадения нет",
+    "saveFailed": "Не удалось сохранить compliance policy",
+    "deleteConfirm": "Удалить эту compliance policy? Её история вычислений и событий тоже будет удалена.",
+    "moreRules": "+ещё {count} правил",
+    "anySource": "Любой источник",
+    "anyTarget": "Любая цель",
+    "anyHost": "Любой хост",
+    "anyState": "Любое состояние",
+    "targetModes": {
+      "any": "Любая цель",
+      "hosts": "Хосты окружения",
+      "endpoint": "Строковый endpoint"
+    },
+    "modes": {
+      "allowlist": "allowlist",
+      "blacklist": "blacklist"
+    },
+    "eventKinds": {
+      "rise": "нарушение открыто",
+      "resolved": "устранено"
+    },
+    "eventOrigins": {
+      "live": "live",
+      "backfill": "backfill"
+    },
+    "connectivity": {
+      "reachable": "доступно",
+      "unreachable": "недоступно"
+    },
+    "serviceStatus": {
+      "running": "запущен",
+      "stopped": "остановлен"
+    }
   }
 }

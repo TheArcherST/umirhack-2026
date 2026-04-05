@@ -65,7 +65,7 @@ async def create_schedule_rule(
     platform_service: FromDishka[PlatformService],
     uow_ctl: FromDishka[UoWCtl],
 ) -> ScheduleRuleDTO:
-    await access_service.require_environment_member(
+    await access_service.require_environment_operator(
         payload.environment_id,
         user_id=current_user.id,
     )
@@ -97,7 +97,7 @@ async def patch_schedule_rule(
     rule = await platform_service.get_schedule_rule(schedule_rule_id)
     if rule is None:
         raise HTTPException(status_code=404, detail="Schedule rule not found")
-    await access_service.require_environment_member(
+    await access_service.require_environment_operator(
         rule.environment_id,
         user_id=current_user.id,
     )
@@ -143,7 +143,7 @@ async def delete_schedule_rule(
     rule = await platform_service.get_schedule_rule(schedule_rule_id)
     if rule is None:
         raise HTTPException(status_code=404, detail="Schedule rule not found")
-    await access_service.require_environment_member(
+    await access_service.require_environment_operator(
         rule.environment_id,
         user_id=current_user.id,
     )

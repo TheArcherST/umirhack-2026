@@ -644,7 +644,7 @@ fn command_for_kind(kind: &str) -> Option<&'static str> {
         (_, "diagnostic.command.disk_usage") => Some("df -h"),
         (_, "diagnostic.command.memory_cpu") => Some("uptime && free -m"),
         (_, "diagnostic.command.service_status") => {
-            Some("systemctl list-units --type=service --state=running --no-pager")
+            Some("systemctl list-units --type=service --all --no-pager")
         }
         (_, "diagnostic.command.system_logs") => {
             Some("journalctl -n 100 --no-pager")
@@ -670,7 +670,7 @@ fn allowed_commands_for_kind(kind: &str) -> &'static [&'static str] {
             "wmic OS get FreePhysicalMemory,TotalVisibleMemorySize,LastBootUpTime /Value & wmic cpu get loadpercentage,name",
         ],
         "diagnostic.command.service_status" => &[
-            "systemctl list-units --type=service --state=running --no-pager",
+            "systemctl list-units --type=service --all --no-pager",
             "launchctl list",
             "sc query type= service state= all",
         ],

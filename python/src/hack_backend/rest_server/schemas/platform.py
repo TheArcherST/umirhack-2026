@@ -195,6 +195,61 @@ class ScheduleRuleDTO(BaseDTO):
     task_kind: str
 
 
+class ComplianceCatalogItemDTO(BaseDTO):
+    entity_kind: str
+    label: str
+    description: str
+
+
+class CompliancePolicyDTO(BaseDTO):
+    id: str
+    environment_id: str
+    name: str
+    entity_kind: str
+    mode: str
+    description: str | None = None
+    is_enabled: bool
+    current_revision_id: str | None = None
+    revision_no: int | None = None
+    rule_count: int
+    definition_json: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+
+
+class ComplianceFindingDTO(BaseDTO):
+    policy_id: str
+    revision_id: str
+    revision_no: int
+    policy_name: str
+    policy_mode: str
+    entity_kind: str
+    host_id: str | None = None
+    host_name: str | None = None
+    subject_key: str
+    subject_label: str
+    matched_rule_labels: list[str] = Field(default_factory=list)
+    evidence_json: dict[str, Any] = Field(default_factory=dict)
+    observed_at: datetime
+    expires_at: datetime | None = None
+
+
+class ComplianceEventDTO(BaseDTO):
+    id: str
+    policy_id: str
+    revision_id: str
+    revision_no: int
+    policy_name: str
+    entity_kind: str
+    event_kind: str
+    event_origin: str
+    host_id: str | None = None
+    host_name: str | None = None
+    subject_key: str
+    subject_label: str
+    happened_at: datetime
+    payload_json: dict[str, Any] = Field(default_factory=dict)
+
+
 class InstallScriptDTO(BaseDTO):
     command: str
     agent_id: str

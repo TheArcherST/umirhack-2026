@@ -18,6 +18,21 @@ class EnvironmentMemberRole(StrEnum):
     OBSERVER = "observer"
 
 
+class ComplianceMode(StrEnum):
+    ALLOWLIST = "allowlist"
+    BLACKLIST = "blacklist"
+
+
+class ComplianceEventKind(StrEnum):
+    RISE = "rise"
+    RESOLVED = "resolved"
+
+
+class ComplianceEventOrigin(StrEnum):
+    LIVE = "live"
+    BACKFILL = "backfill"
+
+
 class AgentStatus(StrEnum):
     ONLINE = "online"
     OFFLINE = "offline"

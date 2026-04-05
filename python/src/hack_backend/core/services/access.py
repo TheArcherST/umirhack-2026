@@ -245,6 +245,37 @@ class AccessService:
             )
         return environment
 
+    async def require_environment_operator(
+        self,
+        environment_id: str,
+        *,
+        user_id: int,
+    ) -> Environment:
+        environment = await self.require_environment_member(
+            environment_id,
+            user_id=user_id,
+        )
+        project = await self.require_project_member(
+            environment.project_id,
+            user_id=user_id,
+        )
+        if project.owner_id == user_id:
+            return environment
+
+        membership = await self.orm_session.get(
+            EnvironmentMember,
+            {"environment_id": environment_id, "user_id": user_id},
+        )
+        if (
+            membership is None
+            or membership.role != EnvironmentMemberRole.OPERATOR
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="Environment operator access required",
+            )
+        return environment
+
     async def lookup_login_session(
         self,
         login_session_uid: UUID,

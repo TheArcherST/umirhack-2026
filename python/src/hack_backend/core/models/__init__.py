@@ -1,9 +1,19 @@
 from .agent import Agent
 from .agent_bootstrap_token import AgentBootstrapToken
+from .compliance import (
+    ComplianceCurrentFinding,
+    ComplianceEvaluation,
+    ComplianceEvent,
+    CompliancePolicy,
+    CompliancePolicyRevision,
+)
 from .login_session import LoginSession
 from .environment import Environment
 from .enums import (
     AgentStatus,
+    ComplianceEventKind,
+    ComplianceEventOrigin,
+    ComplianceMode,
     EnvironmentMemberRole,
     InviteStatus,
     ProjectMemberRole,
@@ -25,6 +35,14 @@ __all__ = [
     "Agent",
     "AgentBootstrapToken",
     "AgentStatus",
+    "ComplianceEvaluation",
+    "ComplianceEvent",
+    "ComplianceEventKind",
+    "ComplianceEventOrigin",
+    "ComplianceMode",
+    "CompliancePolicy",
+    "CompliancePolicyRevision",
+    "ComplianceCurrentFinding",
     "Environment",
     "EnvironmentMember",
     "EnvironmentMemberRole",

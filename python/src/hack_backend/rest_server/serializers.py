@@ -4,6 +4,9 @@ from typing import Any
 
 from hack_backend.core.models import (
     Agent,
+    ComplianceEvent,
+    CompliancePolicy,
+    CompliancePolicyRevision,
     Environment,
     EnvironmentMember,
     GraphEdge,
@@ -18,8 +21,16 @@ from hack_backend.core.models import (
     TelemetryRecord,
     User,
 )
+from hack_backend.core.services.compliance_service import (
+    ComplianceEventView,
+    ComplianceFindingView,
+)
 from hack_backend.rest_server.schemas.platform import (
     AgentDTO,
+    ComplianceCatalogItemDTO,
+    ComplianceEventDTO,
+    ComplianceFindingDTO,
+    CompliancePolicyDTO,
     EnvironmentDTO,
     EnvironmentMemberDTO,
     GraphEdgeDTO,
@@ -248,4 +259,79 @@ def schedule_rule_to_dto(
         created_at=rule.created_at,
         task_name=template.name,
         task_kind=template.kind,
+    )
+
+
+def compliance_catalog_item_to_dto(
+    item: dict[str, Any],
+) -> ComplianceCatalogItemDTO:
+    return ComplianceCatalogItemDTO(
+        entity_kind=str(item["entity_kind"]),
+        label=str(item["label"]),
+        description=str(item["description"]),
+    )
+
+
+def compliance_policy_with_revision_to_dto(
+    policy: CompliancePolicy,
+    revision: CompliancePolicyRevision | None,
+) -> CompliancePolicyDTO:
+    return CompliancePolicyDTO(
+        id=policy.id,
+        environment_id=policy.environment_id,
+        name=policy.name,
+        entity_kind=policy.entity_kind,
+        mode=_string_value(policy.mode),
+        description=policy.description,
+        is_enabled=bool(policy.is_enabled),
+        current_revision_id=revision.id if revision is not None else None,
+        revision_no=revision.revision_no if revision is not None else None,
+        rule_count=len((revision.definition_json or {}).get("rules") or [])
+        if revision is not None
+        else 0,
+        definition_json=revision.definition_json or {} if revision is not None else {},
+        created_at=policy.created_at,
+    )
+
+
+def compliance_finding_to_dto(
+    finding: ComplianceFindingView,
+) -> ComplianceFindingDTO:
+    return ComplianceFindingDTO(
+        policy_id=finding.policy.id,
+        revision_id=finding.revision.id,
+        revision_no=finding.revision.revision_no,
+        policy_name=finding.policy.name,
+        policy_mode=_string_value(finding.policy.mode),
+        entity_kind=finding.policy.entity_kind,
+        host_id=finding.finding.host_id,
+        host_name=finding.host.name if finding.host is not None else None,
+        subject_key=finding.finding.subject_key,
+        subject_label=finding.finding.subject_label,
+        matched_rule_labels=finding.matched_rule_labels,
+        evidence_json=finding.finding.evidence_json or {},
+        observed_at=finding.finding.observed_at,
+        expires_at=finding.finding.expires_at,
+    )
+
+
+def compliance_event_to_dto(
+    view: ComplianceEventView,
+) -> ComplianceEventDTO:
+    event: ComplianceEvent = view.event
+    return ComplianceEventDTO(
+        id=event.id,
+        policy_id=view.policy.id,
+        revision_id=view.revision.id,
+        revision_no=view.revision.revision_no,
+        policy_name=view.policy.name,
+        entity_kind=view.policy.entity_kind,
+        event_kind=_string_value(event.event_kind),
+        event_origin=_string_value(event.event_origin),
+        host_id=event.host_id,
+        host_name=view.host.name if view.host is not None else None,
+        subject_key=event.subject_key,
+        subject_label=event.subject_label,
+        happened_at=event.happened_at,
+        payload_json=event.payload_json or {},
     )

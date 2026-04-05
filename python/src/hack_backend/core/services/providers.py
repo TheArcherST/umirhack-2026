@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from hack_backend.core.services.access import AccessService
 from hack_backend.core.services.agent_runtime_service import AgentRuntimeService
 from hack_backend.core.services.agent_versioning import AgentVersioningService
+from hack_backend.core.services.compliance_service import ComplianceService
 from hack_backend.core.services.email_verification import EmailVerificationService
 from hack_backend.core.services.platform_service import PlatformService
 from hack_backend.core.services.uow_ctl import UoWCtl
@@ -17,6 +18,10 @@ class ProviderServices(Provider):
     )
     get_email_verification_service = provide(
         EmailVerificationService,
+        scope=Scope.REQUEST,
+    )
+    get_compliance_service = provide(
+        ComplianceService,
         scope=Scope.REQUEST,
     )
     get_platform_service = provide(

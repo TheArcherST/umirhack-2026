@@ -35,7 +35,7 @@ async def create_task_runs(
     platform_service: FromDishka[PlatformService],
     uow_ctl: FromDishka[UoWCtl],
 ) -> list[TaskRunDTO]:
-    await access_service.require_environment_member(
+    await access_service.require_environment_operator(
         payload.environment_id,
         user_id=current_user.id,
     )

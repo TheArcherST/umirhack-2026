@@ -6,13 +6,21 @@ import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from hack_backend.core.compliance import apply_compliance_materialization
+from hack_backend.core.entity_resolution import (
+    canonicalize_endpoint_host,
+    host_resolution_aliases,
+)
 from hack_backend.core.models import (
     Agent,
     AgentBootstrapToken,
     AgentStatus,
+    ComplianceEvaluation,
+    ComplianceEvent,
+    ComplianceCurrentFinding,
     Environment,
     EnvironmentMember,
     EnvironmentMemberRole,
@@ -101,7 +109,7 @@ BUILTIN_TEMPLATES: tuple[dict[str, Any], ...] = (
         "name": "Service Status",
         "payload_json": {"template_code": "service_status"},
         "metric_policy_json": {},
-        "approved_command": "systemctl list-units --type=service --state=running --no-pager",
+        "approved_command": "systemctl list-units --type=service --all --no-pager",
     },
     {
         "kind": "diagnostic.command.system_logs",
@@ -147,6 +155,21 @@ async def delete_hosts_and_related(
     )
     await session.execute(
         MetricSnapshot.__table__.delete().where(MetricSnapshot.host_id.in_(host_ids))
+    )
+    await session.execute(
+        update(ComplianceEvent)
+        .where(ComplianceEvent.host_id.in_(host_ids))
+        .values(host_id=None)
+    )
+    await session.execute(
+        update(ComplianceEvaluation)
+        .where(ComplianceEvaluation.host_id.in_(host_ids))
+        .values(host_id=None)
+    )
+    await session.execute(
+        ComplianceCurrentFinding.__table__.delete().where(
+            ComplianceCurrentFinding.host_id.in_(host_ids)
+        )
     )
     await session.execute(
         TelemetryRecord.__table__.delete().where(
@@ -456,7 +479,7 @@ async def store_task_result(
             payload=telemetry_payload,
             collected_at=telemetry_record.collected_at,
         )
-        await materialize_metric_projection(
+        metric_snapshots = await materialize_metric_projection(
             session,
             task_run=task_run,
             telemetry_record=telemetry_record,
@@ -465,6 +488,12 @@ async def store_task_result(
             session,
             task_run=task_run,
             telemetry_record=telemetry_record,
+        )
+        await apply_compliance_materialization(
+            session,
+            environment_id=task_run.environment_id,
+            telemetry_record=telemetry_record,
+            metric_snapshots=metric_snapshots,
         )
 
 
@@ -532,7 +561,7 @@ async def materialize_metric_projection(
     *,
     task_run: TaskRun,
     telemetry_record: TelemetryRecord,
-) -> None:
+) -> list[MetricSnapshot]:
     payload = telemetry_record.payload_json
     metric_kind: str | None = None
     value_json: dict[str, Any] | None = None
@@ -558,17 +587,18 @@ async def materialize_metric_projection(
         }
 
     if metric_kind is None or value_json is None:
-        return
+        return []
 
-    session.add(
-        MetricSnapshot(
-            environment_id=task_run.environment_id,
-            host_id=task_run.host_id,
-            metric_kind=metric_kind,
-            computed_at=telemetry_record.collected_at,
-            value_json=value_json,
-        )
+    metric = MetricSnapshot(
+        environment_id=task_run.environment_id,
+        host_id=task_run.host_id,
+        metric_kind=metric_kind,
+        computed_at=telemetry_record.collected_at,
+        value_json=value_json,
     )
+    session.add(metric)
+    await session.flush()
+    return [metric]
 
 
 async def materialize_graph_projection(
@@ -622,18 +652,17 @@ async def find_host_for_endpoint(
     environment_id: str,
     endpoint: str,
 ) -> Host | None:
-    host_or_ip = str(endpoint).split("://")[-1].split("/")[0].split(":")[0]
-    return await session.scalar(
-        select(Host).where(
-            Host.environment_id == environment_id,
-            or_(
-                Host.hostname == host_or_ip,
-                Host.primary_ipv4 == host_or_ip,
-                Host.primary_ipv6 == host_or_ip,
-                Host.name == host_or_ip,
-            ),
-        )
+    host_or_ip = canonicalize_endpoint_host(endpoint)
+    if host_or_ip is None:
+        return None
+
+    hosts = list(
+        await session.scalars(select(Host).where(Host.environment_id == environment_id))
     )
+    for host in hosts:
+        if host_or_ip in {alias.lower() for alias in host_resolution_aliases(host)}:
+            return host
+    return None
 
 
 async def set_agent_online(

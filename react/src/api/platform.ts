@@ -3,6 +3,12 @@ import type {
     Agent,
     AssignEnvRolePayload,
     AuthResponse,
+    ComplianceCatalogItem,
+    ComplianceEvent,
+    ComplianceFinding,
+    ComplianceMode,
+    CompliancePolicy,
+    ComplianceEntityKind,
     CreateAgentPayload,
     CreateEnvironmentPayload,
     CreateProjectPayload,
@@ -34,6 +40,8 @@ import type {
     ScheduleRule,
     TaskTemplateItem,
     EndpointSuggestion,
+    EndpointComplianceRuleDefinition,
+    ServiceComplianceRuleDefinition,
 } from './types'
 
 type AgentApi = {
@@ -1084,4 +1092,81 @@ export async function stubCreateScheduleRule(payload: CreateCronPayload): Promis
 
     const { data } = await apiClient.post<ScheduleRule>('/schedule-rules', body)
     return data
+}
+
+export async function stubGetComplianceCatalog(): Promise<ComplianceCatalogItem[]> {
+    const { data } = await apiClient.get<ComplianceCatalogItem[]>('/compliance/catalog')
+    return data
+}
+
+export async function stubGetCompliancePolicies(envId: string): Promise<CompliancePolicy[]> {
+    const { data } = await apiClient.get<CompliancePolicy[]>(`/environments/${envId}/compliance/policies`)
+    return data
+}
+
+export async function stubGetComplianceFindings(envId: string): Promise<ComplianceFinding[]> {
+    const { data } = await apiClient.get<ComplianceFinding[]>(`/environments/${envId}/compliance/findings`)
+    return data
+}
+
+export async function stubGetComplianceEvents(envId: string): Promise<ComplianceEvent[]> {
+    const { data } = await apiClient.get<ComplianceEvent[]>(`/environments/${envId}/compliance/events`)
+    return data
+}
+
+export interface CreateCompliancePolicyPayload {
+    environment_id: string
+    name: string
+    entity_kind: ComplianceEntityKind
+    mode: ComplianceMode
+    description?: string
+    is_enabled?: boolean
+    definition_json: {
+        rules: Array<EndpointComplianceRuleDefinition | ServiceComplianceRuleDefinition>
+    }
+}
+
+export interface PatchCompliancePolicyPayload {
+    name?: string
+    entity_kind?: ComplianceEntityKind
+    mode?: ComplianceMode
+    description?: string
+    is_enabled?: boolean
+    definition_json?: {
+        rules: Array<EndpointComplianceRuleDefinition | ServiceComplianceRuleDefinition>
+    }
+}
+
+export async function stubCreateCompliancePolicy(
+    payload: CreateCompliancePolicyPayload,
+): Promise<CompliancePolicy> {
+    const { data } = await apiClient.post<CompliancePolicy>('/compliance/policies', {
+        environment_id: payload.environment_id,
+        name: payload.name,
+        entity_kind: payload.entity_kind,
+        mode: payload.mode,
+        description: payload.description?.trim() || undefined,
+        is_enabled: payload.is_enabled ?? true,
+        definition_json: payload.definition_json,
+    })
+    return data
+}
+
+export async function stubPatchCompliancePolicy(
+    id: string,
+    payload: PatchCompliancePolicyPayload,
+): Promise<CompliancePolicy> {
+    const { data } = await apiClient.patch<CompliancePolicy>(`/compliance/policies/${id}`, {
+        name: payload.name?.trim(),
+        entity_kind: payload.entity_kind,
+        mode: payload.mode,
+        description: payload.description?.trim(),
+        is_enabled: payload.is_enabled,
+        definition_json: payload.definition_json,
+    })
+    return data
+}
+
+export async function stubDeleteCompliancePolicy(id: string): Promise<void> {
+    await apiClient.delete(`/compliance/policies/${id}`)
 }

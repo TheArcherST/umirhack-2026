@@ -4,6 +4,8 @@ export type MemberRole = 'owner' | 'admin' | 'member' | 'operator' | 'observer'
 export type EnvRole = 'operator' | 'observer'
 export type AgentOS = 'linux' | 'windows' | 'macos'
 export type InviteStatus = 'pending' | 'accepted'
+export type ComplianceEntityKind = 'endpoint_connectivity' | 'service_status'
+export type ComplianceMode = 'allowlist' | 'blacklist'
 
 export type TaskTemplate =
     | 'ping'
@@ -163,6 +165,81 @@ export interface ScheduleRule {
     created_at: string
     task_name: string
     task_kind: string
+}
+
+export interface ComplianceCatalogItem {
+    entity_kind: ComplianceEntityKind
+    label: string
+    description: string
+}
+
+export interface EndpointComplianceRuleDefinition {
+    id: string
+    label: string
+    source_host_ids: string[]
+    target_host_ids: string[]
+    target_endpoint: string | null
+    connectivity: 'any' | 'reachable' | 'unreachable'
+    max_latency_ms: number | null
+}
+
+export interface ServiceComplianceRuleDefinition {
+    id: string
+    label: string
+    host_ids: string[]
+    service_name: string
+    status: 'any' | 'running' | 'stopped'
+}
+
+export interface CompliancePolicy {
+    id: string
+    environment_id: string
+    name: string
+    entity_kind: ComplianceEntityKind
+    mode: ComplianceMode
+    description: string | null
+    is_enabled: boolean
+    current_revision_id: string | null
+    revision_no: number | null
+    rule_count: number
+    definition_json: {
+        rules: Array<EndpointComplianceRuleDefinition | ServiceComplianceRuleDefinition>
+    }
+    created_at: string
+}
+
+export interface ComplianceFinding {
+    policy_id: string
+    revision_id: string
+    revision_no: number
+    policy_name: string
+    policy_mode: ComplianceMode
+    entity_kind: ComplianceEntityKind
+    host_id: string | null
+    host_name: string | null
+    subject_key: string
+    subject_label: string
+    matched_rule_labels: string[]
+    evidence_json: Record<string, any>
+    observed_at: string
+    expires_at: string | null
+}
+
+export interface ComplianceEvent {
+    id: string
+    policy_id: string
+    revision_id: string
+    revision_no: number
+    policy_name: string
+    entity_kind: ComplianceEntityKind
+    event_kind: 'rise' | 'resolved'
+    event_origin: 'live' | 'backfill'
+    host_id: string | null
+    host_name: string | null
+    subject_key: string
+    subject_label: string
+    happened_at: string
+    payload_json: Record<string, any>
 }
 
 export interface TaskTemplateItem {

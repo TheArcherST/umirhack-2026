@@ -107,8 +107,12 @@ async def assign_environment_role(
     platform_service: FromDishka[PlatformService],
     uow_ctl: FromDishka[UoWCtl],
 ) -> EnvironmentMemberDTO:
-    await access_service.require_environment_member(
+    environment = await access_service.require_environment_member(
         environment_id,
+        user_id=current_user.id,
+    )
+    await access_service.require_project_admin(
+        environment.project_id,
         user_id=current_user.id,
     )
     member = await platform_service.assign_environment_role(
