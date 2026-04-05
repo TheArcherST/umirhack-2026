@@ -266,3 +266,56 @@ def test_compliance_materializes_service_and_endpoint_policies(api) -> None:
     assert endpoint_violation["matched_rule_labels"] == []
     assert endpoint_violation["subject_label"] == "alpha.internal -> alpha.internal"
     assert endpoint_violation["revision_no"] == 2
+
+
+def test_compliance_rejects_second_ruleset_for_same_entity_kind(api) -> None:
+    owner = api.register_user(prefix="compliance-single-kind")
+    bundle = api.create_project_bundle(
+        user=owner,
+        project_name="Single Ruleset Compliance",
+    )
+
+    first_response = api.client.post(
+        "/compliance/policies",
+        json={
+            "environment_id": bundle.environment["id"],
+            "name": "Service status rules",
+            "entity_kind": "service_status",
+            "mode": "blacklist",
+            "definition_json": {
+                "rules": [
+                    {
+                        "label": "block sshd",
+                        "host_ids": [],
+                        "service_name": "sshd.service",
+                        "status": "running",
+                    }
+                ]
+            },
+        },
+        headers=owner.headers,
+    )
+    assert first_response.status_code == 201, first_response.text
+
+    second_response = api.client.post(
+        "/compliance/policies",
+        json={
+            "environment_id": bundle.environment["id"],
+            "name": "Another service status rules",
+            "entity_kind": "service_status",
+            "mode": "allowlist",
+            "definition_json": {
+                "rules": [
+                    {
+                        "label": "allow nginx",
+                        "host_ids": [],
+                        "service_name": "nginx.service",
+                        "status": "running",
+                    }
+                ]
+            },
+        },
+        headers=owner.headers,
+    )
+    assert second_response.status_code == 409, second_response.text
+    assert "Only one compliance rule set is allowed per entity type" in second_response.text
