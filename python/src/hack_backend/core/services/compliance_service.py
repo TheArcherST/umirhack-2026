@@ -12,6 +12,7 @@ from hack_backend.core.compliance import (
     ComplianceValidationError,
     ENTITY_KIND_TASK_STREAM,
     _coerce_utc,
+    materialize_expired_window_violations,
     normalize_policy_definition,
     rebuild_policy,
 )
@@ -305,6 +306,16 @@ class ComplianceService:
 
         result.sort(key=lambda item: item.finding.observed_at, reverse=True)
         return result
+
+    async def materialize_expired_findings(
+        self,
+        *,
+        environment_id: str,
+    ) -> bool:
+        return await materialize_expired_window_violations(
+            self.session,
+            environment_id=environment_id,
+        )
 
     async def list_events(
         self,

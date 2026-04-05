@@ -219,6 +219,73 @@ async def apply_compliance_materialization(
         )
 
 
+async def materialize_expired_window_violations(
+    session: AsyncSession,
+    *,
+    environment_id: str,
+) -> bool:
+    now = datetime.now(tz=UTC)
+    policies = list(
+        await session.scalars(
+            select(CompliancePolicy).where(
+                CompliancePolicy.environment_id == environment_id,
+                CompliancePolicy.is_enabled.is_(True),
+                CompliancePolicy.deleted_at.is_(None),
+                CompliancePolicy.current_revision_id.is_not(None),
+                CompliancePolicy.entity_kind == ENTITY_KIND_TASK_STREAM,
+            )
+        )
+    )
+    if not policies:
+        return False
+
+    revisions_by_id = {
+        revision.id: revision
+        for revision in await session.scalars(
+            select(CompliancePolicyRevision).where(
+                CompliancePolicyRevision.id.in_(
+                    [
+                        policy.current_revision_id
+                        for policy in policies
+                        if policy.current_revision_id
+                    ]
+                )
+            )
+        )
+    }
+    findings = list(
+        await session.scalars(
+            select(ComplianceCurrentFinding).where(
+                ComplianceCurrentFinding.environment_id == environment_id,
+                ComplianceCurrentFinding.policy_id.in_([policy.id for policy in policies]),
+            )
+        )
+    )
+
+    policies_by_id = {policy.id: policy for policy in policies}
+    changed = False
+    for finding in findings:
+        policy = policies_by_id.get(finding.policy_id)
+        if policy is None or policy.current_revision_id != finding.revision_id:
+            continue
+        revision = revisions_by_id.get(finding.revision_id)
+        if revision is None or not finding.is_violation:
+            continue
+        expires_at = _coerce_utc(finding.expires_at)
+        if expires_at is None or expires_at > now:
+            continue
+        await _append_expired_resolution(
+            session,
+            policy=policy,
+            revision=revision,
+            finding=finding,
+            expired_at=expires_at,
+        )
+        changed = True
+
+    return changed
+
+
 def _normalize_rule_id(raw_value: Any, *, index: int) -> str:
     text = str(raw_value or "").strip().lower().replace(" ", "-")
     if text:
@@ -1075,6 +1142,95 @@ async def _upsert_current_finding(
     finding.observed_at = observed_at
     finding.expires_at = expires_at
     finding.is_violation = is_violation
+
+
+async def _append_expired_resolution(
+    session: AsyncSession,
+    *,
+    policy: CompliancePolicy,
+    revision: CompliancePolicyRevision,
+    finding: ComplianceCurrentFinding,
+    expired_at: datetime,
+) -> None:
+    expired_at = _coerce_utc(expired_at) or expired_at
+    entity = ObservedEntity(
+        subject_key=finding.subject_key,
+        subject_label=finding.subject_label,
+        host_id=finding.host_id,
+        scope_key=finding.scope_key,
+        values={},
+        evidence_json={
+            "expired_window": True,
+            "previous_evaluation_id": finding.latest_evaluation_id,
+            "expired_at": expired_at.isoformat(),
+        },
+    )
+    evaluation = ComplianceEvaluation(
+        policy_id=policy.id,
+        revision_id=revision.id,
+        environment_id=policy.environment_id,
+        host_id=finding.host_id,
+        entity_kind=policy.entity_kind,
+        subject_key=finding.subject_key,
+        subject_label=finding.subject_label,
+        scope_key=finding.scope_key,
+        source_kind="window_expiry",
+        source_record_id=finding.latest_evaluation_id,
+        observed_at=expired_at,
+        is_violation=False,
+        event_origin=ComplianceEventOrigin.LIVE,
+        matched_rule_ids_json=[],
+        evidence_json=entity.evidence_json,
+        expires_at=None,
+    )
+    session.add(evaluation)
+    await session.flush()
+
+    await _upsert_current_finding(
+        session,
+        policy=policy,
+        revision=revision,
+        evaluation=evaluation,
+        entity=entity,
+        matched_rule_ids=[],
+        evidence_json=entity.evidence_json,
+        is_violation=False,
+        observed_at=expired_at,
+        expires_at=None,
+    )
+
+    session.add(
+        ComplianceEvent(
+            policy_id=policy.id,
+            revision_id=revision.id,
+            evaluation_id=evaluation.id,
+            environment_id=policy.environment_id,
+            host_id=finding.host_id,
+            entity_kind=policy.entity_kind,
+            subject_key=finding.subject_key,
+            subject_label=finding.subject_label,
+            event_kind=ComplianceEventKind.RESOLVED,
+            event_origin=ComplianceEventOrigin.LIVE,
+            happened_at=expired_at,
+            payload_json={
+                "matched_rule_ids": finding.matched_rule_ids_json,
+                "evidence": entity.evidence_json,
+            },
+        )
+    )
+    queue_compliance_email_notification(
+        session,
+        environment_id=policy.environment_id,
+        policy_name=policy.name,
+        event_kind=ComplianceEventKind.RESOLVED.value,
+        event_origin=ComplianceEventOrigin.LIVE.value,
+        subject_label=finding.subject_label,
+        happened_at=expired_at,
+        matched_rule_labels=_matched_rule_labels(
+            revision.definition_json or {},
+            finding.matched_rule_ids_json,
+        ),
+    )
 
 
 def _merged_task_input(task_run: TaskRun) -> dict[str, Any]:
