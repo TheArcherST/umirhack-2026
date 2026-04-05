@@ -85,3 +85,57 @@ def test_normalize_service_policy_definition_rejects_unknown_host() -> None:
                 _host("host-a", name="db", hostname="db.internal"),
             ],
         )
+
+
+def test_normalize_command_output_policy_definition_compiles_regex_rule() -> None:
+    definition, compiled = normalize_policy_definition(
+        entity_kind="command_output",
+        definition_json={
+            "rules": [
+                {
+                    "label": "detect ubuntu",
+                    "host_ids": ["host-a"],
+                    "command_pattern": "os-release",
+                    "output_pattern": "ubuntu",
+                }
+            ]
+        },
+        available_hosts=[
+            _host("host-a", name="web", hostname="web.internal"),
+        ],
+    )
+
+    assert definition["rules"][0]["output_pattern"] == "ubuntu"
+    assert compiled["rules"][0]["clauses"][-1] == {
+        "field": "output_text",
+        "operator": "regex_search",
+        "value": "ubuntu",
+    }
+
+
+def test_normalize_port_binding_policy_definition_compiles_range_and_subnet() -> None:
+    definition, compiled = normalize_policy_definition(
+        entity_kind="port_binding",
+        definition_json={
+            "rules": [
+                {
+                    "label": "public tcp listeners",
+                    "host_ids": ["host-a"],
+                    "protocol": "tcp",
+                    "local_subnet": "10.0.0.0/24",
+                    "state": "listening",
+                    "port_from": 20,
+                    "port_to": 30,
+                }
+            ]
+        },
+        available_hosts=[
+            _host("host-a", name="web", hostname="web.internal"),
+        ],
+    )
+
+    assert definition["rules"][0]["local_subnet"] == "10.0.0.0/24"
+    assert compiled["rules"][0]["clauses"][-2:] == [
+        {"field": "port", "operator": "gte_number", "value": 20},
+        {"field": "port", "operator": "lte_number", "value": 30},
+    ]

@@ -402,6 +402,19 @@
     "maxLatency": "Max latency (ms)",
     "serviceName": "Service name",
     "serviceNamePlaceholder": "cron.service",
+    "commandPattern": "Command regex",
+    "commandPatternPlaceholder": "Optional regex to scope matching to specific commands",
+    "outputPattern": "Output regex",
+    "outputPatternPlaceholder": "Regex matched against the captured command output",
+    "protocol": "Protocol",
+    "localAddress": "Local address",
+    "localAddressPlaceholder": "0.0.0.0 or 127.0.0.1",
+    "localSubnet": "Local subnet",
+    "localSubnetPlaceholder": "10.0.0.0/24",
+    "portRange": "Port range",
+    "portFrom": "From",
+    "portTo": "To",
+    "anyProtocol": "Any protocol",
     "hostScope": "Host scope",
     "activeViolations": "Active violations",
     "matchedRules": "Matched rules",
@@ -450,6 +463,10 @@
     "serviceStatus": {
       "running": "running",
       "stopped": "stopped"
+    },
+    "portState": {
+      "listening": "listening",
+      "established": "established"
     }
   }
 }

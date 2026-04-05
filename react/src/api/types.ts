@@ -6,7 +6,11 @@ export type ApiKeyRole = 'operator' | 'observer'
 export type AgentOS = 'linux' | 'windows' | 'macos'
 export type InviteStatus = 'pending' | 'accepted'
 export type ApiKeyExpiry = '1d' | '7d' | '30d' | '90d' | 'never'
-export type ComplianceEntityKind = 'endpoint_connectivity' | 'service_status'
+export type ComplianceEntityKind =
+    | 'endpoint_connectivity'
+    | 'service_status'
+    | 'command_output'
+    | 'port_binding'
 export type ComplianceMode = 'allowlist' | 'blacklist'
 
 export type TaskTemplate =
@@ -193,6 +197,26 @@ export interface ServiceComplianceRuleDefinition {
     status: 'any' | 'running' | 'stopped'
 }
 
+export interface CommandOutputComplianceRuleDefinition {
+    id: string
+    label: string
+    host_ids: string[]
+    command_pattern: string | null
+    output_pattern: string
+}
+
+export interface PortBindingComplianceRuleDefinition {
+    id: string
+    label: string
+    host_ids: string[]
+    protocol: 'any' | 'tcp' | 'udp'
+    local_address: string | null
+    local_subnet: string | null
+    state: 'any' | 'listening' | 'established'
+    port_from: number | null
+    port_to: number | null
+}
+
 export interface CompliancePolicy {
     id: string
     environment_id: string
@@ -205,7 +229,12 @@ export interface CompliancePolicy {
     revision_no: number | null
     rule_count: number
     definition_json: {
-        rules: Array<EndpointComplianceRuleDefinition | ServiceComplianceRuleDefinition>
+        rules: Array<
+            | EndpointComplianceRuleDefinition
+            | ServiceComplianceRuleDefinition
+            | CommandOutputComplianceRuleDefinition
+            | PortBindingComplianceRuleDefinition
+        >
     }
     created_at: string
 }

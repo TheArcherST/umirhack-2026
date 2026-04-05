@@ -41,7 +41,9 @@ import type {
     TaskTemplateItem,
     EndpointSuggestion, ApiKeyCreateResponse, ApiKeyRole, ApiKeyListResponse, ApiKey,
     EndpointSuggestion,
+    CommandOutputComplianceRuleDefinition,
     EndpointComplianceRuleDefinition,
+    PortBindingComplianceRuleDefinition,
     ServiceComplianceRuleDefinition,
 } from './types'
 
@@ -1147,7 +1149,12 @@ export interface CreateCompliancePolicyPayload {
     description?: string
     is_enabled?: boolean
     definition_json: {
-        rules: Array<EndpointComplianceRuleDefinition | ServiceComplianceRuleDefinition>
+        rules: Array<
+            | EndpointComplianceRuleDefinition
+            | ServiceComplianceRuleDefinition
+            | CommandOutputComplianceRuleDefinition
+            | PortBindingComplianceRuleDefinition
+        >
     }
 }
 
@@ -1158,7 +1165,12 @@ export interface PatchCompliancePolicyPayload {
     description?: string
     is_enabled?: boolean
     definition_json?: {
-        rules: Array<EndpointComplianceRuleDefinition | ServiceComplianceRuleDefinition>
+        rules: Array<
+            | EndpointComplianceRuleDefinition
+            | ServiceComplianceRuleDefinition
+            | CommandOutputComplianceRuleDefinition
+            | PortBindingComplianceRuleDefinition
+        >
     }
 }
 

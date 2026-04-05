@@ -402,6 +402,19 @@
     "maxLatency": "Максимальная задержка (мс)",
     "serviceName": "Имя сервиса",
     "serviceNamePlaceholder": "cron.service",
+    "commandPattern": "Регулярка команды",
+    "commandPatternPlaceholder": "Необязательная регулярка для выбора конкретных команд",
+    "outputPattern": "Регулярка вывода",
+    "outputPatternPlaceholder": "Регулярка, которая применяется к захваченному выводу команды",
+    "protocol": "Протокол",
+    "localAddress": "Локальный адрес",
+    "localAddressPlaceholder": "0.0.0.0 или 127.0.0.1",
+    "localSubnet": "Локальная подсеть",
+    "localSubnetPlaceholder": "10.0.0.0/24",
+    "portRange": "Диапазон портов",
+    "portFrom": "От",
+    "portTo": "До",
+    "anyProtocol": "Любой протокол",
     "hostScope": "Охват хостов",
     "activeViolations": "Активные нарушения",
     "matchedRules": "Сработавшие правила",
@@ -450,6 +463,10 @@
     "serviceStatus": {
       "running": "запущен",
       "stopped": "остановлен"
+    },
+    "portState": {
+      "listening": "слушает",
+      "established": "установлен"
     }
   }
 }

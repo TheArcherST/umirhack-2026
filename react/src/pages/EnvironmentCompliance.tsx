@@ -38,6 +38,7 @@ import {
   type PatchCompliancePolicyPayload,
 } from '@/api/stubs'
 import type {
+  CommandOutputComplianceRuleDefinition,
   ComplianceCatalogItem,
   ComplianceEntityKind,
   ComplianceEvent,
@@ -46,6 +47,7 @@ import type {
   CompliancePolicy,
   EndpointComplianceRuleDefinition,
   Host,
+  PortBindingComplianceRuleDefinition,
   ServiceComplianceRuleDefinition,
 } from '@/api/types'
 import { cn, formatDate } from '@/lib/utils'
@@ -56,6 +58,8 @@ type EndpointRuleDraft = EndpointComplianceRuleDefinition & {
 }
 
 type ServiceRuleDraft = ServiceComplianceRuleDefinition
+type CommandOutputRuleDraft = CommandOutputComplianceRuleDefinition
+type PortBindingRuleDraft = PortBindingComplianceRuleDefinition
 
 let draftRuleCounter = 1
 
@@ -84,6 +88,30 @@ function newServiceRule(): ServiceRuleDraft {
     host_ids: [],
     service_name: '',
     status: 'running',
+  }
+}
+
+function newCommandOutputRule(): CommandOutputRuleDraft {
+  return {
+    id: nextRuleId(),
+    label: '',
+    host_ids: [],
+    command_pattern: null,
+    output_pattern: '',
+  }
+}
+
+function newPortBindingRule(): PortBindingRuleDraft {
+  return {
+    id: nextRuleId(),
+    label: '',
+    host_ids: [],
+    protocol: 'tcp',
+    local_address: null,
+    local_subnet: null,
+    state: 'listening',
+    port_from: null,
+    port_to: null,
   }
 }
 
@@ -118,6 +146,18 @@ function mapDraftToEndpointRule(
 
 function isEndpointEntityKind(entityKind: ComplianceEntityKind) {
   return entityKind === 'endpoint_connectivity'
+}
+
+function isServiceEntityKind(entityKind: ComplianceEntityKind) {
+  return entityKind === 'service_status'
+}
+
+function isCommandOutputEntityKind(entityKind: ComplianceEntityKind) {
+  return entityKind === 'command_output'
+}
+
+function isPortBindingEntityKind(entityKind: ComplianceEntityKind) {
+  return entityKind === 'port_binding'
 }
 
 function isEndpointPolicy(policy: CompliancePolicy) {
@@ -460,6 +500,262 @@ function ServiceRuleTable({
   )
 }
 
+function CommandOutputRuleTable({
+  rules,
+  hosts,
+  onChange,
+  onDelete,
+  t,
+}: {
+  rules: CommandOutputRuleDraft[]
+  hosts: Host[]
+  onChange: (index: number, nextRule: CommandOutputRuleDraft) => void
+  onDelete: (index: number) => void
+  t: (key: string) => string
+}) {
+  if (rules.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-border bg-muted/10 px-4 py-8 text-center text-sm text-muted-foreground">
+        {t('compliance.noRulesConfigured')}
+      </div>
+    )
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-lg border border-border bg-card">
+      <table className="w-full min-w-[920px] text-sm">
+        <thead>
+          <tr className="border-b border-border bg-muted/20">
+            <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.rule')}</th>
+            <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.hostScope')}</th>
+            <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.commandPattern')}</th>
+            <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.outputPattern')}</th>
+            <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">{t('common.actions')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rules.map((rule, index) => {
+            const toggleHost = (hostId: string) => {
+              onChange(index, {
+                ...rule,
+                host_ids: rule.host_ids.includes(hostId)
+                  ? rule.host_ids.filter((id) => id !== hostId)
+                  : [...rule.host_ids, hostId],
+              })
+            }
+
+            return (
+              <tr key={rule.id} className="border-b border-border/40 align-top last:border-0">
+                <td className="px-3 py-3">
+                  <Input
+                    value={rule.label}
+                    onChange={(e) => onChange(index, { ...rule, label: e.target.value })}
+                    placeholder={t('compliance.ruleLabelPlaceholder')}
+                  />
+                </td>
+                <td className="px-3 py-3">
+                  <HostSelector
+                    hosts={hosts}
+                    selectedIds={rule.host_ids}
+                    onToggle={toggleHost}
+                  />
+                </td>
+                <td className="px-3 py-3">
+                  <Input
+                    value={rule.command_pattern ?? ''}
+                    onChange={(e) =>
+                      onChange(index, {
+                        ...rule,
+                        command_pattern: e.target.value.trim() || null,
+                      })
+                    }
+                    placeholder={t('compliance.commandPatternPlaceholder')}
+                  />
+                </td>
+                <td className="px-3 py-3">
+                  <Input
+                    value={rule.output_pattern}
+                    onChange={(e) => onChange(index, { ...rule, output_pattern: e.target.value })}
+                    placeholder={t('compliance.outputPatternPlaceholder')}
+                  />
+                </td>
+                <td className="px-3 py-3 text-right">
+                  <Button type="button" size="sm" variant="ghost" onClick={() => onDelete(index)}>
+                    <Trash2 size={12} />
+                  </Button>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function PortBindingRuleTable({
+  rules,
+  hosts,
+  onChange,
+  onDelete,
+  t,
+}: {
+  rules: PortBindingRuleDraft[]
+  hosts: Host[]
+  onChange: (index: number, nextRule: PortBindingRuleDraft) => void
+  onDelete: (index: number) => void
+  t: (key: string) => string
+}) {
+  if (rules.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-border bg-muted/10 px-4 py-8 text-center text-sm text-muted-foreground">
+        {t('compliance.noRulesConfigured')}
+      </div>
+    )
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-lg border border-border bg-card">
+      <table className="w-full min-w-[1120px] text-sm">
+        <thead>
+          <tr className="border-b border-border bg-muted/20">
+            <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.rule')}</th>
+            <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.hostScope')}</th>
+            <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.protocol')}</th>
+            <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.localAddress')}</th>
+            <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.localSubnet')}</th>
+            <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.expectedState')}</th>
+            <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.portRange')}</th>
+            <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">{t('common.actions')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rules.map((rule, index) => {
+            const toggleHost = (hostId: string) => {
+              onChange(index, {
+                ...rule,
+                host_ids: rule.host_ids.includes(hostId)
+                  ? rule.host_ids.filter((id) => id !== hostId)
+                  : [...rule.host_ids, hostId],
+              })
+            }
+
+            return (
+              <tr key={rule.id} className="border-b border-border/40 align-top last:border-0">
+                <td className="px-3 py-3">
+                  <Input
+                    value={rule.label}
+                    onChange={(e) => onChange(index, { ...rule, label: e.target.value })}
+                    placeholder={t('compliance.ruleLabelPlaceholder')}
+                  />
+                </td>
+                <td className="px-3 py-3">
+                  <HostSelector
+                    hosts={hosts}
+                    selectedIds={rule.host_ids}
+                    onToggle={toggleHost}
+                  />
+                </td>
+                <td className="px-3 py-3">
+                  <Select
+                    value={rule.protocol}
+                    onValueChange={(value) =>
+                      onChange(index, { ...rule, protocol: value as PortBindingRuleDraft['protocol'] })
+                    }
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">{t('compliance.anyProtocol')}</SelectItem>
+                      <SelectItem value="tcp">TCP</SelectItem>
+                      <SelectItem value="udp">UDP</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </td>
+                <td className="px-3 py-3">
+                  <Input
+                    value={rule.local_address ?? ''}
+                    onChange={(e) =>
+                      onChange(index, {
+                        ...rule,
+                        local_address: e.target.value.trim() || null,
+                        local_subnet: e.target.value.trim() ? null : rule.local_subnet,
+                      })
+                    }
+                    placeholder={t('compliance.localAddressPlaceholder')}
+                  />
+                </td>
+                <td className="px-3 py-3">
+                  <Input
+                    value={rule.local_subnet ?? ''}
+                    onChange={(e) =>
+                      onChange(index, {
+                        ...rule,
+                        local_subnet: e.target.value.trim() || null,
+                        local_address: e.target.value.trim() ? null : rule.local_address,
+                      })
+                    }
+                    placeholder={t('compliance.localSubnetPlaceholder')}
+                  />
+                </td>
+                <td className="px-3 py-3">
+                  <Select
+                    value={rule.state}
+                    onValueChange={(value) =>
+                      onChange(index, { ...rule, state: value as PortBindingRuleDraft['state'] })
+                    }
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">{t('compliance.anyState')}</SelectItem>
+                      <SelectItem value="listening">{t('compliance.portState.listening')}</SelectItem>
+                      <SelectItem value="established">{t('compliance.portState.established')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </td>
+                <td className="px-3 py-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      type="number"
+                      min="1"
+                      max="65535"
+                      value={rule.port_from ?? ''}
+                      onChange={(e) =>
+                        onChange(index, {
+                          ...rule,
+                          port_from: e.target.value === '' ? null : Number(e.target.value),
+                        })
+                      }
+                      placeholder={t('compliance.portFrom')}
+                    />
+                    <Input
+                      type="number"
+                      min="1"
+                      max="65535"
+                      value={rule.port_to ?? ''}
+                      onChange={(e) =>
+                        onChange(index, {
+                          ...rule,
+                          port_to: e.target.value === '' ? null : Number(e.target.value),
+                        })
+                      }
+                      placeholder={t('compliance.portTo')}
+                    />
+                  </div>
+                </td>
+                <td className="px-3 py-3 text-right">
+                  <Button type="button" size="sm" variant="ghost" onClick={() => onDelete(index)}>
+                    <Trash2 size={12} />
+                  </Button>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function ComplianceTypePanel({
   envId,
   catalogItem,
@@ -489,8 +785,18 @@ function ComplianceTypePanel({
       : [],
   )
   const [serviceRules, setServiceRules] = useState<ServiceRuleDraft[]>(
-    policy && !isEndpointPolicy(policy)
+    policy && isServiceEntityKind(policy.entity_kind)
       ? policy.definition_json.rules as ServiceRuleDraft[]
+      : [],
+  )
+  const [commandOutputRules, setCommandOutputRules] = useState<CommandOutputRuleDraft[]>(
+    policy && isCommandOutputEntityKind(policy.entity_kind)
+      ? policy.definition_json.rules as CommandOutputRuleDraft[]
+      : [],
+  )
+  const [portBindingRules, setPortBindingRules] = useState<PortBindingRuleDraft[]>(
+    policy && isPortBindingEntityKind(policy.entity_kind)
+      ? policy.definition_json.rules as PortBindingRuleDraft[]
       : [],
   )
   const [error, setError] = useState('')
@@ -506,8 +812,18 @@ function ComplianceTypePanel({
         : [],
     )
     setServiceRules(
-      policy && !isEndpointPolicy(policy)
+      policy && isServiceEntityKind(policy.entity_kind)
         ? policy.definition_json.rules as ServiceRuleDraft[]
+        : [],
+    )
+    setCommandOutputRules(
+      policy && isCommandOutputEntityKind(policy.entity_kind)
+        ? policy.definition_json.rules as CommandOutputRuleDraft[]
+        : [],
+    )
+    setPortBindingRules(
+      policy && isPortBindingEntityKind(policy.entity_kind)
+        ? policy.definition_json.rules as PortBindingRuleDraft[]
         : [],
     )
     setError('')
@@ -521,17 +837,40 @@ function ComplianceTypePanel({
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const definition_json = isEndpointEntityKind(catalogItem.entity_kind)
-        ? {
-          rules: endpointRules.map(mapDraftToEndpointRule),
+      const definition_json = (() => {
+        if (isEndpointEntityKind(catalogItem.entity_kind)) {
+          return {
+            rules: endpointRules.map(mapDraftToEndpointRule),
+          }
         }
-        : {
-          rules: serviceRules.map((rule) => ({
+        if (isServiceEntityKind(catalogItem.entity_kind)) {
+          return {
+            rules: serviceRules.map((rule) => ({
+              ...rule,
+              label: rule.label.trim(),
+              service_name: rule.service_name.trim(),
+            })),
+          }
+        }
+        if (isCommandOutputEntityKind(catalogItem.entity_kind)) {
+          return {
+            rules: commandOutputRules.map((rule) => ({
+              ...rule,
+              label: rule.label.trim(),
+              command_pattern: rule.command_pattern?.trim() || null,
+              output_pattern: rule.output_pattern.trim(),
+            })),
+          }
+        }
+        return {
+          rules: portBindingRules.map((rule) => ({
             ...rule,
             label: rule.label.trim(),
-            service_name: rule.service_name.trim(),
+            local_address: rule.local_address?.trim() || null,
+            local_subnet: rule.local_subnet?.trim() || null,
           })),
         }
+      })()
 
       if (!policy) {
         const payload: CreateCompliancePolicyPayload = {
@@ -576,12 +915,29 @@ function ComplianceTypePanel({
       setEndpointRules((prev) => [...prev, newEndpointRule()])
       return
     }
-    setServiceRules((prev) => [...prev, newServiceRule()])
+    if (isServiceEntityKind(catalogItem.entity_kind)) {
+      setServiceRules((prev) => [...prev, newServiceRule()])
+      return
+    }
+    if (isCommandOutputEntityKind(catalogItem.entity_kind)) {
+      setCommandOutputRules((prev) => [...prev, newCommandOutputRule()])
+      return
+    }
+    setPortBindingRules((prev) => [...prev, newPortBindingRule()])
   }
 
-  const isSubmitDisabled = isEndpointEntityKind(catalogItem.entity_kind)
-    ? endpointRules.length === 0
-    : serviceRules.length === 0 || serviceRules.some((rule) => !rule.service_name.trim())
+  const isSubmitDisabled = (() => {
+    if (isEndpointEntityKind(catalogItem.entity_kind)) {
+      return endpointRules.length === 0
+    }
+    if (isServiceEntityKind(catalogItem.entity_kind)) {
+      return serviceRules.length === 0 || serviceRules.some((rule) => !rule.service_name.trim())
+    }
+    if (isCommandOutputEntityKind(catalogItem.entity_kind)) {
+      return commandOutputRules.length === 0 || commandOutputRules.some((rule) => !rule.output_pattern.trim())
+    }
+    return portBindingRules.length === 0
+  })()
 
   return (
     <div className="space-y-5">
@@ -628,8 +984,8 @@ function ComplianceTypePanel({
               </label>
             </div>
             <div className="flex items-center gap-2 pt-5">
-              <Button type="button" size="sm" variant="outline" onClick={addRule}>
-                <Plus size={12} className="mr-1.5" />
+              <Button type="button" size="sm" onClick={addRule}>
+                <Plus size={13} className="mr-1.5" />
                 {t('compliance.addRule')}
               </Button>
               <Button
@@ -714,7 +1070,7 @@ function ComplianceTypePanel({
               }
               t={t}
             />
-          ) : (
+          ) : isServiceEntityKind(catalogItem.entity_kind) ? (
             <ServiceRuleTable
               rules={serviceRules}
               hosts={hosts}
@@ -725,6 +1081,34 @@ function ComplianceTypePanel({
               }
               onDelete={(index) =>
                 setServiceRules((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
+              }
+              t={t}
+            />
+          ) : isCommandOutputEntityKind(catalogItem.entity_kind) ? (
+            <CommandOutputRuleTable
+              rules={commandOutputRules}
+              hosts={hosts}
+              onChange={(index, nextRule) =>
+                setCommandOutputRules((prev) =>
+                  prev.map((item, itemIndex) => (itemIndex === index ? nextRule : item)),
+                )
+              }
+              onDelete={(index) =>
+                setCommandOutputRules((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
+              }
+              t={t}
+            />
+          ) : (
+            <PortBindingRuleTable
+              rules={portBindingRules}
+              hosts={hosts}
+              onChange={(index, nextRule) =>
+                setPortBindingRules((prev) =>
+                  prev.map((item, itemIndex) => (itemIndex === index ? nextRule : item)),
+                )
+              }
+              onDelete={(index) =>
+                setPortBindingRules((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
               }
               t={t}
             />

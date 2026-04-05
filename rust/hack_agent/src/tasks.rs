@@ -56,6 +56,15 @@ struct ServiceTelemetryEntry {
     sub_state: Option<String>,
 }
 
+#[derive(Debug, Serialize, PartialEq, Eq)]
+struct PortTelemetryEntry {
+    protocol: String,
+    port: u16,
+    local_address: String,
+    state: String,
+    process: Option<String>,
+}
+
 pub async fn execute_task(
     task: &AgentTaskLease,
     config: &Config,
@@ -236,7 +245,7 @@ async fn command_result(
 ) -> CompletePayload {
     let result = run_command(command).await;
     let telemetry_payload =
-        build_command_telemetry_payload(kind, command, &result.stdout);
+        build_command_telemetry_payload(kind, command, &result);
     let stdout_text = if renders_structured_stdout(kind) {
         pretty_json(&telemetry_payload)
     } else {
@@ -432,23 +441,218 @@ fn pretty_json(value: &Value) -> String {
 fn build_command_telemetry_payload(
     kind: &str,
     command: &str,
-    stdout: &str,
+    result: &CommandOutput,
 ) -> Value {
     match kind {
         "diagnostic.command.service_status" => json!({
             "command": command,
-            "sample": stdout,
-            "services": parse_service_status_output(stdout),
+            "sample": result.stdout,
+            "exit_code": result.exit_code,
+            "stderr": result.stderr,
+            "services": parse_service_status_output(&result.stdout),
+        }),
+        "diagnostic.command.port_scan" => json!({
+            "command": command,
+            "sample": result.stdout,
+            "exit_code": result.exit_code,
+            "stderr": result.stderr,
+            "ports": parse_port_scan_output(&result.stdout),
+        }),
+        "diagnostic.command.custom" => json!({
+            "command": command,
+            "sample": result.stdout,
+            "exit_code": result.exit_code,
+            "stderr": result.stderr,
         }),
         _ => json!({
-            "sample": stdout,
+            "sample": result.stdout,
             "command": command,
+            "exit_code": result.exit_code,
+            "stderr": result.stderr,
         }),
     }
 }
 
 fn renders_structured_stdout(kind: &str) -> bool {
-    matches!(kind, "diagnostic.command.service_status")
+    matches!(kind, "diagnostic.command.service_status" | "diagnostic.command.port_scan")
+}
+
+fn parse_port_scan_output(stdout: &str) -> Vec<PortTelemetryEntry> {
+    match std::env::consts::OS {
+        "windows" => parse_windows_port_scan(stdout),
+        "macos" => parse_macos_port_scan(stdout),
+        _ => parse_linux_port_scan(stdout),
+    }
+}
+
+fn parse_linux_port_scan(stdout: &str) -> Vec<PortTelemetryEntry> {
+    let mut entries = Vec::new();
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty()
+            || trimmed.starts_with("Netid ")
+            || trimmed.starts_with("State ")
+        {
+            continue;
+        }
+
+        let parts = trimmed.split_whitespace().collect::<Vec<_>>();
+        if parts.len() < 5 {
+            continue;
+        }
+
+        let Some((local_address, port)) = parse_socket_endpoint(parts[4]) else {
+            continue;
+        };
+        entries.push(PortTelemetryEntry {
+            protocol: normalize_port_protocol(parts[0]).to_string(),
+            port,
+            local_address,
+            state: normalize_port_state(parts.get(1).copied()).to_string(),
+            process: parts.get(6..).map(|values| values.join(" ")).filter(|value| !value.is_empty()),
+        });
+    }
+    dedupe_ports(entries)
+}
+
+fn parse_macos_port_scan(stdout: &str) -> Vec<PortTelemetryEntry> {
+    let mut entries = Vec::new();
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("COMMAND ") {
+            continue;
+        }
+
+        let parts = trimmed.split_whitespace().collect::<Vec<_>>();
+        if parts.len() < 9 {
+            continue;
+        }
+
+        let endpoint = parts[8..].join(" ");
+        let endpoint = endpoint
+            .split(" (")
+            .next()
+            .unwrap_or_default()
+            .trim();
+        let Some((local_address, port)) = parse_socket_endpoint(endpoint) else {
+            continue;
+        };
+        entries.push(PortTelemetryEntry {
+            protocol: "tcp".to_string(),
+            port,
+            local_address,
+            state: "listening".to_string(),
+            process: Some(parts[0].to_string()),
+        });
+    }
+    dedupe_ports(entries)
+}
+
+fn parse_windows_port_scan(stdout: &str) -> Vec<PortTelemetryEntry> {
+    let mut entries = Vec::new();
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty()
+            || trimmed.starts_with("Proto")
+            || trimmed.starts_with("Active Connections")
+        {
+            continue;
+        }
+
+        let parts = trimmed.split_whitespace().collect::<Vec<_>>();
+        if parts.len() < 3 {
+            continue;
+        }
+
+        let protocol = normalize_port_protocol(parts[0]);
+        let Some((local_address, port)) = parse_socket_endpoint(parts[1]) else {
+            continue;
+        };
+        let (state, process) = if protocol == "udp" {
+            ("listening".to_string(), parts.get(3).map(|value| (*value).to_string()))
+        } else {
+            (
+                normalize_port_state(parts.get(3).copied()).to_string(),
+                parts.get(4).map(|value| (*value).to_string()),
+            )
+        };
+
+        entries.push(PortTelemetryEntry {
+            protocol: protocol.to_string(),
+            port,
+            local_address,
+            state,
+            process,
+        });
+    }
+    dedupe_ports(entries)
+}
+
+fn dedupe_ports(entries: Vec<PortTelemetryEntry>) -> Vec<PortTelemetryEntry> {
+    let mut seen = BTreeSet::new();
+    let mut deduped = Vec::new();
+    for entry in entries {
+        let key = format!(
+            "{}:{}:{}:{}",
+            entry.protocol, entry.local_address, entry.port, entry.state
+        );
+        if seen.insert(key) {
+            deduped.push(entry);
+        }
+    }
+    deduped
+}
+
+fn parse_socket_endpoint(value: &str) -> Option<(String, u16)> {
+    let normalized = value
+        .trim()
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim();
+    let endpoint = normalized
+        .split('%')
+        .next()
+        .unwrap_or(normalized)
+        .trim();
+    let endpoint = endpoint
+        .split("->")
+        .next()
+        .unwrap_or(endpoint)
+        .trim();
+    let (host, port_raw) = endpoint.rsplit_once(':')?;
+    let port = port_raw.parse::<u16>().ok()?;
+    Some((normalize_local_address(host), port))
+}
+
+fn normalize_local_address(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed == "*" {
+        return "*".to_string();
+    }
+    trimmed
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .to_ascii_lowercase()
+}
+
+fn normalize_port_protocol(value: &str) -> &'static str {
+    if value.to_ascii_lowercase().starts_with("udp") {
+        "udp"
+    } else {
+        "tcp"
+    }
+}
+
+fn normalize_port_state(value: Option<&str>) -> &'static str {
+    let normalized = value.unwrap_or_default().to_ascii_lowercase();
+    if normalized.contains("listen")
+        || normalized.contains("unconn")
+        || normalized.contains("bound")
+    {
+        "listening"
+    } else {
+        "established"
+    }
 }
 
 fn parse_service_status_output(stdout: &str) -> Vec<ServiceTelemetryEntry> {

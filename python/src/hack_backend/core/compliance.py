@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import ipaddress
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
@@ -30,15 +33,29 @@ from hack_backend.core.models import (
 
 ENTITY_KIND_ENDPOINT_CONNECTIVITY = "endpoint_connectivity"
 ENTITY_KIND_SERVICE_STATUS = "service_status"
+ENTITY_KIND_COMMAND_OUTPUT = "command_output"
+ENTITY_KIND_PORT_BINDING = "port_binding"
 
 SUPPORTED_ENTITY_KINDS = {
     ENTITY_KIND_ENDPOINT_CONNECTIVITY,
     ENTITY_KIND_SERVICE_STATUS,
+    ENTITY_KIND_COMMAND_OUTPUT,
+    ENTITY_KIND_PORT_BINDING,
 }
 
 
 class ComplianceValidationError(ValueError):
     pass
+
+
+def _telemetry_kind_for_entity_kind(entity_kind: str) -> str | None:
+    if entity_kind == ENTITY_KIND_SERVICE_STATUS:
+        return "diagnostic.command.service_status"
+    if entity_kind == ENTITY_KIND_COMMAND_OUTPUT:
+        return "diagnostic.command.custom"
+    if entity_kind == ENTITY_KIND_PORT_BINDING:
+        return "diagnostic.command.port_scan"
+    return None
 
 
 @dataclass(slots=True, frozen=True)
@@ -97,8 +114,42 @@ def normalize_policy_definition(
             ],
         }
 
+    if entity_kind == ENTITY_KIND_SERVICE_STATUS:
+        normalized_rules = [
+            _normalize_service_rule(
+                index=index,
+                raw_rule=raw_rule,
+                hosts_by_id=hosts_by_id,
+            )
+            for index, raw_rule in enumerate(raw_rules)
+        ]
+        return {"rules": normalized_rules}, {
+            "entity_kind": entity_kind,
+            "rules": [
+                _compile_service_rule(rule, hosts_by_id=hosts_by_id)
+                for rule in normalized_rules
+            ],
+        }
+
+    if entity_kind == ENTITY_KIND_COMMAND_OUTPUT:
+        normalized_rules = [
+            _normalize_command_output_rule(
+                index=index,
+                raw_rule=raw_rule,
+                hosts_by_id=hosts_by_id,
+            )
+            for index, raw_rule in enumerate(raw_rules)
+        ]
+        return {"rules": normalized_rules}, {
+            "entity_kind": entity_kind,
+            "rules": [
+                _compile_command_output_rule(rule, hosts_by_id=hosts_by_id)
+                for rule in normalized_rules
+            ],
+        }
+
     normalized_rules = [
-        _normalize_service_rule(
+        _normalize_port_binding_rule(
             index=index,
             raw_rule=raw_rule,
             hosts_by_id=hosts_by_id,
@@ -108,7 +159,7 @@ def normalize_policy_definition(
     return {"rules": normalized_rules}, {
         "entity_kind": entity_kind,
         "rules": [
-            _compile_service_rule(rule, hosts_by_id=hosts_by_id)
+            _compile_port_binding_rule(rule, hosts_by_id=hosts_by_id)
             for rule in normalized_rules
         ],
     }
@@ -158,12 +209,15 @@ async def rebuild_policy(
             )
         return
 
+    telemetry_kind = _telemetry_kind_for_entity_kind(policy.entity_kind)
+    if telemetry_kind is None:
+        return
     records = list(
         await session.scalars(
             select(TelemetryRecord)
             .where(
                 TelemetryRecord.environment_id == policy.environment_id,
-                TelemetryRecord.kind == "diagnostic.command.service_status",
+                TelemetryRecord.kind == telemetry_kind,
             )
             .order_by(
                 TelemetryRecord.collected_at.asc(),
@@ -194,6 +248,16 @@ async def apply_compliance_materialization(
         and telemetry_record.kind == "diagnostic.command.service_status"
     ):
         relevant_entity_kinds.add(ENTITY_KIND_SERVICE_STATUS)
+    if (
+        telemetry_record is not None
+        and telemetry_record.kind == "diagnostic.command.custom"
+    ):
+        relevant_entity_kinds.add(ENTITY_KIND_COMMAND_OUTPUT)
+    if (
+        telemetry_record is not None
+        and telemetry_record.kind == "diagnostic.command.port_scan"
+    ):
+        relevant_entity_kinds.add(ENTITY_KIND_PORT_BINDING)
     if metric_snapshots and any(
         metric.metric_kind == ENTITY_KIND_ENDPOINT_CONNECTIVITY
         for metric in metric_snapshots
@@ -235,6 +299,17 @@ async def apply_compliance_materialization(
         if (
             telemetry_record is not None
             and policy.entity_kind == ENTITY_KIND_SERVICE_STATUS
+        ):
+            await _apply_policy_to_telemetry(
+                session,
+                policy=policy,
+                revision=revision,
+                telemetry_record=telemetry_record,
+                event_origin=ComplianceEventOrigin.LIVE,
+            )
+        if (
+            telemetry_record is not None
+            and policy.entity_kind in {ENTITY_KIND_COMMAND_OUTPUT, ENTITY_KIND_PORT_BINDING}
         ):
             await _apply_policy_to_telemetry(
                 session,
@@ -385,6 +460,119 @@ def _normalize_service_rule(
     }
 
 
+def _normalize_command_output_rule(
+    *,
+    index: int,
+    raw_rule: Any,
+    hosts_by_id: dict[str, Host],
+) -> dict[str, Any]:
+    if not isinstance(raw_rule, dict):
+        raise ComplianceValidationError("Each command output rule must be an object")
+
+    output_pattern = str(raw_rule.get("output_pattern") or "").strip()
+    if not output_pattern:
+        raise ComplianceValidationError(
+            "Command output rule must define output_pattern"
+        )
+    _ensure_valid_regex(output_pattern, field_name="output_pattern")
+
+    command_pattern = str(raw_rule.get("command_pattern") or "").strip() or None
+    if command_pattern is not None:
+        _ensure_valid_regex(command_pattern, field_name="command_pattern")
+
+    return {
+        "id": _normalize_rule_id(raw_rule.get("id"), index=index),
+        "label": _normalize_rule_label(raw_rule.get("label"), index=index),
+        "host_ids": _normalize_host_id_list(
+            raw_rule.get("host_ids"),
+            hosts_by_id=hosts_by_id,
+            field_name="host_ids",
+        ),
+        "command_pattern": command_pattern,
+        "output_pattern": output_pattern,
+    }
+
+
+def _normalize_port_binding_rule(
+    *,
+    index: int,
+    raw_rule: Any,
+    hosts_by_id: dict[str, Host],
+) -> dict[str, Any]:
+    if not isinstance(raw_rule, dict):
+        raise ComplianceValidationError("Each port binding rule must be an object")
+
+    protocol = str(raw_rule.get("protocol") or "any").strip().lower()
+    if protocol not in {"any", "tcp", "udp"}:
+        raise ComplianceValidationError(
+            "Port binding rule protocol must be any, tcp, or udp"
+        )
+
+    state = str(raw_rule.get("state") or "any").strip().lower()
+    if state not in {"any", "listening", "established"}:
+        raise ComplianceValidationError(
+            "Port binding rule state must be any, listening, or established"
+        )
+
+    local_address = str(raw_rule.get("local_address") or "").strip().lower() or None
+    local_subnet = str(raw_rule.get("local_subnet") or "").strip() or None
+    if local_address and local_subnet:
+        raise ComplianceValidationError(
+            "Port binding rule may define local_address or local_subnet, not both"
+        )
+    if local_subnet is not None:
+        try:
+            ipaddress.ip_network(local_subnet, strict=False)
+        except ValueError as exc:
+            raise ComplianceValidationError(
+                "Port binding rule local_subnet must be a valid subnet"
+            ) from exc
+
+    port_from = _normalize_port_number(raw_rule.get("port_from"), field_name="port_from")
+    port_to = _normalize_port_number(raw_rule.get("port_to"), field_name="port_to")
+    if port_from is not None and port_to is not None and port_from > port_to:
+        raise ComplianceValidationError("port_from must be less than or equal to port_to")
+
+    return {
+        "id": _normalize_rule_id(raw_rule.get("id"), index=index),
+        "label": _normalize_rule_label(raw_rule.get("label"), index=index),
+        "host_ids": _normalize_host_id_list(
+            raw_rule.get("host_ids"),
+            hosts_by_id=hosts_by_id,
+            field_name="host_ids",
+        ),
+        "protocol": protocol,
+        "local_address": local_address,
+        "local_subnet": local_subnet,
+        "state": state,
+        "port_from": port_from,
+        "port_to": port_to,
+    }
+
+
+def _ensure_valid_regex(pattern: str, *, field_name: str) -> None:
+    try:
+        re.compile(pattern, re.IGNORECASE)
+    except re.error as exc:
+        raise ComplianceValidationError(
+            f"{field_name} must be a valid regular expression"
+        ) from exc
+
+
+def _normalize_port_number(value: Any, *, field_name: str) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        port = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ComplianceValidationError(f"{field_name} must be an integer") from exc
+    if not 1 <= port <= 65535:
+        raise ComplianceValidationError(
+            f"{field_name} must be between 1 and 65535"
+        )
+    return port
+
+
 def _compile_host_selector(
     host_ids: list[str],
     *,
@@ -497,6 +685,119 @@ def _compile_service_rule(
     }
 
 
+def _compile_command_output_rule(
+    rule: dict[str, Any],
+    *,
+    hosts_by_id: dict[str, Host],
+) -> dict[str, Any]:
+    clauses: list[dict[str, Any]] = []
+    host_selector = _compile_host_selector(
+        rule["host_ids"],
+        hosts_by_id=hosts_by_id,
+    )
+    if host_selector is not None:
+        clauses.append(
+            {
+                "field": "host",
+                "operator": "host_selector",
+                "value": host_selector,
+            }
+        )
+    if rule["command_pattern"]:
+        clauses.append(
+            {
+                "field": "command_text",
+                "operator": "regex_search",
+                "value": rule["command_pattern"],
+            }
+        )
+    clauses.append(
+        {
+            "field": "output_text",
+            "operator": "regex_search",
+            "value": rule["output_pattern"],
+        }
+    )
+    return {
+        "id": rule["id"],
+        "label": rule["label"],
+        "clauses": clauses,
+    }
+
+
+def _compile_port_binding_rule(
+    rule: dict[str, Any],
+    *,
+    hosts_by_id: dict[str, Host],
+) -> dict[str, Any]:
+    clauses: list[dict[str, Any]] = []
+    host_selector = _compile_host_selector(
+        rule["host_ids"],
+        hosts_by_id=hosts_by_id,
+    )
+    if host_selector is not None:
+        clauses.append(
+            {
+                "field": "host",
+                "operator": "host_selector",
+                "value": host_selector,
+            }
+        )
+    if rule["protocol"] != "any":
+        clauses.append(
+            {
+                "field": "protocol",
+                "operator": "equals_ci",
+                "value": rule["protocol"],
+            }
+        )
+    if rule["local_address"]:
+        clauses.append(
+            {
+                "field": "local_address",
+                "operator": "equals_ci",
+                "value": rule["local_address"],
+            }
+        )
+    if rule["local_subnet"]:
+        clauses.append(
+            {
+                "field": "local_address",
+                "operator": "ip_in_subnet",
+                "value": rule["local_subnet"],
+            }
+        )
+    if rule["state"] != "any":
+        clauses.append(
+            {
+                "field": "state",
+                "operator": "equals_ci",
+                "value": rule["state"],
+            }
+        )
+    if rule["port_from"] is not None:
+        clauses.append(
+            {
+                "field": "port",
+                "operator": "gte_number",
+                "value": rule["port_from"],
+            }
+        )
+    if rule["port_to"] is not None:
+        clauses.append(
+            {
+                "field": "port",
+                "operator": "lte_number",
+                "value": rule["port_to"],
+            }
+        )
+    return {
+        "id": rule["id"],
+        "label": rule["label"],
+        "clauses": clauses,
+    }
+
+
 def _evaluate_compiled_policy(
     *,
     compiled_json: dict[str, Any],
@@ -536,6 +837,25 @@ def _clause_matches(*, clause: dict[str, Any], entity_values: dict[str, Any]) ->
         try:
             return float(actual) <= float(expected)
         except (TypeError, ValueError):
+            return False
+    if operator == "gte_number":
+        if actual is None:
+            return False
+        try:
+            return float(actual) >= float(expected)
+        except (TypeError, ValueError):
+            return False
+    if operator == "regex_search":
+        try:
+            pattern = re.compile(str(expected or ""), re.IGNORECASE)
+        except re.error:
+            return False
+        return bool(pattern.search(str(actual or "")))
+    if operator == "ip_in_subnet":
+        try:
+            network = ipaddress.ip_network(str(expected), strict=False)
+            return ipaddress.ip_address(str(actual)) in network
+        except ValueError:
             return False
     if operator == "host_selector":
         if not isinstance(actual, dict):
@@ -680,16 +1000,46 @@ async def _extract_telemetry_source(
     policy: CompliancePolicy,
     telemetry_record: TelemetryRecord,
 ) -> ExtractedSource | None:
-    if (
-        policy.entity_kind != ENTITY_KIND_SERVICE_STATUS
-        or telemetry_record.kind != "diagnostic.command.service_status"
-    ):
-        return None
-
     hosts = await _load_environment_hosts(session, environment_id=policy.environment_id)
     host = next((item for item in hosts if item.id == telemetry_record.host_id), None)
     host_label = host.name if host is not None else telemetry_record.host_id
 
+    if (
+        policy.entity_kind == ENTITY_KIND_SERVICE_STATUS
+        and telemetry_record.kind == "diagnostic.command.service_status"
+    ):
+        return _extract_service_status_source(
+            telemetry_record=telemetry_record,
+            host=host,
+            host_label=host_label,
+        )
+    if (
+        policy.entity_kind == ENTITY_KIND_COMMAND_OUTPUT
+        and telemetry_record.kind == "diagnostic.command.custom"
+    ):
+        return _extract_command_output_source(
+            telemetry_record=telemetry_record,
+            host=host,
+            host_label=host_label,
+        )
+    if (
+        policy.entity_kind == ENTITY_KIND_PORT_BINDING
+        and telemetry_record.kind == "diagnostic.command.port_scan"
+    ):
+        return _extract_port_binding_source(
+            telemetry_record=telemetry_record,
+            host=host,
+            host_label=host_label,
+        )
+    return None
+
+
+def _extract_service_status_source(
+    *,
+    telemetry_record: TelemetryRecord,
+    host: Host | None,
+    host_label: str,
+) -> ExtractedSource:
     raw_services = telemetry_record.payload_json.get("services") or []
     if not isinstance(raw_services, list):
         raw_services = []
@@ -735,6 +1085,109 @@ async def _extract_telemetry_source(
         source_record_id=telemetry_record.id,
         observed_at=telemetry_record.collected_at,
         authoritative_scope_key=f"service-status:{telemetry_record.host_id}",
+        entities=entities,
+    )
+
+
+def _extract_command_output_source(
+    *,
+    telemetry_record: TelemetryRecord,
+    host: Host | None,
+    host_label: str,
+) -> ExtractedSource:
+    payload = telemetry_record.payload_json or {}
+    command = str(payload.get("command") or "").strip()
+    sample = str(payload.get("sample") or "")
+    command_key = _stable_text_key(command or telemetry_record.id)
+    subject_key = f"command-output:{telemetry_record.host_id}:{command_key}"
+    subject_label = (
+        f"{host_label}: {command}"
+        if command
+        else f"{host_label}: custom command"
+    )
+    return ExtractedSource(
+        source_kind="telemetry_record",
+        source_record_id=telemetry_record.id,
+        observed_at=telemetry_record.collected_at,
+        authoritative_scope_key=subject_key,
+        entities=[
+            ObservedEntity(
+                subject_key=subject_key,
+                subject_label=subject_label,
+                host_id=telemetry_record.host_id,
+                scope_key=subject_key,
+                values={
+                    "host": {"host": host, "host_id": telemetry_record.host_id},
+                    "command_text": command,
+                    "output_text": sample,
+                    "exit_code": payload.get("exit_code"),
+                },
+                evidence_json={
+                    "command": command,
+                    "sample": sample,
+                    "exit_code": payload.get("exit_code"),
+                    "stderr": payload.get("stderr"),
+                },
+            )
+        ],
+    )
+
+
+def _extract_port_binding_source(
+    *,
+    telemetry_record: TelemetryRecord,
+    host: Host | None,
+    host_label: str,
+) -> ExtractedSource:
+    raw_ports = telemetry_record.payload_json.get("ports") or []
+    if not isinstance(raw_ports, list):
+        raw_ports = []
+
+    entities: list[ObservedEntity] = []
+    for raw_port in raw_ports:
+        if not isinstance(raw_port, dict):
+            continue
+        protocol = str(raw_port.get("protocol") or "").strip().lower()
+        local_address = str(raw_port.get("local_address") or "").strip().lower()
+        state = str(raw_port.get("state") or "").strip().lower()
+        try:
+            port = int(raw_port.get("port"))
+        except (TypeError, ValueError):
+            continue
+        if not protocol or not local_address or not state:
+            continue
+
+        subject_key = (
+            f"port-binding:{telemetry_record.host_id}:{protocol}:{local_address}:{port}"
+        )
+        entities.append(
+            ObservedEntity(
+                subject_key=subject_key,
+                subject_label=f"{host_label}: {protocol}/{port} on {local_address}",
+                host_id=telemetry_record.host_id,
+                scope_key=f"port-binding:{telemetry_record.host_id}",
+                values={
+                    "host": {"host": host, "host_id": telemetry_record.host_id},
+                    "protocol": protocol,
+                    "port": port,
+                    "local_address": local_address,
+                    "state": state,
+                },
+                evidence_json={
+                    "protocol": protocol,
+                    "port": port,
+                    "local_address": local_address,
+                    "state": state,
+                    "process": raw_port.get("process"),
+                },
+            )
+        )
+
+    return ExtractedSource(
+        source_kind="telemetry_record",
+        source_record_id=telemetry_record.id,
+        observed_at=telemetry_record.collected_at,
+        authoritative_scope_key=f"port-binding:{telemetry_record.host_id}",
         entities=entities,
     )
 
@@ -1041,3 +1494,7 @@ def _build_host_endpoint_index(hosts: list[Host]) -> dict[str, Host]:
         for alias in host_resolution_aliases(host):
             index.setdefault(alias, host)
     return index
+
+
+def _stable_text_key(value: str) -> str:
+    return hashlib.sha1(value.encode("utf-8")).hexdigest()[:12]

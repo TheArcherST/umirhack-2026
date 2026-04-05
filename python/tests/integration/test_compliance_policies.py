@@ -319,3 +319,213 @@ def test_compliance_rejects_second_ruleset_for_same_entity_kind(api) -> None:
     )
     assert second_response.status_code == 409, second_response.text
     assert "Only one compliance rule set is allowed per entity type" in second_response.text
+
+
+def test_compliance_materializes_command_output_and_port_binding_rules(api) -> None:
+    owner = api.register_user(prefix="compliance-advanced")
+    bundle = api.create_project_bundle(
+        user=owner,
+        project_name="Advanced Compliance Fleet",
+    )
+    created_agent = api.create_agent(
+        user=owner,
+        project_id=bundle.project["id"],
+        environment_id=bundle.environment["id"],
+        name="beta-agent",
+    )
+    bootstrap_token = api.issue_install_token(
+        user=owner,
+        agent_id=created_agent["id"],
+    )
+    agent = api.register_agent(bootstrap_token=bootstrap_token)
+
+    bootstrap_leases = api.poll_agent(agent=agent)
+    leases_by_kind = {
+        lease["task_template"]["kind"]: lease for lease in bootstrap_leases
+    }
+    _complete_success(
+        api,
+        agent=agent,
+        lease=leases_by_kind["host.system_profile"],
+        telemetry_kind="host.system_profile",
+        telemetry_payload={
+            "hostname": "beta.internal",
+            "os_name": "linux",
+            "platform_version": "ubuntu-24.04",
+            "kernel": "6.8.0",
+            "cpu_model": "Xeon Platinum",
+        },
+    )
+    _complete_success(
+        api,
+        agent=agent,
+        lease=leases_by_kind["host.ip_interfaces"],
+        telemetry_kind="host.ip_interfaces",
+        telemetry_payload={
+            "interfaces": [
+                {
+                    "name": "eth0",
+                    "mac": "00:11:22:33:44:55",
+                    "ipv4": ["10.20.30.50"],
+                    "ipv6": ["fd00::50"],
+                }
+            ]
+        },
+    )
+
+    hosts_response = api.client.get(
+        f"/environments/{bundle.environment['id']}/hosts",
+        headers=owner.headers,
+    )
+    assert hosts_response.status_code == 200, hosts_response.text
+    host = hosts_response.json()[0]
+
+    custom_template_id = _template_id_for_kind(
+        bundle.templates,
+        "diagnostic.command.custom",
+    )
+    create_custom_task = api.client.post(
+        "/task-runs",
+        json={
+            "environment_id": bundle.environment["id"],
+            "host_ids": [host["id"]],
+            "task_template_id": custom_template_id,
+            "payload_overrides": {"approved_command": "cat /etc/os-release"},
+        },
+        headers=owner.headers,
+    )
+    assert create_custom_task.status_code == 201, create_custom_task.text
+
+    custom_lease = api.poll_agent(agent=agent)[0]
+    _complete_success(
+        api,
+        agent=agent,
+        lease=custom_lease,
+        telemetry_kind="diagnostic.command.custom",
+        telemetry_payload={
+            "command": "cat /etc/os-release",
+            "sample": 'NAME="Ubuntu"\nVERSION="24.04 LTS"\n',
+            "exit_code": 0,
+            "stderr": "",
+        },
+        summary_json={"command": "cat /etc/os-release"},
+    )
+
+    port_scan_template_id = _template_id_for_kind(
+        bundle.templates,
+        "diagnostic.command.port_scan",
+    )
+    create_port_scan_task = api.client.post(
+        "/task-runs",
+        json={
+            "environment_id": bundle.environment["id"],
+            "host_ids": [host["id"]],
+            "task_template_id": port_scan_template_id,
+            "payload_overrides": {},
+        },
+        headers=owner.headers,
+    )
+    assert create_port_scan_task.status_code == 201, create_port_scan_task.text
+
+    port_scan_lease = api.poll_agent(agent=agent)[0]
+    _complete_success(
+        api,
+        agent=agent,
+        lease=port_scan_lease,
+        telemetry_kind="diagnostic.command.port_scan",
+        telemetry_payload={
+            "command": "ss -tulpn",
+            "sample": "",
+            "exit_code": 0,
+            "stderr": "",
+            "ports": [
+                {
+                    "protocol": "tcp",
+                    "port": 22,
+                    "local_address": "0.0.0.0",
+                    "state": "listening",
+                    "process": "sshd",
+                },
+                {
+                    "protocol": "udp",
+                    "port": 53,
+                    "local_address": "127.0.0.53",
+                    "state": "listening",
+                    "process": "systemd-resolved",
+                },
+            ],
+        },
+        summary_json={"command": "ss -tulpn"},
+    )
+
+    command_policy = api.client.post(
+        "/compliance/policies",
+        json={
+            "environment_id": bundle.environment["id"],
+            "name": "Command output rules",
+            "entity_kind": "command_output",
+            "mode": "blacklist",
+            "definition_json": {
+                "rules": [
+                    {
+                        "label": "detect ubuntu marker",
+                        "host_ids": [host["id"]],
+                        "command_pattern": "os-release",
+                        "output_pattern": "ubuntu",
+                    }
+                ]
+            },
+        },
+        headers=owner.headers,
+    )
+    assert command_policy.status_code == 201, command_policy.text
+
+    port_policy = api.client.post(
+        "/compliance/policies",
+        json={
+            "environment_id": bundle.environment["id"],
+            "name": "Port binding rules",
+            "entity_kind": "port_binding",
+            "mode": "blacklist",
+            "definition_json": {
+                "rules": [
+                    {
+                        "label": "block public ssh listener",
+                        "host_ids": [host["id"]],
+                        "protocol": "tcp",
+                        "local_address": "0.0.0.0",
+                        "state": "listening",
+                        "port_from": 22,
+                        "port_to": 22,
+                    }
+                ]
+            },
+        },
+        headers=owner.headers,
+    )
+    assert port_policy.status_code == 201, port_policy.text
+
+    findings_response = api.client.get(
+        f"/environments/{bundle.environment['id']}/compliance/findings",
+        headers=owner.headers,
+    )
+    assert findings_response.status_code == 200, findings_response.text
+    findings = findings_response.json()
+    assert len(findings) == 2
+    assert {finding["entity_kind"] for finding in findings} == {
+        "command_output",
+        "port_binding",
+    }
+
+    events_response = api.client.get(
+        f"/environments/{bundle.environment['id']}/compliance/events",
+        headers=owner.headers,
+    )
+    assert events_response.status_code == 200, events_response.text
+    events = events_response.json()
+    relevant_events = [
+        event for event in events
+        if event["entity_kind"] in {"command_output", "port_binding"}
+    ]
+    assert len(relevant_events) == 2
+    assert all(event["event_origin"] == "backfill" for event in relevant_events)

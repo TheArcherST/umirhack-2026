@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from hack_backend.core.compliance import (
     ComplianceValidationError,
+    ENTITY_KIND_COMMAND_OUTPUT,
     ENTITY_KIND_ENDPOINT_CONNECTIVITY,
+    ENTITY_KIND_PORT_BINDING,
     ENTITY_KIND_SERVICE_STATUS,
     normalize_policy_definition,
     rebuild_policy,
@@ -368,6 +370,22 @@ class ComplianceService:
                 "description": (
                     "Rules over structured service state snapshots reported"
                     " by agents"
+                ),
+            },
+            {
+                "entity_kind": ENTITY_KIND_COMMAND_OUTPUT,
+                "label": "Custom command output",
+                "description": (
+                    "Rules over arbitrary command results using regular"
+                    " expression matching on the captured output"
+                ),
+            },
+            {
+                "entity_kind": ENTITY_KIND_PORT_BINDING,
+                "label": "TCP/UDP port bindings",
+                "description": (
+                    "Rules over observed listening and established socket"
+                    " bindings, including host, protocol, address, and port"
                 ),
             },
         ]
