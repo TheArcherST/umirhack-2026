@@ -155,6 +155,7 @@ def test_compliance_materializes_task_stream_policy(api) -> None:
                     {
                         "label": "alpha connectivity",
                         "task_kind": "network.endpoint_connectivity",
+                        "window_minutes": 60,
                         "input_pattern": "alpha\\.internal",
                         "stdout_pattern": '"success": true',
                         "stderr_pattern": "timeout",
@@ -197,6 +198,7 @@ def test_compliance_materializes_task_stream_policy(api) -> None:
                     {
                         "label": "alpha connectivity v2",
                         "task_kind": "network.endpoint_connectivity",
+                        "window_minutes": 60,
                         "input_pattern": "alpha\\.internal",
                         "stdout_pattern": '"success": true',
                         "stderr_pattern": "timeout",
@@ -258,17 +260,17 @@ def test_compliance_materializes_task_stream_policy(api) -> None:
         headers=owner.headers,
     )
     findings = findings_response.json()
-    assert findings == []
+    assert len(findings) == 1
+    assert findings[0]["matched_rule_labels"] == ["alpha connectivity v2"]
 
     events_response = api.client.get(
         f"/environments/{bundle.environment['id']}/compliance/events",
         headers=owner.headers,
     )
     events = events_response.json()
-    assert len(events) == 2
-    assert events[0]["event_kind"] == "resolved"
-    assert events[0]["event_origin"] == "live"
-    assert events[1]["event_kind"] == "rise"
+    assert len(events) == 1
+    assert events[0]["event_kind"] == "rise"
+    assert events[0]["event_origin"] == "backfill"
 
 
 def test_compliance_materializes_requirements_policy(api) -> None:
@@ -358,11 +360,13 @@ def test_compliance_materializes_requirements_policy(api) -> None:
                     {
                         "label": "curl input",
                         "task_kind": "diagnostic.command.custom",
+                        "window_minutes": 60,
                         "input_pattern": "curl .*",
                     },
                     {
                         "label": "nginx banner",
                         "task_kind": "diagnostic.command.custom",
+                        "window_minutes": 60,
                         "stdout_pattern": "Welcome to nginx!",
                     },
                 ]

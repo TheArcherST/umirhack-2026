@@ -17,6 +17,7 @@ def test_normalize_task_stream_policy_definition_compiles_regex_clauses() -> Non
                 {
                     "label": "ping to alpha",
                     "task_kind": "network.endpoint_connectivity",
+                    "window_minutes": 30,
                     "input_pattern": "alpha\\.internal",
                     "input_negated": True,
                     "stdout_pattern": '"success": true',
@@ -30,6 +31,7 @@ def test_normalize_task_stream_policy_definition_compiles_regex_clauses() -> Non
     assert definition["forbids"][0] == {
         "id": "rule-1",
         "label": "ping to alpha",
+        "window_minutes": 30,
         "task_kind": "network.endpoint_connectivity",
         "input_pattern": "alpha\\.internal",
         "input_negated": True,
@@ -39,6 +41,7 @@ def test_normalize_task_stream_policy_definition_compiles_regex_clauses() -> Non
         "stderr_negated": False,
     }
     assert compiled["requirements"] == []
+    assert compiled["forbids"][0]["window_minutes"] == 30
     assert compiled["forbids"][0]["clauses"] == [
         {
             "field": "task_kind",
@@ -92,6 +95,24 @@ def test_normalize_task_stream_policy_definition_rejects_invalid_regex() -> None
         )
 
 
+def test_normalize_task_stream_policy_definition_defaults_window_minutes() -> None:
+    definition, compiled = normalize_policy_definition(
+        entity_kind="task_stream",
+        definition_json={
+            "forbids": [
+                {
+                    "label": "unknown host",
+                    "stderr_pattern": "Unknown host",
+                }
+            ]
+        },
+        available_hosts=[],
+    )
+
+    assert definition["forbids"][0]["window_minutes"] == 60
+    assert compiled["forbids"][0]["window_minutes"] == 60
+
+
 def test_evaluate_compiled_policy_enforces_requirements_and_forbids() -> None:
     _, compiled = normalize_policy_definition(
         entity_kind="task_stream",
@@ -99,12 +120,14 @@ def test_evaluate_compiled_policy_enforces_requirements_and_forbids() -> None:
             "requirements": [
                 {
                     "label": "nginx welcome banner",
+                    "window_minutes": 60,
                     "stdout_pattern": "Welcome to nginx",
                 }
             ],
             "forbids": [
                 {
                     "label": "unknown host",
+                    "window_minutes": 60,
                     "stderr_pattern": "Unknown host",
                 }
             ],
@@ -147,6 +170,7 @@ def test_requirement_task_kind_is_scope_not_global_violation() -> None:
                 {
                     "label": "custom nginx banner",
                     "task_kind": "diagnostic.command.custom",
+                    "window_minutes": 60,
                     "stdout_pattern": "Welcome to nginx",
                 }
             ],

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, select
@@ -23,6 +23,7 @@ from hack_backend.core.models import (
     CompliancePolicyRevision,
     TaskRun,
     TaskRunResult,
+    TaskTemplate,
 )
 
 ENTITY_KIND_TASK_STREAM = "task_stream"
@@ -248,6 +249,7 @@ def _normalize_task_stream_rule(
     input_negated = bool(raw_rule.get("input_negated"))
     stdout_negated = bool(raw_rule.get("stdout_negated"))
     stderr_negated = bool(raw_rule.get("stderr_negated"))
+    window_minutes = _normalize_window_minutes(raw_rule.get("window_minutes"))
 
     for field_name, pattern in (
         ("input_pattern", input_pattern),
@@ -279,7 +281,28 @@ def _normalize_task_stream_rule(
         "stdout_negated": stdout_negated,
         "stderr_pattern": stderr_pattern,
         "stderr_negated": stderr_negated,
+        "window_minutes": window_minutes,
     }
+
+
+def _normalize_window_minutes(raw_value: Any) -> int:
+    if raw_value is None:
+        return 60
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError) as exc:
+        raise ComplianceValidationError(
+            "window_minutes must be a positive integer"
+        ) from exc
+    if value < 1:
+        raise ComplianceValidationError(
+            "window_minutes must be a positive integer"
+        )
+    if value > 100_000:
+        raise ComplianceValidationError(
+            "window_minutes must be at most 100000"
+        )
+    return value
 
 
 def _compile_task_stream_rule(rule: dict[str, Any]) -> dict[str, Any]:
@@ -310,6 +333,7 @@ def _compile_task_stream_rule(rule: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": rule["id"],
         "label": rule["label"],
+        "window_minutes": rule["window_minutes"],
         "clauses": clauses,
     }
 
@@ -375,6 +399,160 @@ def _evaluate_compiled_policy(
     if mode == ComplianceMode.BLACKLIST:
         return bool(violated_rule_ids), violated_rule_ids
     return not violated_rule_ids, violated_rule_ids
+
+
+def _all_compiled_rules(compiled_json: dict[str, Any] | None) -> list[dict[str, Any]]:
+    compiled = compiled_json or {}
+    requirements = compiled.get("requirements")
+    forbids = compiled.get("forbids")
+    legacy_rules = compiled.get("rules")
+
+    if isinstance(requirements, list) or isinstance(forbids, list):
+        return [
+            *(requirements if isinstance(requirements, list) else []),
+            *(forbids if isinstance(forbids, list) else []),
+        ]
+    if isinstance(legacy_rules, list):
+        return legacy_rules
+    return []
+
+
+async def _evaluate_subject_window(
+    session: AsyncSession,
+    *,
+    revision: CompliancePolicyRevision,
+    task_run: TaskRun,
+    observed_at: datetime,
+) -> tuple[bool, list[str], datetime | None]:
+    compiled_json = revision.compiled_json or {}
+    requirement_rules = compiled_json.get("requirements")
+    forbid_rules = compiled_json.get("forbids")
+    legacy_rules = compiled_json.get("rules")
+
+    if not isinstance(requirement_rules, list) and not isinstance(forbid_rules, list):
+        requirement_rules = []
+        forbid_rules = legacy_rules if isinstance(legacy_rules, list) else []
+
+    subject_values = {"task_kind": task_run.task_template.kind}
+    applicable_rules = [
+        rule
+        for rule in _all_compiled_rules(compiled_json)
+        if _rule_applies_to_entity(rule=rule, entity_values=subject_values)
+    ]
+    if not applicable_rules:
+        return False, [], None
+
+    max_window_minutes = max(
+        int(rule.get("window_minutes") or 60)
+        for rule in applicable_rules
+    )
+    history = await _recent_subject_history(
+        session,
+        task_run=task_run,
+        observed_at=observed_at,
+        max_window_minutes=max_window_minutes,
+    )
+
+    violated_rule_ids: list[str] = []
+    violated_requirement_ids: set[str] = set()
+    forbid_expiries: list[datetime] = []
+
+    for rule in requirement_rules or []:
+        if not _rule_applies_to_entity(rule=rule, entity_values=subject_values):
+            continue
+        window_entities = _window_entities_for_rule(
+            history,
+            observed_at=observed_at,
+            window_minutes=int(rule.get("window_minutes") or 60),
+        )
+        if not any(
+            _rule_stream_matches(rule=rule, entity_values=entity_values)
+            for _, entity_values in window_entities
+        ):
+            rule_id = str(rule["id"])
+            violated_rule_ids.append(rule_id)
+            violated_requirement_ids.add(rule_id)
+
+    for rule in forbid_rules or []:
+        if not _rule_applies_to_entity(rule=rule, entity_values=subject_values):
+            continue
+        window_minutes = int(rule.get("window_minutes") or 60)
+        window_entities = _window_entities_for_rule(
+            history,
+            observed_at=observed_at,
+            window_minutes=window_minutes,
+        )
+        matched_at = [
+            entity_observed_at
+            for entity_observed_at, entity_values in window_entities
+            if _rule_stream_matches(rule=rule, entity_values=entity_values)
+        ]
+        if matched_at:
+            violated_rule_ids.append(str(rule["id"]))
+            forbid_expiries.append(max(matched_at) + timedelta(minutes=window_minutes))
+
+    expires_at = (
+        None
+        if violated_requirement_ids
+        else (max(forbid_expiries) if forbid_expiries else None)
+    )
+    return bool(violated_rule_ids), violated_rule_ids, expires_at
+
+
+async def _recent_subject_history(
+    session: AsyncSession,
+    *,
+    task_run: TaskRun,
+    observed_at: datetime,
+    max_window_minutes: int,
+) -> list[tuple[datetime, dict[str, Any]]]:
+    window_start = observed_at - timedelta(minutes=max_window_minutes)
+    rows = (
+        await session.execute(
+            select(TaskRun, TaskRunResult)
+            .join(TaskRunResult, TaskRunResult.task_run_id == TaskRun.id)
+            .join(TaskTemplate, TaskTemplate.id == TaskRun.task_template_id)
+            .where(
+                TaskRun.host_id == task_run.host_id,
+                TaskTemplate.kind == task_run.task_template.kind,
+                TaskRun.finished_at.is_not(None),
+                TaskRun.finished_at >= window_start,
+                TaskRun.finished_at <= observed_at,
+            )
+            .order_by(
+                TaskRun.finished_at.asc(),
+                TaskRun.queued_at.asc(),
+                TaskRun.id.asc(),
+            )
+        )
+    ).all()
+    return [
+        (
+            row_task_run.finished_at or row_task_result.created_at,
+            {
+                "task_kind": row_task_run.task_template.kind,
+                "input_text": _serialize_json_like(_merged_task_input(row_task_run)),
+                "stdout_text": row_task_result.stdout_text or "",
+                "stderr_text": row_task_result.stderr_text or "",
+                "summary_text": _serialize_json_like(row_task_result.summary_json),
+            },
+        )
+        for row_task_run, row_task_result in rows
+    ]
+
+
+def _window_entities_for_rule(
+    history: list[tuple[datetime, dict[str, Any]]],
+    *,
+    observed_at: datetime,
+    window_minutes: int,
+) -> list[tuple[datetime, dict[str, Any]]]:
+    window_start = observed_at - timedelta(minutes=window_minutes)
+    return [
+        (entity_observed_at, entity_values)
+        for entity_observed_at, entity_values in history
+        if entity_observed_at >= window_start
+    ]
 
 
 def _rule_matches(*, rule: dict[str, Any], entity_values: dict[str, Any]) -> bool:
@@ -452,13 +630,51 @@ async def _apply_policy_to_task_result(
         task_run=task_run,
         task_result=task_result,
     )
+    is_violation, matched_rule_ids, expires_at = await _evaluate_subject_window(
+        session,
+        revision=revision,
+        task_run=task_run,
+        observed_at=extracted.observed_at,
+    )
+    entity = extracted.entities[0]
+    window_minutes_by_rule = {
+        str(rule.get("id")): int(rule.get("window_minutes") or 60)
+        for rule in _all_compiled_rules(revision.compiled_json or {})
+        if isinstance(rule, dict)
+    }
     await _apply_extracted_source(
         session,
         policy=policy,
         revision=revision,
-        extracted=extracted,
+        extracted=ExtractedSource(
+            source_kind=extracted.source_kind,
+            source_record_id=extracted.source_record_id,
+            observed_at=extracted.observed_at,
+            authoritative_scope_key=extracted.authoritative_scope_key,
+            entities=[
+                ObservedEntity(
+                    subject_key=entity.subject_key,
+                    subject_label=entity.subject_label,
+                    host_id=entity.host_id,
+                    scope_key=entity.scope_key,
+                    values=entity.values,
+                    evidence_json={
+                        **entity.evidence_json,
+                        "windowed_evaluation": True,
+                        "matched_rule_windows": {
+                            rule_id: window_minutes_by_rule.get(rule_id)
+                            for rule_id in matched_rule_ids
+                        },
+                    },
+                    expires_at=expires_at,
+                )
+            ],
+        ),
         event_origin=event_origin,
         emit_events=emit_events,
+        precomputed_results={
+            entity.subject_key: (is_violation, matched_rule_ids)
+        },
     )
 
 
@@ -514,6 +730,7 @@ async def _apply_extracted_source(
     extracted: ExtractedSource,
     event_origin: ComplianceEventOrigin,
     emit_events: bool,
+    precomputed_results: dict[str, tuple[bool, list[str]]] | None = None,
 ) -> None:
     previous_by_subject: dict[str, ComplianceCurrentFinding] = {}
     if extracted.authoritative_scope_key is not None:
@@ -526,11 +743,14 @@ async def _apply_extracted_source(
     observed_subjects: set[str] = set()
     for entity in extracted.entities:
         observed_subjects.add(entity.subject_key)
-        is_violation, matched_rule_ids = _evaluate_compiled_policy(
-            compiled_json=revision.compiled_json or {},
-            mode=policy.mode,
-            entity_values=entity.values,
-        )
+        if precomputed_results and entity.subject_key in precomputed_results:
+            is_violation, matched_rule_ids = precomputed_results[entity.subject_key]
+        else:
+            is_violation, matched_rule_ids = _evaluate_compiled_policy(
+                compiled_json=revision.compiled_json or {},
+                mode=policy.mode,
+                entity_values=entity.values,
+            )
         await _append_evaluation(
             session,
             policy=policy,

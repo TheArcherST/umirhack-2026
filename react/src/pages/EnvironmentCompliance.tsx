@@ -72,6 +72,7 @@ function newTaskStreamRule(): TaskStreamRuleDraft {
   return {
     id: nextRuleId(),
     label: '',
+    window_minutes: 60,
     task_kind: 'diagnostic.command.custom',
     input_pattern: null,
     input_negated: false,
@@ -86,6 +87,9 @@ function hydrateRuleDraft(rule: Partial<TaskStreamRuleDraft>): TaskStreamRuleDra
   return {
     id: String(rule.id || nextRuleId()),
     label: String(rule.label || ''),
+    window_minutes: typeof rule.window_minutes === 'number' && Number.isFinite(rule.window_minutes) && rule.window_minutes > 0
+      ? Math.floor(rule.window_minutes)
+      : 60,
     task_kind: typeof rule.task_kind === 'string' && rule.task_kind.trim()
       ? rule.task_kind.trim()
       : null,
@@ -199,10 +203,11 @@ function TaskStreamRuleTable({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
-      <table className="w-full min-w-[980px] text-sm">
+      <table className="w-full min-w-[1120px] text-sm">
         <thead>
           <tr className="border-b border-border bg-muted/20">
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.name')}</th>
+            <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.windowMinutes')}</th>
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.taskKind')}</th>
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.inputPattern')}</th>
             <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{t('compliance.stdoutPattern')}</th>
@@ -218,6 +223,21 @@ function TaskStreamRuleTable({
                   value={rule.label}
                   onChange={(e) => onChange(index, { ...rule, label: e.target.value })}
                   placeholder={t('compliance.namePlaceholder')}
+                />
+              </td>
+              <td className="px-3 py-3">
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={rule.window_minutes}
+                  onChange={(e) =>
+                    onChange(index, {
+                      ...rule,
+                      window_minutes: Math.max(1, Number.parseInt(e.target.value || '1', 10) || 1),
+                    })
+                  }
+                  placeholder={t('compliance.windowMinutesPlaceholder')}
                 />
               </td>
               <td className="px-3 py-3">
@@ -360,6 +380,7 @@ function CompliancePanel({
         requirements: requirements.map((rule) => ({
           id: rule.id,
           label: rule.label.trim(),
+          window_minutes: Math.max(1, Math.floor(rule.window_minutes || 60)),
           task_kind: rule.task_kind?.trim() || null,
           input_pattern: rule.input_pattern === '' ? null : rule.input_pattern,
           input_negated: Boolean(rule.input_negated),
@@ -371,6 +392,7 @@ function CompliancePanel({
         forbids: forbids.map((rule) => ({
           id: rule.id,
           label: rule.label.trim(),
+          window_minutes: Math.max(1, Math.floor(rule.window_minutes || 60)),
           task_kind: rule.task_kind?.trim() || null,
           input_pattern: rule.input_pattern === '' ? null : rule.input_pattern,
           input_negated: Boolean(rule.input_negated),

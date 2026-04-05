@@ -179,6 +179,7 @@ export interface ComplianceCatalogItem {
 export interface TaskStreamComplianceRuleDefinition {
     id: string
     label: string
+    window_minutes: number
     task_kind: string | null
     input_pattern: string | null
     input_negated: boolean
