@@ -21,6 +21,7 @@ import EnvironmentHosts from '@/pages/EnvironmentHosts'
 import EnvironmentHostDetail from '@/pages/EnvironmentHostDetail'
 import EnvironmentTasks from '@/pages/EnvironmentTasks'
 import EnvironmentScheduleRules from '@/pages/EnvironmentScheduleRules'
+import ApiKeysPage from '@/pages/ApiKeysPage'
 import EnvironmentCompliance from '@/pages/EnvironmentCompliance'
 
 const queryClient = new QueryClient({
@@ -64,6 +65,7 @@ function ProtectedContent() {
                 <Route path="environments/:envId/hosts/:hostId" element={<EnvironmentHostDetail/>}/>
                 <Route path="environments/:envId/tasks" element={<EnvironmentTasks/>}/>
                 <Route path="environments/:envId/schedule" element={<EnvironmentScheduleRules/>}/>
+                <Route path="environments/:envId/api-keys" element={<ApiKeysPage/>}/>
                 <Route path="environments/:envId/compliance" element={<EnvironmentCompliance/>}/>
             </Route>
         </Routes>

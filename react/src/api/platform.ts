@@ -39,6 +39,7 @@ import type {
     TaskTemplate,
     ScheduleRule,
     TaskTemplateItem,
+    EndpointSuggestion, ApiKeyCreateResponse, ApiKeyRole, ApiKeyListResponse, ApiKey,
     EndpointSuggestion,
     EndpointComplianceRuleDefinition,
     ServiceComplianceRuleDefinition,
@@ -1092,6 +1093,30 @@ export async function stubCreateScheduleRule(payload: CreateCronPayload): Promis
 
     const { data } = await apiClient.post<ScheduleRule>('/schedule-rules', body)
     return data
+}
+
+export async function stubGetApiKeys(environmentId: string): Promise<ApiKey[]> {
+    const { data } = await apiClient.get<ApiKeyListResponse>(`/environments/${environmentId}/api-keys`)
+    return data.keys
+}
+
+export interface CreateApiKeyPayload {
+    name: string
+    role: ApiKeyRole
+    expiry: string
+}
+
+export async function stubCreateApiKey(environmentId: string, payload: CreateApiKeyPayload): Promise<ApiKeyCreateResponse> {
+    const { data } = await apiClient.post<ApiKeyCreateResponse>(`/environments/${environmentId}/api-keys`, payload)
+    return data
+}
+
+export async function stubRevokeApiKey(environmentId: string, keyId: string): Promise<void> {
+    await apiClient.post(`/environments/${environmentId}/api-keys/${keyId}/revoke`)
+}
+
+export async function stubDeleteApiKey(environmentId: string, keyId: string): Promise<void> {
+    await apiClient.delete(`/environments/${environmentId}/api-keys/${keyId}`)
 }
 
 export async function stubGetComplianceCatalog(): Promise<ComplianceCatalogItem[]> {

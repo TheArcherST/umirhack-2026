@@ -5,6 +5,7 @@ from . import (
     access,
     agents,
     compliance,
+    api_keys,
     dev_router,
     email_verification,
     environments,
@@ -31,6 +32,7 @@ router.include_router(hosts.router)
 router.include_router(task_templates.router)
 router.include_router(task_runs.router)
 router.include_router(schedule_rules.router)
+router.include_router(api_keys.router)
 router.include_router(agent_api.router)
 
 

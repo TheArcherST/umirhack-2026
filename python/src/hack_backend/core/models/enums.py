@@ -18,6 +18,11 @@ class EnvironmentMemberRole(StrEnum):
     OBSERVER = "observer"
 
 
+class ApiKeyRole(StrEnum):
+    OPERATOR = "operator"
+    OBSERVER = "observer"
+
+
 class ComplianceMode(StrEnum):
     ALLOWLIST = "allowlist"
     BLACKLIST = "blacklist"
