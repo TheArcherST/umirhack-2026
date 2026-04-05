@@ -130,7 +130,12 @@ export default function ApiKeysPage() {
 
     return (
         <div className="flex-1 flex flex-col overflow-hidden">
-            <EnvironmentHeader envId={envId!} title={t('apiKey.title')} />
+            <EnvironmentHeader envId={envId!} title={t('apiKey.title')} right={
+                <Button size="sm" onClick={() => setCreateOpen(true)}>
+                    <Plus size={13} className="mr-1.5" />
+                    {t('apiKey.createKey')}
+                </Button>
+            }/>
 
             <div className="flex-1 overflow-y-auto">
                 <div className="p-5 space-y-4">
@@ -148,10 +153,6 @@ export default function ApiKeysPage() {
                                 API Docs (/api/docs)
                             </a>
                         </div>
-                        <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5 h-7 text-xs shrink-0">
-                            <Plus size={12} />
-                            {t('apiKey.createKey')}
-                        </Button>
                     </div>
 
                     {/* Keys list */}
