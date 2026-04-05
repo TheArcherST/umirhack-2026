@@ -832,8 +832,8 @@ export default function EnvironmentCompliance() {
         envId={envId!}
         title={t('compliance.title')}
         right={(
-          <Button size="sm" className="ml-auto h-8 gap-1.5" onClick={() => setCreateOpen(true)}>
-            <Plus size={13} />
+          <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus size={13} className="mr-1.5" />
             {t('compliance.newPolicy')}
           </Button>
         )}

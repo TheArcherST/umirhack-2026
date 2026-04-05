@@ -80,8 +80,8 @@ export default function EnvironmentTasks() {
         envId={envId!}
         title={t('env.tasks')}
         right={
-          <Button size="sm" variant="outline" onClick={() => setCreateTaskOpen(true)} className="gap-1.5 h-7 text-xs">
-            <Plus size={12} />
+          <Button size="sm" onClick={() => setCreateTaskOpen(true)}>
+            <Plus size={13} className="mr-1.5" />
             {t('env.createTask')}
           </Button>
         }
