@@ -25,6 +25,7 @@ class ScheduleRule(Base):
         ForeignKey("task_template.id"),
         index=True,
     )
+    name: Mapped[str | None] = mapped_column(nullable=True)
     cron_expr: Mapped[str]
     target_selector_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     is_enabled: Mapped[bool] = mapped_column(default=True)

@@ -438,22 +438,30 @@ async def store_task_result(
     task_run.lease_token = None
     task_run.leased_until = None
 
+    task_result: TaskRunResult
     existing_result = await session.get(TaskRunResult, task_run.id)
     if existing_result is None:
-        session.add(
-            TaskRunResult(
-                task_run_id=task_run.id,
-                exit_code=exit_code,
-                stdout_text=stdout_text,
-                stderr_text=stderr_text,
-                summary_json=summary_json,
-            )
+        task_result = TaskRunResult(
+            task_run_id=task_run.id,
+            exit_code=exit_code,
+            stdout_text=stdout_text,
+            stderr_text=stderr_text,
+            summary_json=summary_json,
         )
+        session.add(task_result)
     else:
+        task_result = existing_result
         existing_result.exit_code = exit_code
         existing_result.stdout_text = stdout_text
         existing_result.stderr_text = stderr_text
         existing_result.summary_json = summary_json
+
+    await apply_compliance_materialization(
+        session,
+        environment_id=task_run.environment_id,
+        task_run=task_run,
+        task_result=task_result,
+    )
 
     telemetry_record: TelemetryRecord | None = None
     if telemetry_payload is not None and telemetry_kind is not None:

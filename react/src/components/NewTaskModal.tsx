@@ -25,7 +25,7 @@ interface Props {
 
 export function NewTaskModal({ open, onClose, onCreated, defaultAgentId }: Props) {
   const [agentId, setAgentId] = useState(defaultAgentId ?? '')
-  const [template, setTemplate] = useState<TaskTemplate>('system_info')
+  const [template, setTemplate] = useState<TaskTemplate>('custom_command')
   const [target, setTarget] = useState('')
   const [command, setCommand] = useState('')
   const [loading, setLoading] = useState(false)
@@ -71,6 +71,7 @@ export function NewTaskModal({ open, onClose, onCreated, defaultAgentId }: Props
   const handleOpenChange = (open: boolean) => {
     if (!open) {
       onClose()
+      setTemplate('custom_command')
       setTarget('')
       setCommand('')
       setError('')

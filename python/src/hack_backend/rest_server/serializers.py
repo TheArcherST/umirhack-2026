@@ -252,6 +252,7 @@ def schedule_rule_to_dto(
         id=rule.id,
         environment_id=rule.environment_id,
         task_template_id=rule.task_template_id,
+        name=rule.name,
         cron_expr=rule.cron_expr,
         target_selector_json=rule.target_selector_json or {},
         is_enabled=rule.is_enabled,

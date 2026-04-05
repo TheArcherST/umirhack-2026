@@ -677,6 +677,7 @@ class PlatformService:
         *,
         environment_id: str,
         task_template_id: str,
+        name: str | None,
         cron_expr: str,
         target_selector_json: dict | None,
         is_enabled: bool = True,
@@ -696,6 +697,7 @@ class PlatformService:
         rule = ScheduleRule(
             environment_id=environment_id,
             task_template_id=task_template.id,
+            name=(name or "").strip() or None,
             cron_expr=cron_expr,
             target_selector_json=normalized_target_selector,
             is_enabled=is_enabled,
@@ -720,6 +722,8 @@ class PlatformService:
         schedule_rule_id: str,
         *,
         task_template_id: str | None = None,
+        name: str | None = None,
+        replace_name: bool = False,
         is_enabled: bool | None = None,
         cron_expr: str | None = None,
         target_selector_json: dict | None = None,
@@ -739,6 +743,8 @@ class PlatformService:
             )
             rule.task_template_id = task_template.id
             rule.task_template = task_template
+        if replace_name:
+            rule.name = (name or "").strip() or None
         if is_enabled is not None:
             rule.is_enabled = is_enabled
         if cron_expr is not None:

@@ -186,6 +186,7 @@ class ScheduleRuleDTO(BaseDTO):
     id: str
     environment_id: str
     task_template_id: str
+    name: str | None = None
     cron_expr: str
     target_selector_json: dict[str, Any] = Field(default_factory=dict)
     is_enabled: bool

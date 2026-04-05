@@ -9,6 +9,7 @@ import type {
     ComplianceMode,
     CompliancePolicy,
     ComplianceEntityKind,
+    TaskStreamComplianceRuleDefinition,
     CreateAgentPayload,
     CreateEnvironmentPayload,
     CreateProjectPayload,
@@ -39,12 +40,11 @@ import type {
     TaskTemplate,
     ScheduleRule,
     TaskTemplateItem,
-    EndpointSuggestion, ApiKeyCreateResponse, ApiKeyRole, ApiKeyListResponse, ApiKey,
     EndpointSuggestion,
-    CommandOutputComplianceRuleDefinition,
-    EndpointComplianceRuleDefinition,
-    PortBindingComplianceRuleDefinition,
-    ServiceComplianceRuleDefinition,
+    ApiKeyCreateResponse,
+    ApiKeyRole,
+    ApiKeyListResponse,
+    ApiKey,
 } from './types'
 
 type AgentApi = {
@@ -1030,6 +1030,7 @@ export async function stubPatchScheduleRule(
     id: string,
     patch: {
         template?: TaskTemplate
+        name?: string | null
         is_enabled?: boolean
         cron_expr?: string
         host_ids?: string[]
@@ -1038,6 +1039,7 @@ export async function stubPatchScheduleRule(
     },
 ): Promise<ScheduleRule> {
     const body: Record<string, unknown> = {
+        name: patch.name,
         is_enabled: patch.is_enabled,
         cron_expr: patch.cron_expr,
         host_ids: patch.host_ids,
@@ -1065,6 +1067,7 @@ export async function stubDeleteScheduleRule(id: string): Promise<void> {
 
 export interface CreateCronPayload {
     environment_id: string
+    name?: string
     template: TaskTemplate
     cron_expr: string
     host_ids?: string[]
@@ -1086,6 +1089,7 @@ export async function stubCreateScheduleRule(payload: CreateCronPayload): Promis
     const body: Record<string, unknown> = {
         environment_id: payload.environment_id,
         task_template_id: template.id,
+        name: payload.name?.trim() || undefined,
         cron_expr: payload.cron_expr,
         host_ids: payload.host_ids,
         is_enabled: payload.is_enabled ?? true,
@@ -1149,12 +1153,7 @@ export interface CreateCompliancePolicyPayload {
     description?: string
     is_enabled?: boolean
     definition_json: {
-        rules: Array<
-            | EndpointComplianceRuleDefinition
-            | ServiceComplianceRuleDefinition
-            | CommandOutputComplianceRuleDefinition
-            | PortBindingComplianceRuleDefinition
-        >
+        rules: TaskStreamComplianceRuleDefinition[]
     }
 }
 
@@ -1165,12 +1164,7 @@ export interface PatchCompliancePolicyPayload {
     description?: string
     is_enabled?: boolean
     definition_json?: {
-        rules: Array<
-            | EndpointComplianceRuleDefinition
-            | ServiceComplianceRuleDefinition
-            | CommandOutputComplianceRuleDefinition
-            | PortBindingComplianceRuleDefinition
-        >
+        rules: TaskStreamComplianceRuleDefinition[]
     }
 }
 

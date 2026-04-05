@@ -6,11 +6,7 @@ export type ApiKeyRole = 'operator' | 'observer'
 export type AgentOS = 'linux' | 'windows' | 'macos'
 export type InviteStatus = 'pending' | 'accepted'
 export type ApiKeyExpiry = '1d' | '7d' | '30d' | '90d' | 'never'
-export type ComplianceEntityKind =
-    | 'endpoint_connectivity'
-    | 'service_status'
-    | 'command_output'
-    | 'port_binding'
+export type ComplianceEntityKind = 'task_stream'
 export type ComplianceMode = 'allowlist' | 'blacklist'
 
 export type TaskTemplate =
@@ -164,6 +160,7 @@ export interface ScheduleRule {
     id: string
     environment_id: string
     task_template_id: string
+    name: string | null
     cron_expr: string
     target_selector_json: { host_ids?: string[]; target_endpoint?: string; approved_command?: string }
     is_enabled: boolean
@@ -179,42 +176,14 @@ export interface ComplianceCatalogItem {
     description: string
 }
 
-export interface EndpointComplianceRuleDefinition {
+export interface TaskStreamComplianceRuleDefinition {
     id: string
     label: string
-    source_host_ids: string[]
-    target_host_ids: string[]
-    target_endpoint: string | null
-    connectivity: 'any' | 'reachable' | 'unreachable'
-    max_latency_ms: number | null
-}
-
-export interface ServiceComplianceRuleDefinition {
-    id: string
-    label: string
-    host_ids: string[]
-    service_name: string
-    status: 'any' | 'running' | 'stopped'
-}
-
-export interface CommandOutputComplianceRuleDefinition {
-    id: string
-    label: string
-    host_ids: string[]
-    command_pattern: string | null
-    output_pattern: string
-}
-
-export interface PortBindingComplianceRuleDefinition {
-    id: string
-    label: string
-    host_ids: string[]
-    protocol: 'any' | 'tcp' | 'udp'
-    local_address: string | null
-    local_subnet: string | null
-    state: 'any' | 'listening' | 'established'
-    port_from: number | null
-    port_to: number | null
+    task_kind: string | null
+    input_pattern: string | null
+    stdout_pattern: string | null
+    stderr_pattern: string | null
+    summary_pattern: string | null
 }
 
 export interface CompliancePolicy {
@@ -229,12 +198,7 @@ export interface CompliancePolicy {
     revision_no: number | null
     rule_count: number
     definition_json: {
-        rules: Array<
-            | EndpointComplianceRuleDefinition
-            | ServiceComplianceRuleDefinition
-            | CommandOutputComplianceRuleDefinition
-            | PortBindingComplianceRuleDefinition
-        >
+        rules: TaskStreamComplianceRuleDefinition[]
     }
     created_at: string
 }
@@ -285,6 +249,7 @@ export interface TaskTemplateItem {
 
 export interface CreateScheduleRulePayload {
     environment_id: string
+    name?: string
     task_template_id: string
     cron_expr: string
     host_ids?: string[]

@@ -40,6 +40,7 @@ export function CreateCronRuleModal({ open, envId, onClose, onCreated }: Props) 
   const queryClient = useQueryClient()
 
   const [template, setTemplate] = useState<TaskTemplate>('system_info')
+  const [name, setName] = useState('')
   const [cronExpr, setCronExpr] = useState('*/15 * * * *')
   const [target, setTarget] = useState('')
   const [command, setCommand] = useState('')
@@ -67,6 +68,7 @@ export function CreateCronRuleModal({ open, envId, onClose, onCreated }: Props) 
 
   const handleClose = () => {
     setTemplate('system_info')
+    setName('')
     setCronExpr('*/15 * * * *')
     setTarget('')
     setCommand('')
@@ -85,6 +87,7 @@ export function CreateCronRuleModal({ open, envId, onClose, onCreated }: Props) 
 
     mutation.mutate({
       environment_id: envId,
+      name: name.trim() || undefined,
       template,
       cron_expr: cronExpr.trim(),
       host_ids: selectedHostIds.length > 0 ? selectedHostIds : undefined,
@@ -111,6 +114,15 @@ export function CreateCronRuleModal({ open, envId, onClose, onCreated }: Props) 
         <form onSubmit={handleSubmit}>
           <div className="px-6 pb-2 space-y-4">
             {/* Task template */}
+            <div className="space-y-1.5">
+              <Label>{t('cron.name')}</Label>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={t('cron.namePlaceholder')}
+              />
+            </div>
+
             <div className="space-y-1.5">
               <Label>{t('cron.taskTemplate')}</Label>
               <Select value={template} onValueChange={(v) => setTemplate(v as TaskTemplate)}>

@@ -51,6 +51,7 @@ function EditCronModal({
   const { t } = useI18n()
   const queryClient = useQueryClient()
   const [template, setTemplate] = useState<TaskTemplate>(kindToTemplate(rule.task_kind))
+  const [name, setName] = useState(rule.name ?? '')
   const [cronExpr, setCronExpr] = useState(rule.cron_expr)
   const [isEnabled, setIsEnabled] = useState(rule.is_enabled)
   const [target, setTarget] = useState(String(rule.target_selector_json.target_endpoint ?? ''))
@@ -70,6 +71,7 @@ function EditCronModal({
     mutationFn: () =>
       stubPatchScheduleRule(rule.id, {
         template: template !== kindToTemplate(rule.task_kind) ? template : undefined,
+        name: name.trim() !== (rule.name ?? '') ? name.trim() || null : undefined,
         cron_expr: cronExpr.trim() !== rule.cron_expr ? cronExpr.trim() : undefined,
         is_enabled: isEnabled !== rule.is_enabled ? isEnabled : undefined,
         host_ids: selectedHostIds,
@@ -104,6 +106,14 @@ function EditCronModal({
           <DialogTitle>{t('cron.editCron')}</DialogTitle>
         </DialogHeader>
         <div className="px-6 pb-2 space-y-4">
+          <div className="space-y-1.5">
+            <Label>{t('cron.name')}</Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t('cron.namePlaceholder')}
+            />
+          </div>
           <div className="space-y-1.5">
             <Label>{t('cron.taskTemplate')}</Label>
             <Select value={template} onValueChange={handleTemplateChange}>
@@ -289,6 +299,7 @@ export default function EnvironmentScheduleRules() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
+                  <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{t('cron.name')}</th>
                   <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{t('cron.task')}</th>
                   <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden lg:table-cell">{t('cron.details')}</th>
                   <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">{t('cron.cronExpr')}</th>
@@ -301,6 +312,7 @@ export default function EnvironmentScheduleRules() {
               <tbody>
                 {isLoading && Array.from({ length: 3 }).map((_, i) => (
                   <tr key={i} className="border-b border-border/50 last:border-0">
+                    <td className="px-4 py-3"><Skeleton className="h-4 w-28" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-32" /></td>
                     <td className="px-4 py-3 hidden lg:table-cell"><Skeleton className="h-4 w-28" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
@@ -312,6 +324,9 @@ export default function EnvironmentScheduleRules() {
                 ))}
                 {!isLoading && rules.map((rule) => (
                   <tr key={rule.id} className="border-b border-border/50 last:border-0 hover:bg-accent/20 transition-colors">
+                    <td className="px-4 py-3">
+                      <p className="text-xs font-medium">{rule.name || '—'}</p>
+                    </td>
                     <td className="px-4 py-3">
                       {(() => {
                         const tpl = TASK_TEMPLATES.find((t) => t.id === kindToTemplate(rule.task_kind))
@@ -393,7 +408,7 @@ export default function EnvironmentScheduleRules() {
                 ))}
                 {!isLoading && rules.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-xs text-muted-foreground">
+                    <td colSpan={7} className="px-4 py-8 text-center text-xs text-muted-foreground">
                       {t('cron.noRules')}
                     </td>
                   </tr>

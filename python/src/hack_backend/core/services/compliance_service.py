@@ -10,10 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from hack_backend.core.compliance import (
     ComplianceValidationError,
-    ENTITY_KIND_COMMAND_OUTPUT,
-    ENTITY_KIND_ENDPOINT_CONNECTIVITY,
-    ENTITY_KIND_PORT_BINDING,
-    ENTITY_KIND_SERVICE_STATUS,
+    ENTITY_KIND_TASK_STREAM,
     normalize_policy_definition,
     rebuild_policy,
 )
@@ -63,7 +60,10 @@ class ComplianceService:
         *,
         include_deleted: bool,
     ) -> list[CompliancePolicy]:
-        conditions = [CompliancePolicy.environment_id == environment_id]
+        conditions = [
+            CompliancePolicy.environment_id == environment_id,
+            CompliancePolicy.entity_kind == ENTITY_KIND_TASK_STREAM,
+        ]
         if not include_deleted:
             conditions.append(CompliancePolicy.deleted_at.is_(None))
         return list(
@@ -357,35 +357,12 @@ class ComplianceService:
     def catalog(self) -> list[dict[str, Any]]:
         return [
             {
-                "entity_kind": ENTITY_KIND_ENDPOINT_CONNECTIVITY,
-                "label": "Endpoint connectivity",
+                "entity_kind": ENTITY_KIND_TASK_STREAM,
+                "label": "Task stream",
                 "description": (
-                    "Rules over observed connectivity edges between hosts and"
-                    " explicit endpoints"
-                ),
-            },
-            {
-                "entity_kind": ENTITY_KIND_SERVICE_STATUS,
-                "label": "Service status",
-                "description": (
-                    "Rules over structured service state snapshots reported"
-                    " by agents"
-                ),
-            },
-            {
-                "entity_kind": ENTITY_KIND_COMMAND_OUTPUT,
-                "label": "Custom command output",
-                "description": (
-                    "Rules over arbitrary command results using regular"
-                    " expression matching on the captured output"
-                ),
-            },
-            {
-                "entity_kind": ENTITY_KIND_PORT_BINDING,
-                "label": "TCP/UDP port bindings",
-                "description": (
-                    "Rules over observed listening and established socket"
-                    " bindings, including host, protocol, address, and port"
+                    "Rules over completed task runs using an optional task kind"
+                    " filter plus regular expressions on serialized input,"
+                    " stdout, stderr, and summary payloads"
                 ),
             },
         ]
