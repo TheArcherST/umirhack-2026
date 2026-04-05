@@ -192,11 +192,17 @@ async def list_compliance_findings(
     current_user: FromDishka[AuthorizedUser],
     access_service: FromDishka[AccessService],
     compliance_service: FromDishka[ComplianceService],
+    uow_ctl: FromDishka[UoWCtl],
 ) -> list[ComplianceFindingDTO]:
     await access_service.require_environment_member(
         environment_id,
         user_id=current_user.id,
     )
+    if await compliance_service.materialize_expired_findings(
+        environment_id=environment_id
+    ):
+        await uow_ctl.commit()
+        await dispatch_pending_compliance_email_notifications(compliance_service.session)
     return [
         compliance_finding_to_dto(finding)
         for finding in await compliance_service.list_active_findings(
@@ -215,11 +221,17 @@ async def list_compliance_events(
     current_user: FromDishka[AuthorizedUser],
     access_service: FromDishka[AccessService],
     compliance_service: FromDishka[ComplianceService],
+    uow_ctl: FromDishka[UoWCtl],
 ) -> list[ComplianceEventDTO]:
     await access_service.require_environment_member(
         environment_id,
         user_id=current_user.id,
     )
+    if await compliance_service.materialize_expired_findings(
+        environment_id=environment_id
+    ):
+        await uow_ctl.commit()
+        await dispatch_pending_compliance_email_notifications(compliance_service.session)
     return [
         compliance_event_to_dto(event)
         for event in await compliance_service.list_events(
