@@ -12,6 +12,9 @@ from hack_backend.core.services.agent_runtime_service import (
     LEASE_SECONDS,
 )
 from hack_backend.core.services.uow_ctl import UoWCtl
+from hack_backend.rest_server.compliance_notifications import (
+    dispatch_pending_compliance_email_notifications,
+)
 from hack_backend.rest_server.schemas.platform import AgentTaskLeaseDTO
 from hack_backend.rest_server.providers import CurrentAgent
 
@@ -152,4 +155,5 @@ async def complete_task(
         failure_reason=payload.failure_reason,
     )
     await uow_ctl.commit()
+    await dispatch_pending_compliance_email_notifications(runtime_service.session)
     return {"status": "ok"}

@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field
 from hack_backend.core.services.access import AccessService
 from hack_backend.core.services.compliance_service import ComplianceService
 from hack_backend.core.services.uow_ctl import UoWCtl
+from hack_backend.rest_server.compliance_notifications import (
+    dispatch_pending_compliance_email_notifications,
+)
 from hack_backend.rest_server.providers import AuthorizedUser
 from hack_backend.rest_server.schemas.platform import (
     ComplianceCatalogItemDTO,
@@ -113,6 +116,7 @@ async def create_compliance_policy(
         actor_user_id=current_user.id,
     )
     await uow_ctl.commit()
+    await dispatch_pending_compliance_email_notifications(compliance_service.session)
     return compliance_policy_with_revision_to_dto(
         policy,
         await compliance_service.get_policy_revision(policy.current_revision_id),
@@ -150,6 +154,7 @@ async def patch_compliance_policy(
         actor_user_id=current_user.id,
     )
     await uow_ctl.commit()
+    await dispatch_pending_compliance_email_notifications(compliance_service.session)
     return compliance_policy_with_revision_to_dto(
         updated,
         await compliance_service.get_policy_revision(updated.current_revision_id),
@@ -174,6 +179,7 @@ async def delete_compliance_policy(
     )
     await compliance_service.delete_policy(policy_id)
     await uow_ctl.commit()
+    await dispatch_pending_compliance_email_notifications(compliance_service.session)
 
 
 @router.get(

@@ -9,6 +9,9 @@ from typing import Any
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from hack_backend.core.compliance_notifications import (
+    queue_compliance_email_notification,
+)
 from hack_backend.core.models import (
     ComplianceCurrentFinding,
     ComplianceEvaluation,
@@ -279,6 +282,21 @@ def _compile_task_stream_rule(rule: dict[str, Any]) -> dict[str, Any]:
         "label": rule["label"],
         "clauses": clauses,
     }
+
+
+def _matched_rule_labels(
+    definition_json: dict[str, Any],
+    matched_rule_ids: list[str],
+) -> list[str]:
+    labels_by_id = {
+        str(rule.get("id")): str(rule.get("label") or rule.get("id"))
+        for rule in (definition_json or {}).get("rules") or []
+        if isinstance(rule, dict)
+    }
+    return [
+        labels_by_id.get(rule_id, rule_id)
+        for rule_id in matched_rule_ids
+    ]
 
 
 def _evaluate_compiled_policy(
@@ -558,6 +576,19 @@ async def _append_evaluation(
                 },
             )
         )
+        queue_compliance_email_notification(
+            session,
+            environment_id=policy.environment_id,
+            policy_name=policy.name,
+            event_kind=ComplianceEventKind.RISE.value,
+            event_origin=event_origin.value,
+            subject_label=entity.subject_label,
+            happened_at=observed_at,
+            matched_rule_labels=_matched_rule_labels(
+                revision.definition_json or {},
+                matched_rule_ids,
+            ),
+        )
     elif previous_is_violation and not current_is_violation:
         session.add(
             ComplianceEvent(
@@ -577,6 +608,19 @@ async def _append_evaluation(
                     "evidence": evidence_json,
                 },
             )
+        )
+        queue_compliance_email_notification(
+            session,
+            environment_id=policy.environment_id,
+            policy_name=policy.name,
+            event_kind=ComplianceEventKind.RESOLVED.value,
+            event_origin=event_origin.value,
+            subject_label=entity.subject_label,
+            happened_at=observed_at,
+            matched_rule_labels=_matched_rule_labels(
+                revision.definition_json or {},
+                matched_rule_ids,
+            ),
         )
 
 

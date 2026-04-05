@@ -133,7 +133,7 @@ function RegexPatternInput({
         size="sm"
         variant="outline"
         className={cn(
-          'h-9 w-9 px-0 shrink-0 font-mono text-sm',
+          'h-9 w-6 px-0 shrink-0 font-mono text-sm',
           negated
             ? 'border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15'
             : 'text-muted-foreground/40 hover:text-muted-foreground',
@@ -145,7 +145,7 @@ function RegexPatternInput({
       </Button>
       <Input
         value={value ?? ''}
-        onChange={(e) => onChange(e.target.value.trim() || null)}
+        onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)}
         placeholder={placeholder}
       />
     </div>
@@ -330,11 +330,11 @@ function CompliancePanel({
           id: rule.id,
           label: rule.label.trim(),
           task_kind: rule.task_kind?.trim() || null,
-          input_pattern: rule.input_pattern?.trim() || null,
+          input_pattern: rule.input_pattern === '' ? null : rule.input_pattern,
           input_negated: Boolean(rule.input_negated),
-          stdout_pattern: rule.stdout_pattern?.trim() || null,
+          stdout_pattern: rule.stdout_pattern === '' ? null : rule.stdout_pattern,
           stdout_negated: Boolean(rule.stdout_negated),
-          stderr_pattern: rule.stderr_pattern?.trim() || null,
+          stderr_pattern: rule.stderr_pattern === '' ? null : rule.stderr_pattern,
           stderr_negated: Boolean(rule.stderr_negated),
         })),
       }
@@ -380,9 +380,9 @@ function CompliancePanel({
   })
 
   const isSubmitDisabled = rules.length === 0 || rules.some((rule) =>
-    !rule.input_pattern?.trim()
-    && !rule.stdout_pattern?.trim()
-    && !rule.stderr_pattern?.trim()
+    !rule.input_pattern
+    && !rule.stdout_pattern
+    && !rule.stderr_pattern
   )
 
   return (

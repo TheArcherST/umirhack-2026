@@ -1,8 +1,13 @@
 from dishka import FromDishka
 from dishka.integrations.taskiq import inject
 
-from hack_backend.core.providers import ConfigEmail
-from hack_backend.core.services.email import send_password_change_email, send_project_invitation_email, send_verification_email
+from hack_backend.core.providers import ConfigEmail, ConfigServer
+from hack_backend.core.services.email import (
+    send_compliance_event_email,
+    send_password_change_email,
+    send_project_invitation_email,
+    send_verification_email,
+)
 from hack_backend.tasksd.broker import broker
 
 
@@ -80,4 +85,44 @@ async def send_project_invitation_email_task(
         template_name=email_config.invite_template_name,
         app_name=email_config.app_name,
         invite_validity_hours=email_config.invite_validity_hours,
+    )
+
+
+@broker.task(retry_on_error=True, max_retries=2)
+@inject(patch_module=True)
+async def send_compliance_event_email_task(
+    email_address: str,
+    user_name: str,
+    environment_name: str,
+    environment_id: str,
+    policy_name: str,
+    event_kind: str,
+    event_origin: str,
+    subject_label: str,
+    happened_at: str,
+    matched_rule_labels: list[str],
+    email_config: FromDishka[ConfigEmail],
+    server_config: FromDishka[ConfigServer],
+) -> None:
+    """Background task: send compliance event notification email."""
+    frontend_url = server_config.frontend_url.rstrip("/")
+    compliance_url = (
+        f"{frontend_url}/environments/{environment_id}/compliance"
+        if frontend_url
+        else ""
+    )
+    await send_compliance_event_email(
+        to_address=email_address,
+        user_name=user_name,
+        environment_name=environment_name,
+        policy_name=policy_name,
+        event_kind=event_kind,
+        event_origin=event_origin,
+        subject_label=subject_label,
+        happened_at=happened_at,
+        matched_rule_labels=matched_rule_labels,
+        api_key=email_config.resend_api_key,
+        from_address=email_config.from_address,
+        compliance_url=compliance_url,
+        app_name=email_config.app_name,
     )
