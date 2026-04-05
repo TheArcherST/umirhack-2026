@@ -29,18 +29,19 @@ export function EnvironmentSidebar() {
 
   return (
     <aside
-      className="flex flex-col border-r border-border bg-card"
-      style={{ width: 'var(--sidebar-width)', minHeight: '100vh' }}
+      className="flex flex-col border-r border-border bg-card shrink-0 w-12 md:w-[220px]"
+      style={{ minHeight: '100vh' }}
     >
       {/* Back to project */}
-      <div className="flex items-center gap-2 px-3 border-b border-border" style={{ height: 'var(--header-height)' }}>
+      <div className="flex items-center gap-2 px-2 md:px-3 border-b border-border" style={{ height: 'var(--header-height)' }}>
         <button
           onClick={() => navigate('/dashboard')}
-          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors shrink-0"
+          title={currentProject?.name}
         >
           <ArrowLeft size={14} />
         </button>
-        <div className="flex-1 min-w-0">
+        <div className="hidden md:flex flex-1 min-w-0 flex-col">
           <p className="text-xs font-mono text-muted-foreground truncate">
             {currentProject?.name}
           </p>
@@ -51,15 +52,16 @@ export function EnvironmentSidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-2 py-3 space-y-0.5">
+      <nav className="flex-1 px-1.5 md:px-2 py-3 space-y-0.5">
         {navItems.map(({ to, icon: Icon, labelKey, end }) => (
           <NavLink
             key={to}
             to={to}
             end={end}
+            title={t(labelKey)}
             className={({ isActive }) =>
               cn(
-                'flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm transition-colors',
+                'flex items-center gap-2.5 px-2 md:px-2.5 py-2 rounded-md text-sm transition-colors justify-center md:justify-start',
                 isActive
                   ? 'bg-accent text-foreground'
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
@@ -67,7 +69,7 @@ export function EnvironmentSidebar() {
             }
           >
             <Icon size={15} className="shrink-0" />
-            <span>{t(labelKey)}</span>
+            <span className="hidden md:inline">{t(labelKey)}</span>
           </NavLink>
         ))}
       </nav>
