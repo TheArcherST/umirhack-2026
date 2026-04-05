@@ -6,6 +6,7 @@ import datetime
 from datetime import UTC, timedelta
 
 from dishka import FromDishka
+from dishka.integrations.fastapi import inject
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -15,7 +16,7 @@ from sqlalchemy.orm import joinedload
 from hack_backend.core.models import ApiKey
 from hack_backend.core.models.enums import ApiKeyRole
 from hack_backend.core.security import hash_secret, new_secret
-from hack_backend.rest_server.providers import AuthorizedUser, inject
+from hack_backend.rest_server.providers import AuthorizedUser
 
 router = APIRouter(prefix="/environments/{environment_id}/api-keys", tags=["api-keys"])
 
