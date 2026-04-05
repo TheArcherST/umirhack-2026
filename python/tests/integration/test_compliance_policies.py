@@ -1,7 +1,14 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from typing import Any
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+
+from hack_backend.core.models import ComplianceCurrentFinding
+from hack_backend.core.providers import ConfigHack
 
 
 def _template_id_for_kind(templates: list[dict[str, Any]], kind: str) -> str:
@@ -40,6 +47,23 @@ def _complete_success(
             "failure_reason": None,
         },
     )
+
+
+def _expire_current_finding(policy_id: str, subject_key: str) -> None:
+    config = ConfigHack()
+    engine = create_engine(
+        config.postgres.get_sqlalchemy_url("psycopg", is_test_database=True)
+    )
+    try:
+        with Session(engine) as session:
+            finding = session.query(ComplianceCurrentFinding).filter(
+                ComplianceCurrentFinding.policy_id == policy_id,
+                ComplianceCurrentFinding.subject_key == subject_key,
+            ).one()
+            finding.expires_at = datetime.now(tz=UTC) - timedelta(minutes=1)
+            session.commit()
+    finally:
+        engine.dispose()
 
 
 def test_compliance_materializes_task_stream_policy(api) -> None:
@@ -451,3 +475,169 @@ def test_compliance_materializes_requirements_policy(api) -> None:
     )
     assert findings_response.status_code == 200, findings_response.text
     assert findings_response.json() == []
+
+
+def test_compliance_expired_window_materializes_resolved_event(api) -> None:
+    owner = api.register_user(prefix="compliance-expiry")
+    bundle = api.create_project_bundle(
+        user=owner,
+        project_name="Compliance Expiry",
+    )
+    created_agent = api.create_agent(
+        user=owner,
+        project_id=bundle.project["id"],
+        environment_id=bundle.environment["id"],
+        name="expiry-agent",
+    )
+    bootstrap_token = api.issue_install_token(
+        user=owner,
+        agent_id=created_agent["id"],
+    )
+    agent = api.register_agent(bootstrap_token=bootstrap_token)
+
+    bootstrap_leases = api.poll_agent(agent=agent)
+    leases_by_kind = {
+        lease["task_template"]["kind"]: lease for lease in bootstrap_leases
+    }
+    _complete_success(
+        api,
+        agent=agent,
+        lease=leases_by_kind["host.system_profile"],
+        telemetry_kind="host.system_profile",
+        telemetry_payload={
+            "hostname": "expiry.internal",
+            "os_name": "linux",
+            "platform_version": "ubuntu-24.04",
+            "kernel": "6.8.0",
+            "cpu_model": "Xeon Platinum",
+        },
+    )
+    _complete_success(
+        api,
+        agent=agent,
+        lease=leases_by_kind["host.ip_interfaces"],
+        telemetry_kind="host.ip_interfaces",
+        telemetry_payload={
+            "interfaces": [
+                {
+                    "name": "eth0",
+                    "mac": "00:11:22:33:44:77",
+                    "ipv4": ["10.20.30.60"],
+                    "ipv6": ["fd00::60"],
+                }
+            ]
+        },
+    )
+    _complete_success(
+        api,
+        agent=agent,
+        lease=leases_by_kind["diagnostic.command.service_status"],
+        telemetry_kind="diagnostic.command.service_status",
+        telemetry_payload={
+            "command": "systemctl list-units --type=service --all --no-pager",
+            "sample": "",
+            "services": [],
+        },
+    )
+
+    hosts_response = api.client.get(
+        f"/environments/{bundle.environment['id']}/hosts",
+        headers=owner.headers,
+    )
+    assert hosts_response.status_code == 200, hosts_response.text
+    host = hosts_response.json()[0]
+
+    custom_template_id = _template_id_for_kind(
+        bundle.templates,
+        "diagnostic.command.custom",
+    )
+    create_task_runs = api.client.post(
+        "/task-runs",
+        json={
+            "environment_id": bundle.environment["id"],
+            "host_ids": [host["id"]],
+            "task_template_id": custom_template_id,
+            "payload_overrides": {"approved_command": "curl https://forbidden.internal"},
+        },
+        headers=owner.headers,
+    )
+    assert create_task_runs.status_code == 201, create_task_runs.text
+
+    custom_lease = api.poll_agent(agent=agent)[0]
+    api.mark_task_running(
+        agent=agent,
+        task_run_id=custom_lease["id"],
+        lease_token=custom_lease["lease_token"],
+    )
+    api.complete_task(
+        agent=agent,
+        task_run_id=custom_lease["id"],
+        payload={
+            "lease_token": custom_lease["lease_token"],
+            "status": "succeeded",
+            "exit_code": 0,
+            "stdout_text": "Welcome to nginx!",
+            "stderr_text": "",
+            "summary_json": {"status": "ok"},
+            "telemetry_kind": "diagnostic.command.custom",
+            "telemetry_payload": {
+                "approved_command": "curl https://forbidden.internal",
+            },
+            "failure_reason": None,
+        },
+    )
+
+    policy_response = api.client.post(
+        "/compliance/policies",
+        json={
+            "environment_id": bundle.environment["id"],
+            "name": "Forbid nginx banner",
+            "entity_kind": "task_stream",
+            "mode": "blacklist",
+            "description": "Expire forbidden matches into resolved events",
+            "definition_json": {
+                "forbids": [
+                    {
+                        "label": "nginx banner",
+                        "task_kind": "diagnostic.command.custom",
+                        "window_minutes": 60,
+                        "stdout_pattern": "Welcome to nginx!",
+                    }
+                ]
+            },
+        },
+        headers=owner.headers,
+    )
+    assert policy_response.status_code == 201, policy_response.text
+    policy = policy_response.json()
+
+    findings_response = api.client.get(
+        f"/environments/{bundle.environment['id']}/compliance/findings",
+        headers=owner.headers,
+    )
+    assert findings_response.status_code == 200, findings_response.text
+    findings = findings_response.json()
+    assert len(findings) == 1
+    assert findings[0]["matched_rule_labels"] == ["nginx banner"]
+    subject_key = findings[0]["subject_key"]
+
+    _expire_current_finding(policy["id"], subject_key)
+
+    findings_response = api.client.get(
+        f"/environments/{bundle.environment['id']}/compliance/findings",
+        headers=owner.headers,
+    )
+    assert findings_response.status_code == 200, findings_response.text
+    assert findings_response.json() == []
+
+    events_response = api.client.get(
+        f"/environments/{bundle.environment['id']}/compliance/events",
+        headers=owner.headers,
+    )
+    assert events_response.status_code == 200, events_response.text
+    events = events_response.json()
+    assert len(events) == 2
+    assert events[0]["event_kind"] == "resolved"
+    assert events[0]["event_origin"] == "live"
+    assert events[0]["subject_key"] == subject_key
+    assert events[1]["event_kind"] == "rise"
